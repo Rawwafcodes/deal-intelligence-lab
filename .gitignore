@@ -1,0 +1,6 @@
+data/
+__pycache__/
+*.pyc
+.mypy_cache/
+.env
+.DS_Store

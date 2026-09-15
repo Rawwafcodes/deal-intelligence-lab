@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <h1>Deal Intelligence Lab</h1>
+      <p>Your M&amp;A transaction projects, stored locally on this computer.</p>
+    </header>
+
+    <section class="card">
+      <h2>New project</h2>
+      <form id="create-form">
+        <div class="field">
+          <label for="name">Project name</label>
+          <input type="text" id="name" name="name" maxlength="200" required />
+        </div>
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" maxlength="5000"></textarea>
+        </div>
+        <button type="submit">Create project</button>
+        <div class="error" id="form-error"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Projects</h2>
+      <ul class="project-list" id="project-list"></ul>
+      <p class="empty-state" id="empty-state" hidden>No projects yet. Create your first one above.</p>
+    </section>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
