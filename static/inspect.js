@@ -136,46 +136,98 @@ function renderCitations(container, citations, documentId) {
 
 const HEADING_RE = /^##\s+(.*)$/;
 
+function renderContentBlock(text, citations, section, documentId) {
+  const isBullet = /^[-*]\s+/.test(text);
+  const wrapper = document.createElement(isBullet ? "div" : "p");
+  wrapper.className = isBullet ? "inspection-bullet" : "inspection-paragraph";
+
+  const textSpan = document.createElement("span");
+  textSpan.textContent = isBullet ? text.replace(/^[-*]\s+/, "") : text;
+  wrapper.appendChild(textSpan);
+
+  renderCitations(wrapper, citations, documentId);
+
+  const isMaterialStatement = isBullet && section.toLowerCase().includes("material factual statements");
+  if (isMaterialStatement && (!citations || citations.length === 0)) {
+    const uncited = document.createElement("span");
+    uncited.className = "citation-badge uncited";
+    uncited.textContent = "uncited";
+    wrapper.appendChild(uncited);
+  }
+
+  segmentsEl.appendChild(wrapper);
+}
+
+// Concatenating every text block's `text` in order reproduces Claude's
+// full reply exactly - citations only annotate substrings of that one
+// continuous stream (confirmed against a live response: a citation's
+// span can land on a trailing "(page 1)" note rather than the factual
+// sentence right before it, because that's just where the API's citation
+// boundary happened to fall in the stream, not a paragraph or bullet
+// boundary). So markdown structure (headings, blank-line paragraph
+// breaks, "- " bullets) has to be found by re-splitting that reconstructed
+// stream into lines, not by treating each API block as a rendering unit.
+// Each resulting line keeps the citations of every block that contributed
+// characters to it, so a citation is never dropped or misattached.
+function streamToLines(segments) {
+  const lines = [[]];
+  segments.forEach((segment) => {
+    const parts = segment.text.split("\n");
+    parts.forEach((part, index) => {
+      if (index > 0) lines.push([]);
+      if (part) lines[lines.length - 1].push({ text: part, citations: segment.citations || [] });
+    });
+  });
+  return lines.map((pieces) => ({
+    text: pieces.map((p) => p.text).join(""),
+    citations: pieces.flatMap((p) => p.citations),
+  }));
+}
+
 function renderSegments(record) {
   segmentsEl.textContent = "";
-  let currentSection = "";
+  const lines = streamToLines(record.segments);
+  let section = "";
+  let block = null; // { textParts: string[], citations: [] } | null
 
-  record.segments.forEach((segment) => {
-    const trimmed = segment.text.trim();
+  const closeBlock = () => {
+    if (!block) return;
+    const text = block.textParts.join(" ").trim();
+    const citations = block.citations;
+    block = null;
+    if (text) renderContentBlock(text, citations, section, record.document_id);
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.text.trim();
     const headingMatch = HEADING_RE.exec(trimmed);
 
     if (headingMatch) {
-      currentSection = headingMatch[1].trim();
+      closeBlock();
+      section = headingMatch[1].trim();
       const heading = document.createElement("h3");
       heading.className = "inspection-heading";
-      heading.textContent = currentSection;
+      heading.textContent = section;
       segmentsEl.appendChild(heading);
       return;
     }
 
-    if (!trimmed) return;
-
-    const isBullet = /^[-*]\s+/.test(trimmed);
-    const wrapper = document.createElement(isBullet ? "div" : "p");
-    wrapper.className = isBullet ? "inspection-bullet" : "inspection-paragraph";
-
-    const textSpan = document.createElement("span");
-    textSpan.textContent = isBullet ? trimmed.replace(/^[-*]\s+/, "") : segment.text;
-    wrapper.appendChild(textSpan);
-
-    renderCitations(wrapper, segment.citations, record.document_id);
-
-    const isMaterialStatement =
-      isBullet && currentSection.toLowerCase().includes("material factual statements");
-    if (isMaterialStatement && (!segment.citations || segment.citations.length === 0)) {
-      const uncited = document.createElement("span");
-      uncited.className = "citation-badge uncited";
-      uncited.textContent = "uncited";
-      wrapper.appendChild(uncited);
+    if (!trimmed) {
+      closeBlock(); // blank line: paragraph break
+      return;
     }
 
-    segmentsEl.appendChild(wrapper);
+    if (/^[-*]\s+/.test(trimmed)) {
+      closeBlock(); // a new bullet always starts its own block
+      block = { textParts: [trimmed], citations: [...line.citations] };
+    } else if (block) {
+      block.textParts.push(trimmed); // continuation of the open paragraph/bullet
+      block.citations.push(...line.citations);
+    } else {
+      block = { textParts: [trimmed], citations: [...line.citations] };
+    }
   });
+  closeBlock();
 }
 
 function renderError(record) {
