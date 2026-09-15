@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workbook Inspection - Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="card inspection-meta" id="xlsx-meta">
+      <div class="skeleton-line title"></div>
+      <div class="skeleton-line w-60"></div>
+      <div class="skeleton-line w-40"></div>
+    </div>
+
+    <div class="card" id="xlsx-error-card" hidden>
+      <h2>Could not complete the analysis</h2>
+      <p id="xlsx-error-text" class="inspection-error-text"></p>
+    </div>
+
+    <div class="card" id="xlsx-verification-card" hidden>
+      <p id="xlsx-verification-note" class="section-hint"></p>
+    </div>
+
+    <div class="card" id="xlsx-results-card" hidden>
+      <h2>Analysis</h2>
+      <div id="xlsx-segments"></div>
+    </div>
+
+    <div class="card" id="xlsx-trace-card" hidden>
+      <details id="xlsx-trace-details">
+        <summary>Code-execution trace</summary>
+        <div id="xlsx-trace-list"></div>
+      </details>
+    </div>
+  </div>
+
+  <script src="/workbook-inspect.js"></script>
+</body>
+</html>

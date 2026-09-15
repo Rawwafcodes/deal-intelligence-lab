@@ -25,6 +25,8 @@ import inspections
 import multipart
 import pdf_inspection
 import store
+import xlsx_inspection
+import xlsx_inspections
 
 STATIC_DIR = Path(__file__).parent / "static"
 PORT = 8765
@@ -40,6 +42,8 @@ _DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
 _INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/inspections/([^/]+)$")
 _CROSS_ANALYSIS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/cross-analysis$")
 _CROSS_ANALYSIS_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/cross-analyses/([^/]+)$")
+_XLSX_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect-workbook$")
+_XLSX_INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workbook-inspections/([^/]+)$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -140,6 +144,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static_file("cross-analysis.html")
             return
 
+        if path == "/workbook-inspect.html":
+            self._send_static_file("workbook-inspect.html")
+            return
+
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
@@ -183,6 +191,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "cross-document analysis not found"})
                 return
             self._send_json(200, record.to_dict())
+            return
+
+        xlsx_inspection_match = _XLSX_INSPECTION_ITEM_RE.match(path)
+        if xlsx_inspection_match:
+            project_id, xlsx_inspection_id = xlsx_inspection_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            xlsx_record = xlsx_inspections.get_xlsx_inspection(project_id, xlsx_inspection_id)
+            if xlsx_record is None:
+                self._send_json(404, {"error": "workbook inspection not found"})
+                return
+            self._send_json(200, xlsx_record.to_dict())
             return
 
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
@@ -263,6 +284,12 @@ class Handler(BaseHTTPRequestHandler):
         if cross_analysis_match:
             (project_id,) = cross_analysis_match.groups()
             self._handle_cross_analysis(project_id)
+            return
+
+        xlsx_inspect_match = _XLSX_INSPECT_RE.match(path)
+        if xlsx_inspect_match:
+            project_id, document_id = xlsx_inspect_match.groups()
+            self._handle_workbook_inspect(project_id, document_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -426,12 +453,60 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
+    def _handle_workbook_inspect(self, project_id: str, document_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        document = documents.get_document(project_id, document_id)
+        if document is None:
+            self._send_json(404, {"error": "document not found"})
+            return
+
+        if document.extension not in (".xlsx", ".xls"):
+            self._send_json(400, {"error": "only .xlsx or .xls documents can be inspected with this action"})
+            return
+
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(
+                400, {"error": "workbook inspection requires {\"confirm\": true} in the request body"}
+            )
+            return
+
+        outcome = xlsx_inspection.inspect_workbook(document)
+        record = xlsx_inspections.create_xlsx_inspection(
+            project_id=project_id,
+            document_id=document_id,
+            document_filename=document.original_filename,
+            document_checksum=document.sha256,
+            status="success" if outcome.success else "error",
+            transmitted=outcome.transmitted,
+            remote_cleanup_attempted=outcome.remote_cleanup_attempted,
+            remote_cleanup_succeeded=outcome.remote_cleanup_succeeded,
+            verification_available=outcome.verification_available,
+            verification_unavailable_reason=outcome.verification_unavailable_reason,
+            analysis_seconds=outcome.analysis_seconds,
+            model=outcome.model,
+            mandate_version=xlsx_inspection.MANDATE_VERSION,
+            stop_reason=outcome.stop_reason,
+            input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+            output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+            code_execution_requests=outcome.usage.get("code_execution_requests") if outcome.usage else None,
+            error_type=outcome.error_type,
+            error_message=outcome.error_message,
+            segments=[s.to_dict() for s in outcome.segments] if outcome.segments else None,
+            tool_trace=outcome.tool_trace,
+        )
+        self._send_json(200 if outcome.success else 502, record.to_dict())
+
 
 def main() -> None:
     store.init_db()
     documents.init_documents_db()
     inspections.init_inspections_db()
     cross_analyses.init_cross_analyses_db()
+    xlsx_inspections.init_xlsx_inspections_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

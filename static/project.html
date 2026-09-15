@@ -25,7 +25,7 @@
 
     <div class="card" id="upload-card" hidden>
       <h2>Upload documents</h2>
-      <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, PPTX, TXT, and common image formats.</p>
+      <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, XLS, PPTX, TXT, and common image formats.</p>
       <div class="dropzone" id="upload-dropzone">
         <div class="upload-buttons">
           <label class="button-like">
@@ -95,6 +95,22 @@
       <div class="modal-actions">
         <button type="button" class="button-secondary" id="cancel-inspect">Cancel</button>
         <button type="submit" id="confirm-inspect">Send to Claude</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="xlsx-inspect-dialog" class="modal">
+    <form id="xlsx-inspect-form">
+      <h2>Inspect with Claude</h2>
+      <p id="xlsx-inspect-dialog-text"></p>
+      <p class="section-hint">
+        This uploads the original workbook to Anthropic, where Claude opens and analyses it inside a
+        sandboxed code-execution environment. No other documents in this project are sent.
+      </p>
+      <div class="error" id="xlsx-inspect-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-xlsx-inspect">Cancel</button>
+        <button type="submit" id="confirm-xlsx-inspect">Send to Claude</button>
       </div>
     </form>
   </dialog>

@@ -81,7 +81,7 @@ is stored exactly as-is (byte-for-byte) and listed in an inventory with
 its file type, size, checksum, and upload time. You can download the
 original file back at any time, or remove it (after confirming).
 
-Supported file types: PDF, DOCX, XLSX, PPTX, TXT, and common image
+Supported file types: PDF, DOCX, XLSX, XLS, PPTX, TXT, and common image
 formats (PNG, JPG, GIF, BMP, TIFF, WEBP). Uploading the exact same file
 twice to a project is detected and skipped rather than stored again.
 
@@ -170,6 +170,48 @@ Like single-document inspection, this sends each selected PDF inline
 (base64) rather than through the Files API, and the same 32 MB /
 ~600-page combined request limits apply — now shared across every
 document you select, not just one.
+
+## Inspecting an Excel workbook with Claude
+
+XLSX and XLS documents get their own **Inspect with Claude** action. This
+works differently from PDF inspection, because Excel isn't something
+Claude can read inline the way it reads a PDF:
+
+- The original workbook is uploaded to Anthropic's **Files API**, then
+  handed to Claude inside a **sandboxed code-execution container** (Python,
+  with `openpyxl`/`xlrd`/`pandas` pre-installed). Claude opens and queries
+  the file itself — this app never extracts, converts, or interprets the
+  workbook's contents locally.
+- After analysis, the app **deletes the uploaded file from Anthropic** and
+  records whether that deletion succeeded. This is not a claim of instant,
+  total erasure everywhere: per Anthropic's own documentation, a deleted
+  file "may persist in active Messages API calls and associated tool uses"
+  already in flight, and — separately from Files API deletion —
+  **code-execution container data is retained for up to 30 days** as
+  Anthropic's standard retention for that feature. Neither the Files API
+  nor code execution is eligible for Zero Data Retention. The results page
+  states this plainly rather than implying the file is gone the instant
+  deletion is attempted.
+- Excel has no native citation feature the way PDFs do, so this app
+  defines its own convention and asks Claude to follow it: every
+  workbook-specific claim is cited as `('Sheet Name'!B7 [value])` (or
+  `[formula]` / `[label]`, and `B7:C10` for a range). After Claude
+  responds, the app **independently opens the same original workbook**
+  (reading only sheet names and grid bounds — never cell values) and
+  checks that every cited sheet and cell/range actually exists, marking
+  each citation verified or not. A citation in some other shape is simply
+  never treated as one.
+- A collapsible **code-execution trace** on the results page shows what
+  Claude actually ran (commands and capped output snippets), so the
+  process can be reviewed without the app storing full raw spreadsheet
+  dumps.
+
+Only `.xlsx` and `.xls` are supported in this milestone (500 MB upload
+limit, matching Anthropic's own Files API limit). Encrypted or unreadable
+workbooks are reported clearly, and are distinguished from a workbook that
+analyzed successfully but whose citations simply couldn't be checked
+locally this run (verification and analysis success are tracked and shown
+separately, never conflated).
 
 ## AI connection
 

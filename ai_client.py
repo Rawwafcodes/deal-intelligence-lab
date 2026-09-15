@@ -14,6 +14,8 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+from anthropic_errors import is_insufficient_credit_error
+
 load_dotenv(Path(__file__).parent / ".env.local")
 
 DEFAULT_MODEL = "claude-opus-5"
@@ -123,7 +125,7 @@ def test_connection() -> ConnectionResult:
             error_message=_redact(_ERROR_MESSAGES["rate_limit"], api_key),
         )
     except anthropic.APIStatusError as exc:
-        if exc.status_code == 402 or getattr(exc, "type", None) == "billing_error":
+        if is_insufficient_credit_error(exc):
             return ConnectionResult(
                 success=False,
                 model=configured_model,

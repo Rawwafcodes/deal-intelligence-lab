@@ -49,6 +49,8 @@ import anthropic
 from anthropic.types import DocumentBlockParam, MessageParam, TextBlockParam
 from dotenv import load_dotenv
 
+from anthropic_errors import is_insufficient_credit_error
+
 import documents
 
 load_dotenv(Path(__file__).parent / ".env.local")
@@ -300,7 +302,7 @@ def inspect_document(document: documents.Document) -> InspectionOutcome:
             ),
         )
     except anthropic.APIStatusError as exc:
-        if exc.status_code == 402 or getattr(exc, "type", None) == "billing_error":
+        if is_insufficient_credit_error(exc):
             return InspectionOutcome(
                 success=False,
                 transmitted=True,

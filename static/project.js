@@ -32,6 +32,12 @@ const crossConfirmListEl = document.getElementById("cross-confirm-list");
 const crossConfirmErrorEl = document.getElementById("cross-confirm-error");
 const backCrossConfirmButtonEl = document.getElementById("back-cross-confirm");
 const sendCrossConfirmButtonEl = document.getElementById("send-cross-confirm");
+const xlsxInspectDialogEl = document.getElementById("xlsx-inspect-dialog");
+const xlsxInspectFormEl = document.getElementById("xlsx-inspect-form");
+const xlsxInspectDialogTextEl = document.getElementById("xlsx-inspect-dialog-text");
+const xlsxInspectErrorEl = document.getElementById("xlsx-inspect-error");
+const cancelXlsxInspectButtonEl = document.getElementById("cancel-xlsx-inspect");
+const confirmXlsxInspectButtonEl = document.getElementById("confirm-xlsx-inspect");
 
 // Must match cross_document_analysis.MAX_TOTAL_SOURCE_BYTES on the server -
 // this is only used here to give the user an early, friendly heads-up;
@@ -195,6 +201,14 @@ function renderDocuments(docs) {
       inspectButton.textContent = "Inspect with Claude";
       inspectButton.className = "link-action";
       inspectButton.addEventListener("click", () => openInspectDialog(doc));
+      actionsCell.append(inspectButton);
+    }
+
+    if (doc.extension === ".xlsx" || doc.extension === ".xls") {
+      const inspectButton = document.createElement("button");
+      inspectButton.textContent = "Inspect with Claude";
+      inspectButton.className = "link-action";
+      inspectButton.addEventListener("click", () => openXlsxInspectDialog(doc));
       actionsCell.append(inspectButton);
     }
 
@@ -537,6 +551,58 @@ crossConfirmFormEl.addEventListener("submit", async (event) => {
     sendCrossConfirmButtonEl.disabled = false;
     backCrossConfirmButtonEl.disabled = false;
     sendCrossConfirmButtonEl.textContent = "Send to Claude";
+  }
+});
+
+// Workbook (XLSX/XLS) inspection
+
+let pendingXlsxInspectDoc = null;
+
+function openXlsxInspectDialog(doc) {
+  pendingXlsxInspectDoc = doc;
+  xlsxInspectDialogTextEl.textContent =
+    `Send "${doc.original_filename}" to Anthropic's Claude API for sandboxed workbook analysis?`;
+  xlsxInspectErrorEl.textContent = "";
+  confirmXlsxInspectButtonEl.disabled = false;
+  confirmXlsxInspectButtonEl.textContent = "Send to Claude";
+  xlsxInspectDialogEl.showModal();
+}
+
+cancelXlsxInspectButtonEl.addEventListener("click", () => xlsxInspectDialogEl.close());
+closeOnBackdropClick(xlsxInspectDialogEl);
+
+xlsxInspectFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingXlsxInspectDoc) return;
+
+  xlsxInspectErrorEl.textContent = "";
+  confirmXlsxInspectButtonEl.disabled = true;
+  cancelXlsxInspectButtonEl.disabled = true;
+  confirmXlsxInspectButtonEl.textContent = "Analyzing… this can take several minutes";
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(pendingXlsxInspectDoc.id)}/inspect-workbook`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      }
+    );
+    const record = await res.json().catch(() => null);
+
+    if (!record || !record.id) {
+      xlsxInspectErrorEl.textContent = (record && record.error) || "The inspection request failed.";
+      return;
+    }
+
+    window.location.href = `/workbook-inspect.html?project=${encodeURIComponent(projectId)}&inspection=${encodeURIComponent(record.id)}`;
+  } catch (err) {
+    xlsxInspectErrorEl.textContent = "Could not reach the local app server.";
+  } finally {
+    confirmXlsxInspectButtonEl.disabled = false;
+    cancelXlsxInspectButtonEl.disabled = false;
+    confirmXlsxInspectButtonEl.textContent = "Send to Claude";
   }
 });
 

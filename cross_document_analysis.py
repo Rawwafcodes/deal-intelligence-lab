@@ -47,6 +47,8 @@ import anthropic
 from anthropic.types import DocumentBlockParam, MessageParam, TextBlockParam
 from dotenv import load_dotenv
 
+from anthropic_errors import is_insufficient_credit_error
+
 import documents
 import pdf_inspection
 
@@ -393,7 +395,7 @@ def run_cross_analysis(selected: list[documents.Document]) -> CrossAnalysisOutco
             error_message=_redact(message, api_key),
         )
     except anthropic.APIStatusError as exc:
-        if exc.status_code == 402 or getattr(exc, "type", None) == "billing_error":
+        if is_insufficient_credit_error(exc):
             return CrossAnalysisOutcome(
                 success=False,
                 transmitted=True,
