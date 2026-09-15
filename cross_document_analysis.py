@@ -66,7 +66,15 @@ MIN_DOCUMENTS = 2
 # needs more.
 MAX_DOCUMENTS = int(os.environ.get("DEAL_LAB_MAX_CROSS_ANALYSIS_DOCUMENTS", 12))
 
-ANALYSIS_MAX_TOKENS = 32000
+# A real production run against 6 substantial documents (~443K input
+# tokens) was cut off by a 32,000-token cap partway through the findings.
+# Raised to the streaming default the API skill itself recommends for
+# large-output requests. A generous client-side timeout (below) has to
+# move with this: the truncated run above already took 488s to produce
+# just 32K tokens, well past the SDK's default 600s read timeout if a
+# full, untruncated report needs proportionally longer to generate.
+ANALYSIS_MAX_TOKENS = 64000
+ANALYSIS_CLIENT_TIMEOUT_SECONDS = 1800.0
 
 # Bump this whenever MANDATE or STRUCTURE_INSTRUCTIONS changes materially,
 # so stored analysis records stay traceable to the exact prompt that
@@ -325,7 +333,7 @@ def run_cross_analysis(selected: list[documents.Document]) -> CrossAnalysisOutco
             }
         )
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, timeout=ANALYSIS_CLIENT_TIMEOUT_SECONDS)
 
     intro = (
         f"You have been given {len(selected)} original PDF documents for this analysis, "

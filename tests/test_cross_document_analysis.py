@@ -186,6 +186,26 @@ class CrossDocumentAnalysisTests(unittest.TestCase):
         self.assertEqual(document_blocks[0]["title"], "nda.pdf")
         self.assertEqual(document_blocks[1]["title"], "term_sheet.pdf")
 
+    def test_request_uses_generous_max_tokens_and_client_timeout(self):
+        # Regression guard: a real production run against 6 large documents
+        # was cut off by a too-small max_tokens cap, and a naive fix (just
+        # raising it) would risk trading that for a client read-timeout on
+        # the resulting longer-running request. Both must move together.
+        response = fake_response([fake_text_block("## Combined Document Understanding\nBoth relate.")])
+        mock_stream = MagicMock()
+        mock_stream.get_final_message.return_value = response
+        mock_client = MagicMock()
+        mock_client.messages.stream.return_value.__enter__.return_value = mock_stream
+
+        with patch("cross_document_analysis.anthropic.Anthropic", return_value=mock_client) as mock_anthropic_cls:
+            cross_document_analysis.run_cross_analysis([self.doc_a, self.doc_b])
+
+        _, client_kwargs = mock_anthropic_cls.call_args
+        self.assertGreaterEqual(client_kwargs["timeout"], 1200)
+
+        _, stream_kwargs = mock_client.messages.stream.call_args
+        self.assertGreaterEqual(stream_kwargs["max_tokens"], 64000)
+
     def test_unselected_document_never_sent(self):
         other_bytes = f"%PDF-1.4\n%unrelated document\n% {self.id()}\n%%EOF".encode()
         other_result = documents.save_uploaded_file(self.project.id, "unrelated.pdf", "", other_bytes)
