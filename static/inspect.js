@@ -136,13 +136,29 @@ function renderCitations(container, citations, documentId) {
 
 const HEADING_RE = /^##\s+(.*)$/;
 
+// Appends text as DOM nodes, rendering **bold** spans as <strong> - never
+// via innerHTML, since this text ultimately derives from PDF content and
+// must be treated as inert data, not markup to execute.
+function appendInlineFormatted(container, text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  parts.forEach((part) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      const strong = document.createElement("strong");
+      strong.textContent = part.slice(2, -2);
+      container.appendChild(strong);
+    } else if (part) {
+      container.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
 function renderContentBlock(text, citations, section, documentId) {
   const isBullet = /^[-*]\s+/.test(text);
   const wrapper = document.createElement(isBullet ? "div" : "p");
   wrapper.className = isBullet ? "inspection-bullet" : "inspection-paragraph";
 
   const textSpan = document.createElement("span");
-  textSpan.textContent = isBullet ? text.replace(/^[-*]\s+/, "") : text;
+  appendInlineFormatted(textSpan, isBullet ? text.replace(/^[-*]\s+/, "") : text);
   wrapper.appendChild(textSpan);
 
   renderCitations(wrapper, citations, documentId);
