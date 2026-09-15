@@ -1,0 +1,392 @@
+/* Deal Workspace (Milestone 9): a data-dense review page, layered on top
+   of style.css's shared tokens/components. Kept in its own file so the
+   findings-table/filters/badges/memo styling needed here never has to
+   touch the shared stylesheet other pages depend on.
+
+   Motion follows emil-design-eng: transform/opacity only, under ~200ms,
+   ease-out for entrances - and nothing animates on the findings table
+   itself, since it re-renders on every keystroke of the search filter and
+   this app's design guidance treats a project like this as a serious
+   financial-review product, not a place for decorative motion. */
+
+.page-wide {
+  max-width: 1180px;
+}
+
+.workspace-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.button-secondary.button-like {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.button-secondary.button-like:hover {
+  background: var(--muted-bg);
+}
+
+.button-danger {
+  background: var(--danger);
+}
+
+.button-danger:hover {
+  background: #b91c1c;
+}
+
+/* -- summary strip ------------------------------------------------------ */
+
+.ws-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: var(--elevation-1);
+}
+
+.ws-metric {
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.ws-metric .ws-metric-value {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ws-metric .ws-metric-label {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+.ws-metric.ws-metric-critical .ws-metric-value { color: var(--danger); }
+.ws-metric.ws-metric-attention .ws-metric-value { color: var(--accent-gold); }
+
+/* -- tabs ---------------------------------------------------------------- */
+
+.ws-tablist {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.ws-tab {
+  background: none;
+  color: var(--text-muted);
+  border: none;
+  border-radius: 0;
+  padding: 10px 4px;
+  margin-right: 20px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 150ms ease, border-color 150ms ease;
+  white-space: nowrap;
+}
+
+.ws-tab:hover {
+  background: none;
+  color: var(--text);
+  transform: none;
+  box-shadow: none;
+}
+
+.ws-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* -- filters -------------------------------------------------------------- */
+
+.ws-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  align-items: end;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  position: sticky;
+  top: 66px;
+  z-index: 5;
+}
+
+.ws-filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+.ws-filter-field label {
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+
+.ws-filter-field select,
+.ws-filter-field input[type="text"] {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ws-filter-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.ws-filter-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.ws-filter-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+#findings-count-hint {
+  margin: 0 0 10px;
+}
+
+/* -- findings table -------------------------------------------------------- */
+
+.ws-findings-table th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ws-findings-table th[data-sort]:hover {
+  color: var(--accent);
+}
+
+.ws-findings-table th.sorted::after {
+  content: " \2193";
+}
+
+.ws-findings-table th.sorted.sort-desc::after {
+  content: " \2191";
+}
+
+.ws-finding-row {
+  cursor: pointer;
+}
+
+.ws-finding-row.is-duplicate {
+  opacity: 0.6;
+}
+
+.ws-finding-row .ws-expand-icon {
+  display: inline-block;
+  width: 14px;
+  color: var(--text-muted);
+  transition: transform 150ms ease-out;
+}
+
+.ws-finding-row[aria-expanded="true"] .ws-expand-icon {
+  transform: rotate(90deg);
+}
+
+.ws-severity-badge,
+.ws-status-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.ws-severity-critical { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.ws-severity-high { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+.ws-severity-medium { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+.ws-severity-low { background: #e0f2fe; color: #075985; border-color: #93c5fd; }
+.ws-severity-informational { background: var(--muted-bg); color: var(--text-muted); border-color: var(--border); }
+.ws-severity-unspecified { background: var(--muted-bg); color: var(--text-muted); border-color: var(--border); }
+
+.ws-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: var(--muted-bg);
+  color: var(--text-muted);
+}
+
+.ws-badge.ws-badge-origin-human { background: #ede9fe; color: #5b21b6; }
+.ws-badge.ws-badge-origin-ai { background: var(--muted-bg); color: var(--text-muted); }
+.ws-badge.ws-badge-approved { background: #dcfce7; color: var(--success); }
+.ws-badge.ws-badge-draft { background: var(--muted-bg); color: var(--text-muted); }
+
+.ws-finding-detail-row td {
+  white-space: normal;
+  background: var(--bg);
+  padding: 18px 20px !important;
+}
+
+.ws-finding-detail {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+}
+
+.ws-finding-detail-content > p {
+  margin: 0 0 10px;
+}
+
+.ws-finding-detail-content .ws-detail-label {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.ws-finding-detail-workflow {
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ws-finding-detail-workflow .field {
+  margin-bottom: 0;
+}
+
+.ws-finding-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ws-finding-detail-actions button {
+  font-size: 0.82rem;
+  padding: 7px 12px;
+}
+
+.ws-duplicate-note {
+  color: var(--accent-gold);
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.ws-save-hint {
+  font-size: 0.78rem;
+  color: var(--success);
+  min-height: 1.1em;
+}
+
+/* -- requests -------------------------------------------------------------- */
+
+.ws-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ws-section-header h2 {
+  margin: 0;
+}
+
+.ws-request-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 14px;
+}
+
+.ws-request-card .ws-request-question {
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.ws-request-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.ws-request-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.ws-request-fields .field {
+  margin-bottom: 0;
+}
+
+/* -- memo -------------------------------------------------------------- */
+
+.ws-memo-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+#memo-save-status {
+  margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .ws-filters {
+    position: static;
+  }
+  .ws-filter-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .ws-finding-detail {
+    grid-template-columns: 1fr;
+  }
+  .ws-finding-detail-workflow {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  .documents-table th:nth-child(4),
+  .documents-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-finding-row .ws-expand-icon {
+    transition-duration: 0.01ms;
+  }
+}

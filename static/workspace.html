@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deal Workspace - Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/workspace.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page page-wide">
+    <div class="card" id="workspace-loading-card">
+      <div class="skeleton-line title"></div>
+      <div class="skeleton-line w-60"></div>
+      <div class="skeleton-line w-40"></div>
+    </div>
+
+    <div class="card" id="workspace-error-card" hidden>
+      <p class="inspection-error-text" id="workspace-error-text"></p>
+    </div>
+
+    <div id="workspace-content" hidden>
+      <div class="page-header">
+        <div>
+          <h1 id="workspace-title">Deal workspace</h1>
+          <p class="page-subtitle" id="workspace-subtitle"></p>
+        </div>
+        <div class="workspace-toolbar">
+          <a class="button-like button-secondary" id="export-findings-link" href="#">Findings register (.xlsx)</a>
+          <a class="button-like button-secondary" id="export-requests-link" href="#">Requests (.xlsx)</a>
+          <a class="button-like button-secondary" id="export-package-link" href="#" target="_blank" rel="noopener">Decision package (print)</a>
+        </div>
+      </div>
+
+      <div class="ws-summary-strip" id="workspace-summary-strip"></div>
+
+      <div class="ws-tablist" role="tablist" aria-label="Workspace sections">
+        <button type="button" class="ws-tab" id="tab-findings" role="tab" aria-selected="true" aria-controls="panel-findings">Findings</button>
+        <button type="button" class="ws-tab" id="tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests">Information requests</button>
+        <button type="button" class="ws-tab" id="tab-memo" role="tab" aria-selected="false" aria-controls="panel-memo">Executive memo</button>
+      </div>
+
+      <section id="panel-findings" role="tabpanel" aria-labelledby="tab-findings">
+        <div class="card ws-filters" id="ws-filters">
+          <div class="ws-filter-field">
+            <label for="filter-search">Search</label>
+            <input type="text" id="filter-search" placeholder="Search title or explanation" />
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-severity">Severity</label>
+            <select id="filter-severity"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-classification">Classification</label>
+            <select id="filter-classification"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-review-status">Review status</label>
+            <select id="filter-review-status"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-resolution-status">Resolution</label>
+            <select id="filter-resolution-status"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-source-document">Source document</label>
+            <select id="filter-source-document"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field">
+            <label for="filter-owner">Owner</label>
+            <select id="filter-owner"><option value="all">All</option></select>
+          </div>
+          <div class="ws-filter-field ws-filter-checkbox">
+            <label><input type="checkbox" id="filter-show-duplicates" /> Show duplicates</label>
+          </div>
+          <div class="ws-filter-actions">
+            <button type="button" class="button-secondary" id="reset-filters">Reset filters</button>
+            <button type="button" id="add-finding-button">Add finding</button>
+          </div>
+        </div>
+
+        <p class="section-hint" id="findings-count-hint"></p>
+
+        <div class="card" id="findings-table-card">
+          <div class="table-scroll">
+            <table class="documents-table ws-findings-table" id="findings-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th data-sort="effective_severity">Severity</th>
+                  <th data-sort="title">Title</th>
+                  <th data-sort="classification">Classification</th>
+                  <th data-sort="review_status">Review</th>
+                  <th data-sort="resolution_status">Resolution</th>
+                  <th data-sort="assigned_owner">Owner</th>
+                  <th>Origin</th>
+                </tr>
+              </thead>
+              <tbody id="findings-tbody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="findings-empty" hidden>
+            <p>No findings match the current filters.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-requests" role="tabpanel" aria-labelledby="tab-requests" hidden>
+        <div class="card">
+          <div class="ws-section-header">
+            <h2>Information requests</h2>
+            <button type="button" id="add-request-button">New request</button>
+          </div>
+          <p class="section-hint">
+            Convert accepted or partially accepted findings into questions for management, or add a standalone
+            question. Requests are tracked here only - nothing is sent automatically.
+          </p>
+          <div id="requests-list"></div>
+          <div class="empty-state" id="requests-empty" hidden>
+            <p>No information requests yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-memo" role="tabpanel" aria-labelledby="tab-memo" hidden>
+        <div class="card" id="memo-card">
+          <div class="ws-section-header">
+            <h2>Executive deal memo</h2>
+            <span class="ws-badge" id="memo-status-badge"></span>
+          </div>
+          <p class="section-hint" id="memo-approval-note"></p>
+          <p class="section-hint">
+            Generated initially from accepted findings and human review. Edit freely below; approving records
+            who approved it and when, and any further edit returns it to draft.
+          </p>
+
+          <div class="field">
+            <label for="memo-recommendation">Overall recommendation</label>
+            <select id="memo-recommendation"></select>
+          </div>
+
+          <div class="field">
+            <label for="memo-executive-conclusion">Executive conclusion</label>
+            <textarea id="memo-executive-conclusion" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-transaction-overview">Transaction overview</label>
+            <textarea id="memo-transaction-overview" rows="3"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-critical-issues">Critical issues</label>
+            <textarea id="memo-critical-issues" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-high-priority-issues">High-priority issues</label>
+            <textarea id="memo-high-priority-issues" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-financial-implications">Financial and valuation implications</label>
+            <textarea id="memo-financial-implications" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-missing-information">Missing information</label>
+            <textarea id="memo-missing-information" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-confirmed-consistencies">Confirmed consistencies</label>
+            <textarea id="memo-confirmed-consistencies" rows="3"></textarea>
+          </div>
+          <div class="field">
+            <label for="memo-next-actions">Recommended next actions</label>
+            <textarea id="memo-next-actions" rows="4"></textarea>
+          </div>
+
+          <div class="error" id="memo-error"></div>
+          <div class="ws-memo-actions">
+            <span id="memo-save-status" class="section-hint"></span>
+            <button type="button" class="button-secondary" id="save-memo-button">Save changes</button>
+            <button type="button" id="approve-memo-button">Approve memo</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <dialog id="add-finding-dialog" class="modal">
+    <form id="add-finding-form">
+      <h2>Add a finding Claude missed</h2>
+      <p class="section-hint">This finding is labelled human-added everywhere it appears and is never presented as an AI finding.</p>
+      <div class="field">
+        <label for="hf-title">Title</label>
+        <input type="text" id="hf-title" required />
+      </div>
+      <div class="field">
+        <label for="hf-classification">Classification</label>
+        <input type="text" id="hf-classification" placeholder="e.g. cross-source conflict" />
+      </div>
+      <div class="field">
+        <label for="hf-severity">Severity</label>
+        <select id="hf-severity"><option value="">Not set</option></select>
+      </div>
+      <div class="field">
+        <label for="hf-explanation">Explanation</label>
+        <textarea id="hf-explanation" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label for="hf-commercial-relevance">Commercial or financial relevance</label>
+        <textarea id="hf-commercial-relevance" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label for="hf-uncertainty">Uncertainty</label>
+        <input type="text" id="hf-uncertainty" />
+      </div>
+      <div class="field">
+        <label for="hf-recommended-action">Recommended action</label>
+        <textarea id="hf-recommended-action" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label for="hf-evidence-notes">Evidence notes</label>
+        <textarea id="hf-evidence-notes" rows="2" placeholder="Describe the evidence supporting this finding"></textarea>
+      </div>
+      <div class="field">
+        <label for="hf-evidence-documents">Linked project documents</label>
+        <select id="hf-evidence-documents" multiple size="4"></select>
+      </div>
+      <div class="error" id="add-finding-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-add-finding">Cancel</button>
+        <button type="submit" id="confirm-add-finding">Add finding</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-finding-dialog" class="modal">
+    <form id="delete-finding-form">
+      <h2>Remove this human-added finding?</h2>
+      <p class="section-hint">This cannot be undone. AI-generated findings can never be deleted, only reviewed.</p>
+      <div class="error" id="delete-finding-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-delete-finding">Cancel</button>
+        <button type="submit" class="button-danger" id="confirm-delete-finding">Remove finding</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="duplicate-dialog" class="modal">
+    <form id="duplicate-form">
+      <h2>Mark as duplicate</h2>
+      <p class="section-hint">Choose the canonical finding this duplicates. Both findings are preserved; the duplicate is excluded from headline counts by default.</p>
+      <div class="field">
+        <label for="duplicate-of-select">Canonical finding</label>
+        <select id="duplicate-of-select"></select>
+      </div>
+      <div class="field">
+        <label for="duplicate-marked-by">Your name</label>
+        <input type="text" id="duplicate-marked-by" required />
+      </div>
+      <div class="error" id="duplicate-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-duplicate">Cancel</button>
+        <button type="submit" id="confirm-duplicate">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="request-dialog" class="modal">
+    <form id="request-form">
+      <h2 id="request-dialog-title">New information request</h2>
+      <div class="field">
+        <label for="req-question">Question</label>
+        <textarea id="req-question" rows="3" required></textarea>
+      </div>
+      <div class="field">
+        <label for="req-priority">Priority</label>
+        <select id="req-priority"></select>
+      </div>
+      <div class="field">
+        <label for="req-recipient">Assigned recipient</label>
+        <input type="text" id="req-recipient" />
+      </div>
+      <div class="field">
+        <label for="req-related-findings">Related findings</label>
+        <select id="req-related-findings" multiple size="5"></select>
+      </div>
+      <div class="error" id="request-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-request">Cancel</button>
+        <button type="submit" id="confirm-request">Save request</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="approve-memo-dialog" class="modal">
+    <form id="approve-memo-form">
+      <h2>Approve executive memo</h2>
+      <p class="section-hint">Editing the memo again after approval will return it to draft status.</p>
+      <div class="field">
+        <label for="approve-memo-name">Approver name</label>
+        <input type="text" id="approve-memo-name" required />
+      </div>
+      <div class="error" id="approve-memo-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-approve-memo">Cancel</button>
+        <button type="submit" id="confirm-approve-memo">Approve</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/workspace.js"></script>
+</body>
+</html>

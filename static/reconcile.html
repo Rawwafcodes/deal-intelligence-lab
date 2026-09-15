@@ -30,6 +30,17 @@
       <p id="reconcile-verification-note" class="section-hint"></p>
     </div>
 
+    <div class="card" id="workspace-action-card" hidden>
+      <h2>Deal workspace</h2>
+      <p class="section-hint">
+        Turn this reconciliation into a structured, human-controlled review: individual finding
+        records, an information-request list, and an executive deal memo. Opening the workspace
+        does not send anything to Anthropic.
+      </p>
+      <button type="button" id="open-workspace-button">Open deal workspace</button>
+      <div class="error" id="workspace-action-error"></div>
+    </div>
+
     <div class="card" id="reconcile-results-card" hidden>
       <h2>Reconciliation</h2>
       <div id="reconcile-segments"></div>

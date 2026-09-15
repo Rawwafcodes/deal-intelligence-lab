@@ -17,6 +17,9 @@ const segmentsEl = document.getElementById("reconcile-segments");
 const traceCardEl = document.getElementById("reconcile-trace-card");
 const traceListEl = document.getElementById("reconcile-trace-list");
 const breadcrumbEl = document.getElementById("app-breadcrumb");
+const workspaceActionCardEl = document.getElementById("workspace-action-card");
+const openWorkspaceButtonEl = document.getElementById("open-workspace-button");
+const workspaceActionErrorEl = document.getElementById("workspace-action-error");
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("project");
@@ -470,6 +473,7 @@ async function loadReconciliation() {
   renderMeta(record);
 
   if (record.status === "success") {
+    workspaceActionCardEl.hidden = false;
     resultsCardEl.hidden = false;
     renderVerificationNote(record);
     renderSegments(record);
@@ -478,5 +482,28 @@ async function loadReconciliation() {
     renderError(record);
   }
 }
+
+openWorkspaceButtonEl.addEventListener("click", async () => {
+  workspaceActionErrorEl.textContent = "";
+  openWorkspaceButtonEl.disabled = true;
+  openWorkspaceButtonEl.textContent = "Opening…";
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/cross-format-analyses/${encodeURIComponent(analysisId)}/workspace`,
+      { method: "POST" }
+    );
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload || !payload.id) {
+      workspaceActionErrorEl.textContent = (payload && payload.error) || "Could not open the deal workspace.";
+      return;
+    }
+    window.location.href = `/workspace.html?project=${encodeURIComponent(projectId)}&workspace=${encodeURIComponent(payload.id)}`;
+  } catch (err) {
+    workspaceActionErrorEl.textContent = "Could not reach the local app server.";
+  } finally {
+    openWorkspaceButtonEl.disabled = false;
+    openWorkspaceButtonEl.textContent = "Open deal workspace";
+  }
+});
 
 loadReconciliation();

@@ -31,6 +31,8 @@ import pdf_inspection
 import store
 import validation_cases
 import validation_runs
+import workspace_exports
+import workspaces
 import xlsx_inspection
 import xlsx_inspections
 
@@ -67,6 +69,20 @@ _VALIDATION_EVALUATION_RE = re.compile(
 )
 _VALIDATION_REPORT_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs/([^/]+)/report$")
 
+_WORKSPACE_OPEN_RE = re.compile(r"^/api/projects/([^/]+)/cross-format-analyses/([^/]+)/workspace$")
+_WORKSPACE_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)$")
+_WORKSPACE_FINDINGS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/findings$")
+_WORKSPACE_FINDING_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/findings/([^/]+)$")
+_WORKSPACE_FINDING_DUPLICATE_RE = re.compile(
+    r"^/api/projects/([^/]+)/workspaces/([^/]+)/findings/([^/]+)/duplicate$"
+)
+_WORKSPACE_REQUESTS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/requests$")
+_WORKSPACE_REQUEST_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/requests/([^/]+)$")
+_WORKSPACE_MEMO_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/memo$")
+_WORKSPACE_MEMO_APPROVE_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/memo/approve$")
+_WORKSPACE_AUDIT_LOG_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/audit-log$")
+_WORKSPACE_EXPORT_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/export/([a-z.]+)$")
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "DealLab/0.1"
@@ -83,6 +99,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_binary(self, status: int, data: bytes, content_type: str, filename: str | None = None) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        if filename:
+            self.send_header("Content-Disposition", self._content_disposition(filename, "attachment"))
+            self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _send_static_file(self, rel_path: str) -> None:
         candidate = (STATIC_DIR / rel_path).resolve()
@@ -186,6 +212,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static_file("validation-evaluation.html")
             return
 
+        if path == "/workspace.html":
+            self._send_static_file("workspace.html")
+            return
+
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
@@ -265,6 +295,44 @@ class Handler(BaseHTTPRequestHandler):
                 return
             records = cross_format_analyses.list_cross_format_analyses(project_id)
             self._send_json(200, [r.to_dict() for r in records])
+            return
+
+        workspace_export_match = _WORKSPACE_EXPORT_RE.match(path)
+        if workspace_export_match:
+            project_id, workspace_id, export_name = workspace_export_match.groups()
+            self._handle_workspace_export(project_id, workspace_id, export_name)
+            return
+
+        workspace_audit_log_match = _WORKSPACE_AUDIT_LOG_RE.match(path)
+        if workspace_audit_log_match:
+            project_id, workspace_id = workspace_audit_log_match.groups()
+            workspace = self._get_owned_workspace(project_id, workspace_id)
+            if workspace is None:
+                return
+            events = workspaces.list_audit_log(workspace_id)
+            self._send_json(200, [e.to_dict() for e in events])
+            return
+
+        workspace_memo_match = _WORKSPACE_MEMO_RE.match(path)
+        if workspace_memo_match:
+            project_id, workspace_id = workspace_memo_match.groups()
+            self._handle_get_memo(project_id, workspace_id)
+            return
+
+        workspace_requests_match = _WORKSPACE_REQUESTS_COLLECTION_RE.match(path)
+        if workspace_requests_match:
+            project_id, workspace_id = workspace_requests_match.groups()
+            workspace = self._get_owned_workspace(project_id, workspace_id)
+            if workspace is None:
+                return
+            requests = workspaces.list_requests(workspace_id)
+            self._send_json(200, [r.to_dict() for r in requests])
+            return
+
+        workspace_item_match = _WORKSPACE_ITEM_RE.match(path)
+        if workspace_item_match:
+            project_id, workspace_id = workspace_item_match.groups()
+            self._handle_get_workspace(project_id, workspace_id)
             return
 
         evaluation_match = _VALIDATION_EVALUATION_RE.match(path)
@@ -458,6 +526,54 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_update_evaluation(project_id, validation_case_id, run_id)
             return
 
+        workspace_open_match = _WORKSPACE_OPEN_RE.match(path)
+        if workspace_open_match:
+            project_id, analysis_id = workspace_open_match.groups()
+            self._handle_open_workspace(project_id, analysis_id)
+            return
+
+        workspace_finding_duplicate_match = _WORKSPACE_FINDING_DUPLICATE_RE.match(path)
+        if workspace_finding_duplicate_match:
+            project_id, workspace_id, finding_id = workspace_finding_duplicate_match.groups()
+            self._handle_set_duplicate(project_id, workspace_id, finding_id)
+            return
+
+        workspace_finding_item_match = _WORKSPACE_FINDING_ITEM_RE.match(path)
+        if workspace_finding_item_match:
+            project_id, workspace_id, finding_id = workspace_finding_item_match.groups()
+            self._handle_update_finding(project_id, workspace_id, finding_id)
+            return
+
+        workspace_findings_collection_match = _WORKSPACE_FINDINGS_COLLECTION_RE.match(path)
+        if workspace_findings_collection_match:
+            project_id, workspace_id = workspace_findings_collection_match.groups()
+            self._handle_create_human_finding(project_id, workspace_id)
+            return
+
+        workspace_request_item_match = _WORKSPACE_REQUEST_ITEM_RE.match(path)
+        if workspace_request_item_match:
+            project_id, workspace_id, request_id = workspace_request_item_match.groups()
+            self._handle_update_request(project_id, workspace_id, request_id)
+            return
+
+        workspace_requests_collection_match = _WORKSPACE_REQUESTS_COLLECTION_RE.match(path)
+        if workspace_requests_collection_match:
+            project_id, workspace_id = workspace_requests_collection_match.groups()
+            self._handle_create_request(project_id, workspace_id)
+            return
+
+        workspace_memo_approve_match = _WORKSPACE_MEMO_APPROVE_RE.match(path)
+        if workspace_memo_approve_match:
+            project_id, workspace_id = workspace_memo_approve_match.groups()
+            self._handle_approve_memo(project_id, workspace_id)
+            return
+
+        workspace_memo_match = _WORKSPACE_MEMO_RE.match(path)
+        if workspace_memo_match:
+            project_id, workspace_id = workspace_memo_match.groups()
+            self._handle_update_memo(project_id, workspace_id)
+            return
+
         self._send_json(404, {"error": "not found"})
 
     def do_DELETE(self) -> None:
@@ -480,6 +596,12 @@ class Handler(BaseHTTPRequestHandler):
 
             documents.delete_document(project_id, document_id)
             self._send_json(200, {"deleted": True})
+            return
+
+        workspace_finding_item_match = _WORKSPACE_FINDING_ITEM_RE.match(path)
+        if workspace_finding_item_match:
+            project_id, workspace_id, finding_id = workspace_finding_item_match.groups()
+            self._handle_delete_human_finding(project_id, workspace_id, finding_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -1081,6 +1203,299 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
+    # -- Deal Workspace (Milestone 9) ---------------------------------------
+
+    def _get_owned_workspace(self, project_id: str, workspace_id: str) -> workspaces.Workspace | None:
+        """Project-isolation + existence check shared by every workspace
+        endpoint, same shape as _get_owned_validation_case."""
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return None
+        workspace = workspaces.get_workspace(project_id, workspace_id)
+        if workspace is None:
+            self._send_json(404, {"error": "workspace not found"})
+            return None
+        return workspace
+
+    def _get_workspace_analysis(
+        self, workspace: workspaces.Workspace
+    ) -> cross_format_analyses.CrossFormatAnalysis | None:
+        analysis = cross_format_analyses.get_cross_format_analysis(
+            workspace.project_id, workspace.cross_format_analysis_id
+        )
+        if analysis is None:
+            self._send_json(404, {"error": "the analysis linked to this workspace no longer exists"})
+            return None
+        return analysis
+
+    def _handle_open_workspace(self, project_id: str, analysis_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+        analysis = cross_format_analyses.get_cross_format_analysis(project_id, analysis_id)
+        if analysis is None:
+            self._send_json(404, {"error": "cross-format analysis not found"})
+            return
+        if analysis.status != "success":
+            self._send_json(
+                400, {"error": "a deal workspace can only be opened from a completed (successful) reconciliation"}
+            )
+            return
+        workspace, created = workspaces.get_or_create_workspace(project_id, analysis)
+        self._send_json(201 if created else 200, workspace.to_dict())
+
+    def _handle_get_workspace(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        findings = workspaces.list_findings(workspace, analysis)
+        request_list = workspaces.list_requests(workspace_id)
+        summary = workspaces.compute_summary(workspace, analysis, request_list)
+        self._send_json(
+            200,
+            {
+                "workspace": workspace.to_dict(),
+                "analysis": analysis.to_dict(),
+                "findings": findings,
+                "summary": summary,
+            },
+        )
+
+    def _handle_update_finding(self, project_id: str, workspace_id: str, finding_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            workspaces.update_finding_workflow(workspace_id, finding_id, data)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, workspaces.get_finding(workspace, analysis, finding_id))
+
+    def _handle_create_human_finding(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+
+        evidence_document_ids = data.get("evidence_document_ids") or []
+        if not isinstance(evidence_document_ids, list):
+            self._send_json(400, {"error": "evidence_document_ids must be a list of document id strings"})
+            return
+        for document_id in evidence_document_ids:
+            if not isinstance(document_id, str) or documents.get_document(project_id, document_id) is None:
+                self._send_json(400, {"error": f"evidence document not found in this project: {document_id}"})
+                return
+
+        try:
+            created = workspaces.create_human_finding(workspace_id, data)
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, workspaces.get_finding(workspace, analysis, created["id"]))
+
+    def _handle_delete_human_finding(self, project_id: str, workspace_id: str, finding_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "deletion requires {\"confirm\": true} in the request body"})
+            return
+        try:
+            workspaces.delete_human_finding(workspace_id, finding_id)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, {"deleted": True})
+
+    def _handle_set_duplicate(self, project_id: str, workspace_id: str, finding_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        duplicate_of = data.get("duplicate_of")
+        if duplicate_of is not None and not isinstance(duplicate_of, str):
+            self._send_json(400, {"error": "duplicate_of must be a string finding id or null"})
+            return
+        marked_by = str(data.get("marked_by", "") or "").strip()
+        if duplicate_of and not marked_by:
+            self._send_json(400, {"error": "marked_by is required when marking a duplicate"})
+            return
+        try:
+            workspaces.set_duplicate(workspace_id, finding_id, duplicate_of, marked_by)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, workspaces.get_finding(workspace, analysis, finding_id))
+
+    def _handle_create_request(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            request = workspaces.create_request(workspace_id, data)
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, request.to_dict())
+
+    def _handle_update_request(self, project_id: str, workspace_id: str, request_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            request = workspaces.update_request(workspace_id, request_id, data)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, request.to_dict())
+
+    def _handle_get_memo(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        memo = workspaces.get_or_create_memo(workspace, analysis)
+        self._send_json(200, memo.to_dict())
+
+    def _handle_update_memo(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+        workspaces.get_or_create_memo(workspace, analysis)  # ensure one exists before updating it
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            memo = workspaces.update_memo(workspace_id, data)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, memo.to_dict())
+
+    def _handle_approve_memo(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "approval requires {\"confirm\": true} in the request body"})
+            return
+        approver = str(body.get("approver", "")).strip()
+        if not approver:
+            self._send_json(400, {"error": "an approver name is required to approve the memo"})
+            return
+        try:
+            memo = workspaces.approve_memo(workspace_id, approver)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.WorkspaceValidationError as exc:
+            self._send_json(409, {"error": str(exc)})
+            return
+        self._send_json(200, memo.to_dict())
+
+    def _handle_workspace_export(self, project_id: str, workspace_id: str, export_name: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        project = store.get_project(project_id)
+        assert project is not None
+        analysis = self._get_workspace_analysis(workspace)
+        if analysis is None:
+            return
+
+        if export_name == "findings.xlsx":
+            findings = workspaces.list_findings(workspace, analysis)
+            data = workspace_exports.build_findings_workbook(project, analysis, workspace, findings)
+            self._send_binary(
+                200, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "findings-register.xlsx",
+            )
+            workspaces.log_export(workspace_id, export_name)
+            return
+
+        if export_name == "requests.xlsx":
+            request_list = workspaces.list_requests(workspace_id)
+            data = workspace_exports.build_requests_workbook(project, analysis, workspace, request_list)
+            self._send_binary(
+                200, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "information-requests.xlsx",
+            )
+            workspaces.log_export(workspace_id, export_name)
+            return
+
+        if export_name == "memo.html":
+            memo = workspaces.get_or_create_memo(workspace, analysis)
+            html = workspace_exports.build_memo_html(project, analysis, workspace, memo)
+            self._send_binary(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            workspaces.log_export(workspace_id, export_name)
+            return
+
+        if export_name == "package.html":
+            findings = workspaces.list_findings(workspace, analysis)
+            request_list = workspaces.list_requests(workspace_id)
+            memo = workspaces.get_or_create_memo(workspace, analysis)
+            html = workspace_exports.build_package_html(project, analysis, workspace, findings, request_list, memo)
+            self._send_binary(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            workspaces.log_export(workspace_id, export_name)
+            return
+
+        self._send_json(404, {"error": f"unknown export: {export_name}"})
+
+
 def main() -> None:
     store.init_db()
     documents.init_documents_db()
@@ -1092,6 +1507,7 @@ def main() -> None:
     answer_keys.init_answer_keys_db()
     validation_runs.init_validation_runs_db()
     evaluations.init_evaluations_db()
+    workspaces.init_workspaces_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")
