@@ -73,3 +73,55 @@ formEl.addEventListener("submit", async (event) => {
 });
 
 loadProjects();
+
+// AI connection test
+
+const testConnectionButtonEl = document.getElementById("test-connection-button");
+const connectionResultEl = document.getElementById("connection-result");
+
+testConnectionButtonEl.addEventListener("click", async () => {
+  testConnectionButtonEl.disabled = true;
+  testConnectionButtonEl.textContent = "Testing…";
+  connectionResultEl.textContent = "";
+  connectionResultEl.className = "";
+
+  try {
+    const res = await fetch("/api/ai/test-connection", { method: "POST" });
+    const result = await res.json();
+    renderConnectionResult(result);
+  } catch (err) {
+    connectionResultEl.className = "connection-result status-error";
+    connectionResultEl.textContent = "Could not reach the local app server.";
+  } finally {
+    testConnectionButtonEl.disabled = false;
+    testConnectionButtonEl.textContent = "Test AI connection";
+  }
+});
+
+function renderConnectionResult(result) {
+  connectionResultEl.textContent = "";
+
+  if (result.success) {
+    connectionResultEl.className = "connection-result status-success";
+    const lines = [
+      "Connected successfully.",
+      `Model: ${result.model}`,
+      result.usage
+        ? `Tokens used: ${result.usage.input_tokens} in / ${result.usage.output_tokens} out`
+        : "",
+      result.matched_expected
+        ? "Response matched the expected confirmation text."
+        : `Unexpected reply: "${result.reply_text}"`,
+    ].filter(Boolean);
+    for (const line of lines) {
+      const p = document.createElement("p");
+      p.textContent = line;
+      connectionResultEl.appendChild(p);
+    }
+  } else {
+    connectionResultEl.className = "connection-result status-error";
+    const p = document.createElement("p");
+    p.textContent = result.error_message || "The connection test failed.";
+    connectionResultEl.appendChild(p);
+  }
+}

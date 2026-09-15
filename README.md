@@ -4,19 +4,45 @@ A local app for keeping track of your M&A deal projects. Create a project,
 upload the original deal documents, and come back to them any time —
 everything is saved on your own computer.
 
-This is an early milestone: it handles projects and original-document
-storage. AI-assisted analysis will come in a later step.
+This is an early milestone: it handles projects, original-document
+storage, and a basic AI connection check. Document analysis by AI comes
+in a later step.
 
 ## Requirements
 
 - Python 3 (already installed on this Mac — nothing else to install)
 
-## How to run it
+## One-time setup
+
+This app now uses two small add-on packages (to talk to the Claude API),
+so it runs inside a Python "virtual environment" — an isolated folder of
+packages that doesn't affect anything else on your computer. Set it up
+once:
 
 1. Open the Terminal app.
 2. Go to this folder:
    ```
    cd ~/Projects/deal-intelligence-lab
+   ```
+3. Create the virtual environment:
+   ```
+   python3 -m venv venv
+   ```
+4. Activate it and install the packages:
+   ```
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+## How to run it
+
+Every time you want to run the app:
+
+1. Open the Terminal app.
+2. Go to this folder and activate the virtual environment:
+   ```
+   cd ~/Projects/deal-intelligence-lab
+   source venv/bin/activate
    ```
 3. Start the app:
    ```
@@ -74,10 +100,37 @@ for example:
 DEAL_LAB_DATA_DIR=/path/to/somewhere/else python3 server.py
 ```
 
-## Running the tests (optional)
+## AI connection
 
-If you want to double-check everything still works after any changes:
+On the home page, the **AI connection** card has a **Test AI connection**
+button. It sends one tiny request to Claude asking it to reply with a
+fixed confirmation phrase, and reports whether it worked, which model
+responded, and how many tokens were used. It never sends any of your
+uploaded documents — it's just a connectivity check.
+
+To use it, you need an Anthropic API key (get one at
+[console.anthropic.com](https://console.anthropic.com/)). Set it up
+once:
 
 ```
+cp .env.example .env.local
+```
+
+Then open `.env.local` in any text editor and paste your key after
+`ANTHROPIC_API_KEY=`. This file is ignored by git and never shared —
+only your own computer reads it. Restart the app (`Ctrl+C`, then
+`python3 server.py` again) after editing it.
+
+`ANTHROPIC_MODEL` in the same file controls which Claude model is used
+for the test; leave it as-is unless you have a reason to change it.
+
+## Running the tests (optional)
+
+If you want to double-check everything still works after any changes
+(this uses a stand-in for the AI connection, so it never contacts the
+real API or uses any credit):
+
+```
+source venv/bin/activate
 python3 -m unittest discover -s tests
 ```

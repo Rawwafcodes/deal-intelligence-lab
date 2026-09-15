@@ -1,7 +1,8 @@
 """Deal Intelligence Lab - local web server.
 
-Standard-library only: no pip install required. Run with:
+Run inside the project's virtual environment (see README.md):
 
+    source venv/bin/activate
     python3 server.py
 
 Then open http://localhost:8765 in a browser.
@@ -16,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+import ai_client
 import documents
 import multipart
 import store
@@ -164,6 +166,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+
+        if path == "/api/ai/test-connection":
+            length = int(self.headers.get("Content-Length", 0))
+            if length > 0:
+                self.rfile.read(length)  # discard any body; nothing is required
+            result = ai_client.test_connection()
+            self._send_json(200 if result.success else 502, result.to_dict())
+            return
 
         if path == "/api/projects":
             data = self._read_json_body()

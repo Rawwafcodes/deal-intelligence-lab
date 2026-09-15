@@ -207,6 +207,24 @@ button:hover {
   margin: -8px 0 16px;
 }
 
+#connection-result {
+  margin-top: 14px;
+}
+
+.connection-result p {
+  margin: 4px 0;
+  font-size: 0.88rem;
+}
+
+.connection-result.status-success p:first-child {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.connection-result.status-error p {
+  color: var(--danger);
+}
+
 .upload-controls {
   display: flex;
   gap: 12px;

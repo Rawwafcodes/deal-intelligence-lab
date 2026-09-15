@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 .mypy_cache/
 .env
+.env.local
 .DS_Store
+venv/
