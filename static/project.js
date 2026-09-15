@@ -40,6 +40,8 @@ const cancelXlsxInspectButtonEl = document.getElementById("cancel-xlsx-inspect")
 const confirmXlsxInspectButtonEl = document.getElementById("confirm-xlsx-inspect");
 const validationLabCardEl = document.getElementById("validation-lab-card");
 const validationLabLinkEl = document.getElementById("validation-lab-link");
+const reconciliationsCardEl = document.getElementById("reconciliations-card");
+const reconciliationsListEl = document.getElementById("reconciliations-list");
 const reconcileCardEl = document.getElementById("reconcile-card");
 const reconcileUnavailableHintEl = document.getElementById("reconcile-unavailable-hint");
 const reconcileOpenButtonEl = document.getElementById("reconcile-open-button");
@@ -57,10 +59,12 @@ const reconcileConfirmErrorEl = document.getElementById("reconcile-confirm-error
 const backReconcileConfirmButtonEl = document.getElementById("back-reconcile-confirm");
 const sendReconcileConfirmButtonEl = document.getElementById("send-reconcile-confirm");
 
-// Must match cross_document_analysis.MAX_TOTAL_SOURCE_BYTES on the server -
-// this is only used here to give the user an early, friendly heads-up;
-// the server enforces the real limit regardless.
-const CROSS_ANALYSIS_MAX_TOTAL_BYTES = 23 * 1024 * 1024;
+// Must match pdf_inspection.MAX_PDF_SOURCE_BYTES on the server (the shared
+// combined-PDF-bytes cap used by cross-document analysis, cross-format
+// reconciliation, and the Validation Lab) - this is only used here to give
+// the user an early, friendly heads-up; the server enforces the real limit
+// regardless, and honors DEAL_LAB_MAX_PDF_SOURCE_BYTES if that's overridden.
+const CROSS_ANALYSIS_MAX_TOTAL_BYTES = 23.5 * 1024 * 1024;
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
@@ -254,6 +258,35 @@ async function loadDocuments() {
 
   validationLabCardEl.hidden = false;
   validationLabLinkEl.href = `/validation.html?project=${encodeURIComponent(projectId)}`;
+}
+
+async function loadReconciliations() {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/cross-format-analyses`);
+  if (!res.ok) return;
+  const records = await res.json();
+  reconciliationsCardEl.hidden = records.length === 0;
+  reconciliationsListEl.textContent = "";
+
+  records.forEach((record, index) => {
+    const li = document.createElement("li");
+    const link = document.createElement("a");
+    link.className = "project-item";
+    link.href = `/reconcile.html?project=${encodeURIComponent(projectId)}&analysis=${encodeURIComponent(record.id)}`;
+    link.style.setProperty("--stagger-i", Math.min(index, 10));
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "name";
+    nameEl.textContent = `Reconciliation — ${formatDate(record.created_at)}`;
+
+    const descEl = document.createElement("div");
+    descEl.className = "desc";
+    const docCount = `${record.pdf_document_filenames.length} PDF, ${record.excel_document_filenames.length} Excel`;
+    descEl.textContent = record.status === "success" ? `${docCount} · completed` : `${docCount} · did not complete`;
+
+    link.append(nameEl, descEl);
+    li.appendChild(link);
+    reconciliationsListEl.appendChild(li);
+  });
 }
 
 function updateCrossAnalysisAvailability() {
@@ -761,5 +794,8 @@ reconcileConfirmFormEl.addEventListener("submit", async (event) => {
 });
 
 loadProject().then(() => {
-  if (projectId) loadDocuments();
+  if (projectId) {
+    loadDocuments();
+    loadReconciliations();
+  }
 });
