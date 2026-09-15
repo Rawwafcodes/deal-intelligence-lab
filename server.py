@@ -15,11 +15,13 @@ import mimetypes
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import ai_client
 import documents
+import inspections
 import multipart
+import pdf_inspection
 import store
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -31,7 +33,9 @@ MAX_BODY_BYTES = 1_000_000
 
 _DOCUMENTS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/documents$")
 _DOCUMENT_DOWNLOAD_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/download$")
+_DOCUMENT_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect$")
 _DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
+_INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/inspections/([^/]+)$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -77,22 +81,25 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return data if isinstance(data, dict) else None
 
-    def _content_disposition(self, filename: str) -> str:
+    def _content_disposition(self, filename: str, disposition_type: str = "attachment") -> str:
         ascii_fallback = filename.encode("ascii", "replace").decode("ascii").replace('"', "'")
         encoded = quote(filename, safe="")
-        return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+        return f'{disposition_type}; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
 
-    def _send_file_download(self, document) -> None:
+    def _send_file_download(self, document, inline: bool = False) -> None:
         path = documents.stored_file_path(document)
         if not path.is_file():
             self._send_json(404, {"error": "stored file is missing"})
             return
         body = path.read_bytes()
         content_type = documents.ALLOWED_EXTENSIONS.get(document.extension, "application/octet-stream")
+        disposition_type = "inline" if inline else "attachment"
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Content-Disposition", self._content_disposition(document.original_filename))
+        self.send_header(
+            "Content-Disposition", self._content_disposition(document.original_filename, disposition_type)
+        )
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
@@ -110,7 +117,8 @@ class Handler(BaseHTTPRequestHandler):
     # -- routing -------------------------------------------------------
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
 
         if path == "/":
             self._send_static_file("index.html")
@@ -118,6 +126,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/project.html":
             self._send_static_file("project.html")
+            return
+
+        if path == "/inspect.html":
+            self._send_static_file("inspect.html")
             return
 
         if path == "/api/projects":
@@ -135,7 +147,21 @@ class Handler(BaseHTTPRequestHandler):
             if document is None:
                 self._send_json(404, {"error": "document not found"})
                 return
-            self._send_file_download(document)
+            inline = parse_qs(parsed.query).get("inline", ["0"])[0] == "1"
+            self._send_file_download(document, inline=inline)
+            return
+
+        inspection_match = _INSPECTION_ITEM_RE.match(path)
+        if inspection_match:
+            project_id, inspection_id = inspection_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            inspection = inspections.get_inspection(project_id, inspection_id)
+            if inspection is None:
+                self._send_json(404, {"error": "inspection not found"})
+                return
+            self._send_json(200, inspection.to_dict())
             return
 
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
@@ -204,6 +230,12 @@ class Handler(BaseHTTPRequestHandler):
         if collection_match:
             (project_id,) = collection_match.groups()
             self._handle_document_upload(project_id)
+            return
+
+        inspect_match = _DOCUMENT_INSPECT_RE.match(path)
+        if inspect_match:
+            project_id, document_id = inspect_match.groups()
+            self._handle_document_inspect(project_id, document_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -282,10 +314,48 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json(200, {"results": results})
 
+    def _handle_document_inspect(self, project_id: str, document_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        document = documents.get_document(project_id, document_id)
+        if document is None:
+            self._send_json(404, {"error": "document not found"})
+            return
+
+        if document.extension != ".pdf":
+            self._send_json(400, {"error": "only PDF documents can be inspected in this milestone"})
+            return
+
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "inspection requires {\"confirm\": true} in the request body"})
+            return
+
+        outcome = pdf_inspection.inspect_document(document)
+        record = inspections.create_inspection(
+            project_id=project_id,
+            document_id=document_id,
+            document_filename=document.original_filename,
+            status="success" if outcome.success else "error",
+            transmitted=outcome.transmitted,
+            analysis_seconds=outcome.analysis_seconds,
+            model=outcome.model,
+            stop_reason=outcome.stop_reason,
+            input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+            output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+            error_type=outcome.error_type,
+            error_message=outcome.error_message,
+            segments=[s.to_dict() for s in outcome.segments] if outcome.segments else None,
+        )
+        self._send_json(200 if outcome.success else 502, record.to_dict())
+
 
 def main() -> None:
     store.init_db()
     documents.init_documents_db()
+    inspections.init_inspections_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

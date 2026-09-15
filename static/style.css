@@ -662,6 +662,112 @@ dialog.modal h2 {
   background: var(--muted-bg);
 }
 
+.inspection-meta .name {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.inspection-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 16px 0 0;
+  font-size: 0.88rem;
+}
+
+.inspection-facts dt {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.inspection-facts dd {
+  margin: 0;
+}
+
+.inspection-error-text {
+  color: var(--danger);
+  font-weight: 700;
+  margin: 0;
+}
+
+.inspection-error-detail {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-top: 6px;
+}
+
+.inspection-heading {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 22px 0 8px;
+  color: var(--accent);
+}
+
+.inspection-heading:first-child {
+  margin-top: 0;
+}
+
+.inspection-paragraph {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.inspection-bullet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 18px;
+  position: relative;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.inspection-bullet::before {
+  content: "\2022";
+  position: absolute;
+  left: 4px;
+  color: var(--text-muted);
+}
+
+.citation-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.citation-badge {
+  display: inline-block;
+  background: var(--muted-bg);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.citation-badge:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.citation-badge.uncited {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  cursor: default;
+}
+
+.citation-badge.uncited:hover {
+  background: none;
+  color: var(--danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.01ms !important;

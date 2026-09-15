@@ -71,6 +71,22 @@
     </div>
   </div>
 
+  <dialog id="inspect-dialog" class="modal">
+    <form id="inspect-form">
+      <h2>Inspect with Claude</h2>
+      <p id="inspect-dialog-text"></p>
+      <p class="section-hint">
+        This sends the original PDF file directly to Anthropic's Claude API for analysis. No other
+        documents in this project are sent.
+      </p>
+      <div class="error" id="inspect-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-inspect">Cancel</button>
+        <button type="submit" id="confirm-inspect">Send to Claude</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="/project.js"></script>
 </body>
 </html>

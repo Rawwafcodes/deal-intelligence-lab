@@ -10,6 +10,12 @@ const folderInputLabelEl = document.getElementById("folder-input-label");
 const documentsTbodyEl = document.getElementById("documents-tbody");
 const documentsEmptyEl = document.getElementById("documents-empty");
 const breadcrumbEl = document.getElementById("app-breadcrumb");
+const inspectDialogEl = document.getElementById("inspect-dialog");
+const inspectFormEl = document.getElementById("inspect-form");
+const inspectDialogTextEl = document.getElementById("inspect-dialog-text");
+const inspectErrorEl = document.getElementById("inspect-error");
+const cancelInspectButtonEl = document.getElementById("cancel-inspect");
+const confirmInspectButtonEl = document.getElementById("confirm-inspect");
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
@@ -161,12 +167,22 @@ function renderDocuments(docs) {
     downloadLink.textContent = "Download";
     downloadLink.className = "link-action";
 
+    actionsCell.append(downloadLink);
+
+    if (doc.extension === ".pdf") {
+      const inspectButton = document.createElement("button");
+      inspectButton.textContent = "Inspect with Claude";
+      inspectButton.className = "link-action";
+      inspectButton.addEventListener("click", () => openInspectDialog(doc));
+      actionsCell.append(inspectButton);
+    }
+
     const removeButton = document.createElement("button");
     removeButton.textContent = "Remove";
     removeButton.className = "link-action danger";
     removeButton.addEventListener("click", () => removeDocument(doc));
 
-    actionsCell.append(downloadLink, removeButton);
+    actionsCell.append(removeButton);
 
     row.append(nameCell, folderCell, typeCell, sizeCell, checksumCell, uploadedCell, actionsCell);
     documentsTbodyEl.appendChild(row);
@@ -299,6 +315,67 @@ dropzoneEl.addEventListener("drop", (event) => {
 // Prevent the browser from navigating away if a file is dropped outside the zone.
 window.addEventListener("dragover", (event) => event.preventDefault());
 window.addEventListener("drop", (event) => event.preventDefault());
+
+// PDF inspection
+
+let pendingInspectDoc = null;
+
+function openInspectDialog(doc) {
+  pendingInspectDoc = doc;
+  inspectDialogTextEl.textContent =
+    `Send "${doc.original_filename}" to Anthropic's Claude API for analysis?`;
+  inspectErrorEl.textContent = "";
+  confirmInspectButtonEl.disabled = false;
+  confirmInspectButtonEl.textContent = "Send to Claude";
+  inspectDialogEl.showModal();
+}
+
+cancelInspectButtonEl.addEventListener("click", () => inspectDialogEl.close());
+
+inspectDialogEl.addEventListener("click", (event) => {
+  const rect = inspectDialogEl.getBoundingClientRect();
+  const inDialog =
+    rect.top <= event.clientY &&
+    event.clientY <= rect.top + rect.height &&
+    rect.left <= event.clientX &&
+    event.clientX <= rect.left + rect.width;
+  if (!inDialog) inspectDialogEl.close();
+});
+
+inspectFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingInspectDoc) return;
+
+  inspectErrorEl.textContent = "";
+  confirmInspectButtonEl.disabled = true;
+  cancelInspectButtonEl.disabled = true;
+  confirmInspectButtonEl.textContent = "Analyzing… this can take a minute";
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(pendingInspectDoc.id)}/inspect`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      }
+    );
+    const record = await res.json().catch(() => null);
+
+    if (!record || !record.id) {
+      inspectErrorEl.textContent = (record && record.error) || "The inspection request failed.";
+      return;
+    }
+
+    window.location.href = `/inspect.html?project=${encodeURIComponent(projectId)}&inspection=${encodeURIComponent(record.id)}`;
+  } catch (err) {
+    inspectErrorEl.textContent = "Could not reach the local app server.";
+  } finally {
+    confirmInspectButtonEl.disabled = false;
+    cancelInspectButtonEl.disabled = false;
+    confirmInspectButtonEl.textContent = "Send to Claude";
+  }
+});
 
 loadProject().then(() => {
   if (projectId) loadDocuments();

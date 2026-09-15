@@ -100,6 +100,38 @@ for example:
 DEAL_LAB_DATA_DIR=/path/to/somewhere/else python3 server.py
 ```
 
+## Inspecting a PDF with Claude
+
+On a project's page, PDF documents get an **Inspect with Claude** action.
+Clicking it asks you to confirm before sending anything, since this is the
+one action in the app that transmits a document outside your computer.
+After you confirm:
+
+- The **original PDF file, and only that file** (no other project
+  documents), is sent directly to Claude using Anthropic's native PDF
+  support — the app never extracts, OCRs, converts, or otherwise
+  preprocesses the file itself.
+- Claude reads the PDF and identifies what the document is, its principal
+  subjects, and its material factual statements, citing the source page
+  for every factual statement using Anthropic's native citation feature.
+  Citations link straight back to the original PDF, opened at that page.
+- You land on a results page showing the analysis, with a clearly marked
+  "(uncited)" tag on any material statement Claude could not tie to a
+  page — never a fabricated page reference.
+- Every inspection (its outcome, the model used, token usage, stop
+  reason, and how long it took) is recorded in `data/deal_lab.db` so
+  there's an audit trail of what was sent and when.
+
+Only PDF files are supported in this milestone. Files above ~23 MB, PDFs
+that are password-protected or encrypted, and malformed files are
+rejected with a clear error before or after the request, instead of
+being silently mishandled.
+
+**Design note:** the PDF is sent inline (base64) in the request rather
+than uploaded to Anthropic's Files API first, since each inspection is a
+one-off analysis of a single document — this keeps no remote copy on
+Anthropic's side to track or delete afterwards.
+
 ## AI connection
 
 On the home page, the **AI connection** card has a **Test AI connection**
