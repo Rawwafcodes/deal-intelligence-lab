@@ -200,3 +200,120 @@ button:hover {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
+
+.section-hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: -8px 0 16px;
+}
+
+.upload-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.button-like {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.button-like:hover {
+  background: var(--accent-hover);
+}
+
+#upload-status {
+  margin-top: 16px;
+  font-size: 0.85rem;
+}
+
+.upload-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.upload-result {
+  padding: 4px 0;
+}
+
+.upload-result.status-success {
+  color: var(--accent);
+}
+
+.upload-result.status-duplicate {
+  color: var(--text-muted);
+}
+
+.upload-result.status-unsupported_type,
+.upload-result.status-failed {
+  color: var(--danger);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.documents-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.documents-table th,
+.documents-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.documents-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.documents-table .muted {
+  color: var(--text-muted);
+}
+
+.documents-table .checksum {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.documents-table .actions {
+  white-space: nowrap;
+  max-width: none;
+}
+
+.link-action {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-right: 12px;
+  text-decoration: none;
+}
+
+.link-action:hover {
+  text-decoration: underline;
+}
+
+.link-action.danger {
+  color: var(--danger);
+}
+

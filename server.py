@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
+import documents
+import multipart
 import store
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -23,6 +26,10 @@ PORT = 8765
 MAX_NAME_LENGTH = 200
 MAX_DESCRIPTION_LENGTH = 5000
 MAX_BODY_BYTES = 1_000_000
+
+_DOCUMENTS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/documents$")
+_DOCUMENT_DOWNLOAD_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/download$")
+_DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -68,6 +75,36 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return data if isinstance(data, dict) else None
 
+    def _content_disposition(self, filename: str) -> str:
+        ascii_fallback = filename.encode("ascii", "replace").decode("ascii").replace('"', "'")
+        encoded = quote(filename, safe="")
+        return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+
+    def _send_file_download(self, document) -> None:
+        path = documents.stored_file_path(document)
+        if not path.is_file():
+            self._send_json(404, {"error": "stored file is missing"})
+            return
+        body = path.read_bytes()
+        content_type = documents.ALLOWED_EXTENSIONS.get(document.extension, "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", self._content_disposition(document.original_filename))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_multipart_body(self) -> bytes | None:
+        length = int(self.headers.get("Content-Length", 0))
+        if length <= 0 or length > documents.MAX_UPLOAD_BYTES:
+            self.send_response(413)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            self.close_connection = True
+            return None
+        return self.rfile.read(length)
+
     # -- routing -------------------------------------------------------
 
     def do_GET(self) -> None:
@@ -84,6 +121,29 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
+            return
+
+        download_match = _DOCUMENT_DOWNLOAD_RE.match(path)
+        if download_match:
+            project_id, document_id = download_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+            self._send_file_download(document)
+            return
+
+        collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
+        if collection_match:
+            (project_id,) = collection_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            docs = [d.to_dict() for d in documents.list_documents(project_id)]
+            self._send_json(200, docs)
             return
 
         if path.startswith("/api/projects/"):
@@ -130,11 +190,92 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(201, project.to_dict())
             return
 
+        collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
+        if collection_match:
+            (project_id,) = collection_match.groups()
+            self._handle_document_upload(project_id)
+            return
+
         self._send_json(404, {"error": "not found"})
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+
+        item_match = _DOCUMENT_ITEM_RE.match(path)
+        if item_match:
+            project_id, document_id = item_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            if documents.get_document(project_id, document_id) is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+
+            body = self._read_json_body()
+            if not body or body.get("confirm") is not True:
+                self._send_json(400, {"error": "deletion requires {\"confirm\": true} in the request body"})
+                return
+
+            documents.delete_document(project_id, document_id)
+            self._send_json(200, {"deleted": True})
+            return
+
+        self._send_json(404, {"error": "not found"})
+
+    def _handle_document_upload(self, project_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        content_type_header = self.headers.get("Content-Type", "")
+        if not content_type_header.lower().startswith("multipart/form-data"):
+            self._send_json(400, {"error": "expected multipart/form-data"})
+            return
+
+        try:
+            boundary = multipart.parse_boundary(content_type_header)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        body = self._read_multipart_body()
+        if body is None:
+            return  # 413 already sent
+
+        try:
+            parts = multipart.parse_multipart(body, boundary)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": f"malformed upload: {exc}"})
+            return
+
+        file_parts = [p for p in parts if p.name == "files" and p.filename]
+        path_parts = [p.data.decode("utf-8", errors="replace") for p in parts if p.name == "relative_paths"]
+
+        if not file_parts:
+            self._send_json(400, {"error": "no files were included in the upload"})
+            return
+
+        if len(file_parts) > documents.MAX_FILES_PER_UPLOAD:
+            self._send_json(
+                400,
+                {"error": f"too many files in one upload (max {documents.MAX_FILES_PER_UPLOAD})"},
+            )
+            return
+
+        results = []
+        for index, part in enumerate(file_parts):
+            raw_relative_path = path_parts[index] if index < len(path_parts) else ""
+            # webkitRelativePath includes the filename itself; keep only the folder portion.
+            folder_path = raw_relative_path.rsplit("/", 1)[0] if "/" in raw_relative_path else ""
+            result = documents.save_uploaded_file(project_id, part.filename or "", folder_path, part.data)
+            results.append(result.to_dict())
+
+        self._send_json(200, {"results": results})
 
 
 def main() -> None:
     store.init_db()
+    documents.init_documents_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

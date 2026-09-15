@@ -13,6 +13,43 @@
     <div class="card project-detail" id="project-detail">
       <p>Loading...</p>
     </div>
+
+    <div class="card" id="upload-card" hidden>
+      <h2>Upload documents</h2>
+      <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, PPTX, TXT, and common image formats.</p>
+      <div class="upload-controls">
+        <label class="button-like">
+          Choose files
+          <input type="file" id="file-input" multiple hidden />
+        </label>
+        <label class="button-like" id="folder-input-label" hidden>
+          Choose a folder
+          <input type="file" id="folder-input" webkitdirectory multiple hidden />
+        </label>
+      </div>
+      <div id="upload-status"></div>
+    </div>
+
+    <div class="card" id="documents-card" hidden>
+      <h2>Documents</h2>
+      <div class="table-scroll">
+      <table class="documents-table" id="documents-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Folder</th>
+            <th>Type</th>
+            <th>Size</th>
+            <th>Checksum (SHA-256)</th>
+            <th>Uploaded</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="documents-tbody"></tbody>
+      </table>
+      </div>
+      <p class="empty-state" id="documents-empty" hidden>No documents uploaded yet.</p>
+    </div>
   </div>
 
   <script src="/project.js"></script>
