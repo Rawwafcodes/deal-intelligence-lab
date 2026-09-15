@@ -7,25 +7,37 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="page">
-    <a class="back-link" href="/">&larr; Back to all projects</a>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
 
+  <div class="page">
     <div class="card project-detail" id="project-detail">
-      <p>Loading...</p>
+      <div class="skeleton-line title"></div>
+      <div class="skeleton-line w-40"></div>
+      <div class="skeleton-line w-30 section-gap"></div>
+      <div class="skeleton-line w-90"></div>
+      <div class="skeleton-line w-60"></div>
     </div>
 
     <div class="card" id="upload-card" hidden>
       <h2>Upload documents</h2>
       <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, PPTX, TXT, and common image formats.</p>
-      <div class="upload-controls">
-        <label class="button-like">
-          Choose files
-          <input type="file" id="file-input" multiple hidden />
-        </label>
-        <label class="button-like" id="folder-input-label" hidden>
-          Choose a folder
-          <input type="file" id="folder-input" webkitdirectory multiple hidden />
-        </label>
+      <div class="dropzone" id="upload-dropzone">
+        <div class="upload-buttons">
+          <label class="button-like">
+            Choose files
+            <input type="file" id="file-input" multiple hidden />
+          </label>
+          <label class="button-like" id="folder-input-label" hidden>
+            Choose a folder
+            <input type="file" id="folder-input" webkitdirectory multiple hidden />
+          </label>
+        </div>
+        <p class="dropzone-hint">or drag and drop files here</p>
       </div>
       <div id="upload-status"></div>
     </div>
@@ -48,7 +60,14 @@
         <tbody id="documents-tbody"></tbody>
       </table>
       </div>
-      <p class="empty-state" id="documents-empty" hidden>No documents uploaded yet.</p>
+      <div class="empty-state" id="documents-empty" hidden>
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6.5 3.5h7l4 4v12a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z" />
+          <path d="M13.5 3.5v4h4" />
+          <path d="M8.5 13h7M8.5 16.5h4.5" />
+        </svg>
+        <p>No documents uploaded yet.</p>
+      </div>
     </div>
   </div>
 

@@ -4,6 +4,10 @@ const listEl = document.getElementById("project-list");
 const emptyStateEl = document.getElementById("empty-state");
 const formEl = document.getElementById("create-form");
 const errorEl = document.getElementById("form-error");
+const newProjectDialogEl = document.getElementById("new-project-dialog");
+const newProjectButtonEl = document.getElementById("new-project-button");
+const emptyStateNewProjectButtonEl = document.getElementById("empty-state-new-project");
+const cancelCreateButtonEl = document.getElementById("cancel-create");
 
 function formatDate(isoString) {
   const d = new Date(isoString);
@@ -14,11 +18,12 @@ function renderProjects(projects) {
   listEl.textContent = "";
   emptyStateEl.hidden = projects.length !== 0;
 
-  for (const project of projects) {
+  projects.forEach((project, index) => {
     const li = document.createElement("li");
     const link = document.createElement("a");
     link.className = "project-item";
     link.href = `/project.html?id=${encodeURIComponent(project.id)}`;
+    link.style.setProperty("--stagger-i", Math.min(index, 10));
 
     const nameEl = document.createElement("div");
     nameEl.className = "name";
@@ -35,7 +40,7 @@ function renderProjects(projects) {
     link.append(nameEl, descEl, metaEl);
     li.appendChild(link);
     listEl.appendChild(li);
-  }
+  });
 }
 
 async function loadProjects() {
@@ -69,7 +74,29 @@ formEl.addEventListener("submit", async (event) => {
   }
 
   formEl.reset();
+  newProjectDialogEl.close();
   await loadProjects();
+});
+
+function openNewProjectDialog() {
+  formEl.reset();
+  errorEl.textContent = "";
+  newProjectDialogEl.showModal();
+  document.getElementById("name").focus();
+}
+
+newProjectButtonEl.addEventListener("click", openNewProjectDialog);
+emptyStateNewProjectButtonEl.addEventListener("click", openNewProjectDialog);
+cancelCreateButtonEl.addEventListener("click", () => newProjectDialogEl.close());
+
+newProjectDialogEl.addEventListener("click", (event) => {
+  const rect = newProjectDialogEl.getBoundingClientRect();
+  const inDialog =
+    rect.top <= event.clientY &&
+    event.clientY <= rect.top + rect.height &&
+    rect.left <= event.clientX &&
+    event.clientX <= rect.left + rect.width;
+  if (!inDialog) newProjectDialogEl.close();
 });
 
 loadProjects();

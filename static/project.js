@@ -9,6 +9,7 @@ const folderInputEl = document.getElementById("folder-input");
 const folderInputLabelEl = document.getElementById("folder-input-label");
 const documentsTbodyEl = document.getElementById("documents-tbody");
 const documentsEmptyEl = document.getElementById("documents-empty");
+const breadcrumbEl = document.getElementById("app-breadcrumb");
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
@@ -36,15 +37,31 @@ function formatSize(bytes) {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function setBreadcrumb(currentLabel) {
+  breadcrumbEl.textContent = "";
+  const homeLink = document.createElement("a");
+  homeLink.href = "/";
+  homeLink.textContent = "Home";
+  const sep = document.createElement("span");
+  sep.className = "sep";
+  sep.textContent = "/";
+  const current = document.createElement("span");
+  current.className = "current";
+  current.textContent = currentLabel;
+  breadcrumbEl.append(homeLink, sep, current);
+}
+
 function renderNotFound() {
   detailEl.textContent = "";
   const p = document.createElement("p");
   p.textContent = "Project not found.";
   detailEl.appendChild(p);
+  setBreadcrumb("Not found");
 }
 
 function renderProject(project) {
   detailEl.textContent = "";
+  setBreadcrumb(project.name);
 
   const nameEl = document.createElement("div");
   nameEl.className = "name";
@@ -85,14 +102,34 @@ async function loadProject() {
   renderProject(project);
   uploadCardEl.hidden = false;
   documentsCardEl.hidden = false;
+  renderDocumentsSkeleton();
+}
+
+function renderDocumentsSkeleton(rows = 3) {
+  documentsTbodyEl.textContent = "";
+  documentsEmptyEl.hidden = true;
+
+  for (let i = 0; i < rows; i++) {
+    const row = document.createElement("tr");
+    row.className = "skeleton-row";
+    for (let c = 0; c < 7; c++) {
+      const cell = document.createElement("td");
+      const line = document.createElement("div");
+      line.className = "skeleton-line";
+      cell.appendChild(line);
+      row.appendChild(cell);
+    }
+    documentsTbodyEl.appendChild(row);
+  }
 }
 
 function renderDocuments(docs) {
   documentsTbodyEl.textContent = "";
   documentsEmptyEl.hidden = docs.length !== 0;
 
-  for (const doc of docs) {
+  docs.forEach((doc, index) => {
     const row = document.createElement("tr");
+    row.style.setProperty("--stagger-i", Math.min(index, 10));
 
     const nameCell = document.createElement("td");
     nameCell.textContent = doc.original_filename;
@@ -133,7 +170,7 @@ function renderDocuments(docs) {
 
     row.append(nameCell, folderCell, typeCell, sizeCell, checksumCell, uploadedCell, actionsCell);
     documentsTbodyEl.appendChild(row);
-  }
+  });
 }
 
 async function loadDocuments() {
@@ -234,6 +271,34 @@ if ("webkitdirectory" in document.createElement("input")) {
     folderInputEl.value = "";
   });
 }
+
+// Drag-and-drop upload
+const dropzoneEl = document.getElementById("upload-dropzone");
+
+["dragenter", "dragover"].forEach((eventName) => {
+  dropzoneEl.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropzoneEl.classList.add("dragover");
+  });
+});
+
+["dragleave", "dragend", "drop"].forEach((eventName) => {
+  dropzoneEl.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropzoneEl.classList.remove("dragover");
+  });
+});
+
+dropzoneEl.addEventListener("drop", (event) => {
+  const files = event.dataTransfer && event.dataTransfer.files;
+  if (files && files.length) {
+    uploadFiles(files);
+  }
+});
+
+// Prevent the browser from navigating away if a file is dropped outside the zone.
+window.addEventListener("dragover", (event) => event.preventDefault());
+window.addEventListener("drop", (event) => event.preventDefault());
 
 loadProject().then(() => {
   if (projectId) loadDocuments();
