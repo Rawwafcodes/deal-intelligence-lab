@@ -26,10 +26,12 @@ import server
 FAKE_SECRET = "sk-ant-api03-ENDPOINT-TEST-FAKE-SECRET-DO-NOT-LEAK"
 
 
-def fake_text_response(text: str):
+def fake_text_response(text: str, stop_reason: str = "end_turn"):
     block = types.SimpleNamespace(type="text", text=text)
     usage = types.SimpleNamespace(input_tokens=9, output_tokens=3)
-    return types.SimpleNamespace(content=[block], model="claude-opus-5", usage=usage)
+    return types.SimpleNamespace(
+        content=[block], model="claude-opus-5", usage=usage, stop_reason=stop_reason
+    )
 
 
 def make_status_error(cls, status_code: int, error_type: str, message: str):
@@ -87,6 +89,17 @@ class AiEndpointTests(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["model"], "claude-opus-5")
         self.assertTrue(payload["matched_expected"])
+
+    def test_truncated_response_returns_502_via_http(self):
+        response = fake_text_response("DEA", stop_reason="max_tokens")
+        with patch("ai_client.anthropic.Anthropic", return_value=MagicMock(**{"messages.create.return_value": response})):
+            status, body = self._post_test_connection()
+
+        payload = json.loads(body)
+        self.assertEqual(status, 502)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_type"], "truncated_response")
+        self.assertEqual(payload["stop_reason"], "max_tokens")
 
     def test_failure_returns_502_with_error_type(self):
         error = make_status_error(anthropic.RateLimitError, 429, "rate_limit_error", "slow down")
