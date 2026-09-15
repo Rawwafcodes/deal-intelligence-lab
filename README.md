@@ -367,6 +367,63 @@ Everything persists in `data/deal_lab.db` (outside git, like every other
 audit record in this app) — refreshing or restarting the app never loses
 a case, an answer key, a run, or an evaluation.
 
+## Deal Workspace: from a reconciliation into a decision-ready package
+
+Milestone 7 produces a long AI reconciliation report; Milestone 8 proved
+Claude's findings are trustworthy in a blind test. Neither is a diligence
+*workflow* a human reviewer can actually run a deal through. The **Deal
+Workspace** (reachable from a completed reconciliation via "Open deal
+workspace") turns one reconciliation into a structured, human-controlled
+review: an individual, filterable/sortable record per finding; an
+information-request list; and an executive deal memo — all persisted
+locally and never requiring another Anthropic call to open or use.
+
+### AI content stays immutable by construction, not convention
+
+`workspaces.py` never copies Claude's finding text into its own tables.
+Every AI-origin finding's content (title, classification, severity,
+explanation, evidence, citations) is re-derived on every read from the
+write-once `cross_format_analyses` record via `evaluations.extract_findings`
+— the same parser Milestone 8 already built, reused as-is rather than
+re-implemented. What this milestone stores is only the human side:
+workflow state per finding (human review status, human-adjusted severity,
+resolution status, assigned owner, management response, reviewer notes,
+due date), duplicate relationships (with full lineage — canonical finding,
+duplicate IDs, who marked it, when — never a destructive merge), human-
+added findings (always labeled as such, never presented as AI output),
+information requests, and the executive memo.
+
+One workspace exists per analysis (`UNIQUE` constraint on the analysis
+id) and is created idempotently — opening an already-open workspace never
+re-creates or duplicates its findings, and never contacts Anthropic.
+
+### The executive memo
+
+The initial memo is generated **deterministically** from the current,
+human-reviewed workspace state (accepted/partially-accepted findings by
+severity, missing-evidence and uncited findings, confirmed consistencies,
+recommended actions) — no Anthropic call, no free-text generation, and it
+is never silently regenerated over a human's edits afterward. The overall
+recommendation defaults to "no conclusion" and is only ever set by a
+human; the app never presents an automated investment decision. Approving
+the memo records an approver name and timestamp; editing an approved memo
+returns it to draft status automatically.
+
+### Exports
+
+- **Findings register** and **information-request list**: native `.xlsx`
+  (via `openpyxl`, already a dependency — nothing new added for this).
+- **Executive memo** and a **combined decision package** (memo + findings
+  register + requests): printer-friendly HTML you save as a PDF through
+  the browser's own print dialog.
+
+Every export carries project/analysis/workspace identifiers, an export
+timestamp, both the original AI severity and any human-adjusted severity,
+review/resolution state, evidence and citation text, whether each finding
+is AI-generated or human-added, duplicate relationships, and a disclaimer
+that findings require independent professional judgment — and never an
+API key, a filesystem path, or raw document bytes.
+
 ## AI connection
 
 On the home page, the **AI connection** card has a **Test AI connection**
