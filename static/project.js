@@ -38,6 +38,22 @@ const xlsxInspectDialogTextEl = document.getElementById("xlsx-inspect-dialog-tex
 const xlsxInspectErrorEl = document.getElementById("xlsx-inspect-error");
 const cancelXlsxInspectButtonEl = document.getElementById("cancel-xlsx-inspect");
 const confirmXlsxInspectButtonEl = document.getElementById("confirm-xlsx-inspect");
+const reconcileCardEl = document.getElementById("reconcile-card");
+const reconcileUnavailableHintEl = document.getElementById("reconcile-unavailable-hint");
+const reconcileOpenButtonEl = document.getElementById("reconcile-open-button");
+const reconcileSelectDialogEl = document.getElementById("reconcile-select-dialog");
+const reconcileSelectFormEl = document.getElementById("reconcile-select-form");
+const reconcileSelectListEl = document.getElementById("reconcile-select-list");
+const reconcileSelectTotalEl = document.getElementById("reconcile-select-total");
+const reconcileSelectErrorEl = document.getElementById("reconcile-select-error");
+const cancelReconcileSelectButtonEl = document.getElementById("cancel-reconcile-select");
+const continueReconcileSelectButtonEl = document.getElementById("continue-reconcile-select");
+const reconcileConfirmDialogEl = document.getElementById("reconcile-confirm-dialog");
+const reconcileConfirmFormEl = document.getElementById("reconcile-confirm-form");
+const reconcileConfirmListEl = document.getElementById("reconcile-confirm-list");
+const reconcileConfirmErrorEl = document.getElementById("reconcile-confirm-error");
+const backReconcileConfirmButtonEl = document.getElementById("back-reconcile-confirm");
+const sendReconcileConfirmButtonEl = document.getElementById("send-reconcile-confirm");
 
 // Must match cross_document_analysis.MAX_TOTAL_SOURCE_BYTES on the server -
 // this is only used here to give the user an early, friendly heads-up;
@@ -241,6 +257,12 @@ function updateCrossAnalysisAvailability() {
   const available = pdfCount >= 2;
   crossAnalysisOpenButtonEl.hidden = !available;
   crossAnalysisUnavailableHintEl.hidden = available;
+
+  const excelCount = latestDocuments.filter((d) => d.extension === ".xlsx" || d.extension === ".xls").length;
+  reconcileCardEl.hidden = false;
+  const reconcileAvailable = pdfCount >= 1 && excelCount >= 1;
+  reconcileOpenButtonEl.hidden = !reconcileAvailable;
+  reconcileUnavailableHintEl.hidden = reconcileAvailable;
 }
 
 async function removeDocument(doc) {
@@ -603,6 +625,133 @@ xlsxInspectFormEl.addEventListener("submit", async (event) => {
     confirmXlsxInspectButtonEl.disabled = false;
     cancelXlsxInspectButtonEl.disabled = false;
     confirmXlsxInspectButtonEl.textContent = "Send to Claude";
+  }
+});
+
+// Cross-format (PDF + Excel) deal reconciliation
+
+function isExcelDoc(doc) {
+  return doc.extension === ".xlsx" || doc.extension === ".xls";
+}
+
+function selectedReconcileDocuments() {
+  const checked = reconcileSelectListEl.querySelectorAll("input[type=checkbox]:checked");
+  return Array.from(checked).map((input) => latestDocuments.find((d) => d.id === input.value));
+}
+
+function updateReconcileSelectTotal() {
+  const selected = selectedReconcileDocuments();
+  const pdfs = selected.filter((d) => d.extension === ".pdf");
+  const excels = selected.filter(isExcelDoc);
+  const pdfBytes = pdfs.reduce((sum, d) => sum + d.size_bytes, 0);
+  const overBudget = pdfBytes > CROSS_ANALYSIS_MAX_TOTAL_BYTES;
+
+  reconcileSelectTotalEl.textContent =
+    `Selected: ${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"} (${formatSize(pdfBytes)} of a ` +
+    `${formatSize(CROSS_ANALYSIS_MAX_TOTAL_BYTES)} combined limit), ${excels.length} Excel workbook` +
+    `${excels.length === 1 ? "" : "s"} (each uploaded and capped individually).`;
+  reconcileSelectTotalEl.classList.toggle("over-budget", overBudget);
+
+  continueReconcileSelectButtonEl.disabled = pdfs.length < 1 || excels.length < 1 || overBudget;
+}
+
+function openReconcileSelectDialog() {
+  reconcileSelectListEl.textContent = "";
+  reconcileSelectErrorEl.textContent = "";
+
+  latestDocuments
+    .filter((d) => d.extension === ".pdf" || isExcelDoc(d))
+    .forEach((doc) => {
+      const item = document.createElement("li");
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = doc.id;
+      checkbox.addEventListener("change", updateReconcileSelectTotal);
+
+      const text = document.createElement("span");
+      const typeLabel = doc.extension === ".pdf" ? "PDF" : doc.extension.replace(".", "").toUpperCase();
+      text.textContent = `[${typeLabel}] ${doc.original_filename} — ${formatSize(doc.size_bytes)}`;
+
+      label.append(checkbox, text);
+      item.appendChild(label);
+      reconcileSelectListEl.appendChild(item);
+    });
+
+  updateReconcileSelectTotal();
+  reconcileSelectDialogEl.showModal();
+}
+
+reconcileOpenButtonEl.addEventListener("click", openReconcileSelectDialog);
+cancelReconcileSelectButtonEl.addEventListener("click", () => reconcileSelectDialogEl.close());
+closeOnBackdropClick(reconcileSelectDialogEl);
+closeOnBackdropClick(reconcileConfirmDialogEl);
+
+let pendingReconcileSelection = [];
+
+reconcileSelectFormEl.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const selected = selectedReconcileDocuments();
+  const pdfs = selected.filter((d) => d.extension === ".pdf");
+  const excels = selected.filter(isExcelDoc);
+  if (pdfs.length < 1 || excels.length < 1) {
+    reconcileSelectErrorEl.textContent = "Select at least one PDF and at least one Excel workbook.";
+    return;
+  }
+
+  pendingReconcileSelection = selected;
+  reconcileSelectDialogEl.close();
+
+  reconcileConfirmListEl.textContent = "";
+  selected.forEach((doc) => {
+    const item = document.createElement("li");
+    const typeLabel = doc.extension === ".pdf" ? "PDF" : doc.extension.replace(".", "").toUpperCase();
+    item.textContent = `[${typeLabel}] ${doc.original_filename}`;
+    reconcileConfirmListEl.appendChild(item);
+  });
+  reconcileConfirmErrorEl.textContent = "";
+  sendReconcileConfirmButtonEl.disabled = false;
+  sendReconcileConfirmButtonEl.textContent = "Send to Claude";
+  reconcileConfirmDialogEl.showModal();
+});
+
+backReconcileConfirmButtonEl.addEventListener("click", () => {
+  reconcileConfirmDialogEl.close();
+  reconcileSelectDialogEl.showModal();
+});
+
+reconcileConfirmFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (pendingReconcileSelection.length === 0) return;
+
+  reconcileConfirmErrorEl.textContent = "";
+  sendReconcileConfirmButtonEl.disabled = true;
+  backReconcileConfirmButtonEl.disabled = true;
+  sendReconcileConfirmButtonEl.textContent = "Analyzing… this can take several minutes";
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/reconciliation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_ids: pendingReconcileSelection.map((d) => d.id),
+        confirm: true,
+      }),
+    });
+    const record = await res.json().catch(() => null);
+
+    if (!record || !record.id) {
+      reconcileConfirmErrorEl.textContent = (record && record.error) || "The reconciliation request failed.";
+      return;
+    }
+
+    window.location.href = `/reconcile.html?project=${encodeURIComponent(projectId)}&analysis=${encodeURIComponent(record.id)}`;
+  } catch (err) {
+    reconcileConfirmErrorEl.textContent = "Could not reach the local app server.";
+  } finally {
+    sendReconcileConfirmButtonEl.disabled = false;
+    backReconcileConfirmButtonEl.disabled = false;
+    sendReconcileConfirmButtonEl.textContent = "Send to Claude";
   }
 });
 

@@ -20,6 +20,8 @@ from urllib.parse import parse_qs, quote, urlparse
 import ai_client
 import cross_analyses
 import cross_document_analysis
+import cross_format_analyses
+import cross_format_analysis
 import documents
 import inspections
 import multipart
@@ -44,6 +46,8 @@ _CROSS_ANALYSIS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/cross-analys
 _CROSS_ANALYSIS_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/cross-analyses/([^/]+)$")
 _XLSX_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect-workbook$")
 _XLSX_INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workbook-inspections/([^/]+)$")
+_RECONCILIATION_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/reconciliation$")
+_RECONCILIATION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/reconciliations/([^/]+)$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -148,6 +152,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static_file("workbook-inspect.html")
             return
 
+        if path == "/reconcile.html":
+            self._send_static_file("reconcile.html")
+            return
+
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
@@ -204,6 +212,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "workbook inspection not found"})
                 return
             self._send_json(200, xlsx_record.to_dict())
+            return
+
+        reconciliation_match = _RECONCILIATION_ITEM_RE.match(path)
+        if reconciliation_match:
+            project_id, reconciliation_id = reconciliation_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            reconciliation_record = cross_format_analyses.get_cross_format_analysis(project_id, reconciliation_id)
+            if reconciliation_record is None:
+                self._send_json(404, {"error": "reconciliation not found"})
+                return
+            self._send_json(200, reconciliation_record.to_dict())
             return
 
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
@@ -290,6 +311,12 @@ class Handler(BaseHTTPRequestHandler):
         if xlsx_inspect_match:
             project_id, document_id = xlsx_inspect_match.groups()
             self._handle_workbook_inspect(project_id, document_id)
+            return
+
+        reconciliation_match = _RECONCILIATION_COLLECTION_RE.match(path)
+        if reconciliation_match:
+            (project_id,) = reconciliation_match.groups()
+            self._handle_reconciliation(project_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -500,6 +527,65 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
+    def _handle_reconciliation(self, project_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(
+                400, {"error": "reconciliation requires {\"confirm\": true} in the request body"}
+            )
+            return
+
+        document_ids = body.get("document_ids")
+        if not isinstance(document_ids, list) or not all(isinstance(d, str) for d in document_ids):
+            self._send_json(400, {"error": "document_ids must be a list of document id strings"})
+            return
+        if len(document_ids) != len(set(document_ids)):
+            self._send_json(400, {"error": "duplicate document selected"})
+            return
+
+        selected = []
+        for document_id in document_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": f"document not found: {document_id}"})
+                return
+            selected.append(document)
+
+        outcome = cross_format_analysis.run_cross_format_analysis(selected)
+
+        pdf_docs = [d for d in selected if d.extension == ".pdf"]
+        excel_docs = [d for d in selected if d.extension in (".xlsx", ".xls")]
+
+        record = cross_format_analyses.create_cross_format_analysis(
+            project_id=project_id,
+            pdf_document_ids=[d.id for d in pdf_docs],
+            pdf_document_filenames=[d.original_filename for d in pdf_docs],
+            pdf_document_checksums=[d.sha256 for d in pdf_docs],
+            excel_document_ids=[d.id for d in excel_docs],
+            excel_document_filenames=[d.original_filename for d in excel_docs],
+            excel_document_checksums=[d.sha256 for d in excel_docs],
+            status="success" if outcome.success else "error",
+            transmitted=outcome.transmitted,
+            analysis_seconds=outcome.analysis_seconds,
+            model=outcome.model,
+            mandate_version=cross_format_analysis.MANDATE_VERSION,
+            stop_reason=outcome.stop_reason,
+            input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+            output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+            code_execution_requests=outcome.usage.get("code_execution_requests") if outcome.usage else None,
+            error_type=outcome.error_type,
+            error_message=outcome.error_message,
+            segments=[s.to_dict() for s in outcome.segments] if outcome.segments else None,
+            tool_trace=outcome.tool_trace,
+            excel_cleanup=[c.to_dict() for c in outcome.excel_cleanup] if outcome.excel_cleanup else None,
+            excel_verification=[v.to_dict() for v in outcome.excel_verification] if outcome.excel_verification else None,
+        )
+        self._send_json(200 if outcome.success else 502, record.to_dict())
+
 
 def main() -> None:
     store.init_db()
@@ -507,6 +593,7 @@ def main() -> None:
     inspections.init_inspections_db()
     cross_analyses.init_cross_analyses_db()
     xlsx_inspections.init_xlsx_inspections_db()
+    cross_format_analyses.init_cross_format_analyses_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

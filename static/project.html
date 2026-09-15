@@ -81,6 +81,19 @@
         Needs at least two uploaded PDF documents.
       </p>
     </div>
+
+    <div class="card" id="reconcile-card" hidden>
+      <h2>Cross-format deal reconciliation</h2>
+      <p class="section-hint">
+        Have Claude read a selection of this project's original PDFs and Excel workbooks together, as
+        evidence for one transaction, and reconcile the financial model against the narrative deal
+        documents.
+      </p>
+      <button type="button" id="reconcile-open-button">Reconcile documents</button>
+      <p class="section-hint" id="reconcile-unavailable-hint" hidden>
+        Needs at least one uploaded PDF and one uploaded Excel workbook (.xlsx or .xls).
+      </p>
+    </div>
   </div>
 
   <dialog id="inspect-dialog" class="modal">
@@ -141,6 +154,40 @@
       <div class="modal-actions">
         <button type="button" class="button-secondary" id="back-cross-confirm">Back</button>
         <button type="submit" id="send-cross-confirm">Send to Claude</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reconcile-select-dialog" class="modal">
+    <form id="reconcile-select-form">
+      <h2>Select documents to reconcile</h2>
+      <p class="section-hint">
+        Choose at least one PDF and at least one Excel workbook. All selected files are analyzed
+        together as evidence for one transaction.
+      </p>
+      <ul class="cross-select-list" id="reconcile-select-list"></ul>
+      <p class="cross-select-total" id="reconcile-select-total"></p>
+      <div class="error" id="reconcile-select-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-reconcile-select">Cancel</button>
+        <button type="submit" id="continue-reconcile-select">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reconcile-confirm-dialog" class="modal">
+    <form id="reconcile-confirm-form">
+      <h2>Confirm cross-format reconciliation</h2>
+      <p class="section-hint">
+        The selected PDFs are sent directly to Anthropic's Claude API. The selected Excel workbooks
+        are uploaded to Anthropic's Files API and made available to Claude's sandboxed code-execution
+        environment, then deleted afterward. No other documents in this project are sent.
+      </p>
+      <ul class="cross-confirm-list" id="reconcile-confirm-list"></ul>
+      <div class="error" id="reconcile-confirm-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="back-reconcile-confirm">Back</button>
+        <button type="submit" id="send-reconcile-confirm">Send to Claude</button>
       </div>
     </form>
   </dialog>

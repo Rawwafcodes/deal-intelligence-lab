@@ -213,6 +213,72 @@ analyzed successfully but whose citations simply couldn't be checked
 locally this run (verification and analysis success are tracked and shown
 separately, never conflated).
 
+## Reconciling a deal across PDFs and Excel workbooks
+
+On a project's page, the **Reconcile documents** action (under "Cross-format
+deal reconciliation") lets you select one or more PDFs together with one or
+more Excel workbooks - say, an information memorandum and its financial
+model - and have Claude read all of them together as evidence for one
+transaction, rather than inspecting each file on its own.
+
+- A picker lists every PDF and Excel document in the project; you must
+  select at least one of each before continuing.
+- A second, explicit step lists every filename that will be sent before
+  anything is transmitted, and explains that PDFs go directly to Claude
+  while Excel workbooks are uploaded to Anthropic's Files API for
+  sandboxed code execution. No other project documents are included.
+- The frontend only ever sends document IDs, never filesystem paths. The
+  server independently re-validates the selection: every document must
+  belong to the project and actually exist, duplicates are rejected, the
+  selection must contain both a PDF and an Excel file, and no unsupported
+  file type is allowed through.
+- **Both mechanisms run in one analytical context, in a single request**:
+  every selected PDF is sent inline using Anthropic's native PDF document
+  input with citations enabled (exactly as in single- and cross-document
+  PDF inspection), and every selected Excel workbook is uploaded to the
+  Files API and handed to Claude as a `container_upload` block alongside
+  the sandboxed code-execution tool (exactly as in workbook inspection).
+  Claude sees all of it together and is instructed to treat every source as
+  evidence for one deal - not to summarize each file separately and merge
+  the summaries with hardcoded rules.
+- Claude reports an executive conclusion, a review of each source
+  (including whether it could be interpreted and any limitations), a set of
+  reconciliation findings (title, classification, severity, explanation,
+  separate PDF and workbook evidence, commercial/financial relevance,
+  uncertainty, and a recommended action), unresolved questions to raise
+  with the deal team, and anything it could not read, calculate, verify, or
+  reconcile.
+- **PDF evidence** uses Anthropic's native citations, exactly as elsewhere
+  in this app - they link straight back to the original PDF at the cited
+  page. **Excel evidence** uses this app's own citation convention (as in
+  workbook inspection), extended so a citation names the exact workbook it
+  came from (`'Workbook 1'!'Sheet Name'!B7 [value]`) rather than only a
+  sheet and cell - this matters once more than one workbook is selected,
+  since two models can easily share a sheet name like "Assumptions". Every
+  Excel citation is independently checked against the real workbook's
+  structure after the fact and marked verified, not found, or unresolved;
+  an Excel citation naming an unrecognized workbook is never guessed at, it
+  is simply marked as not resolved. If a finding only has evidence from one
+  format, Claude is instructed to say so explicitly (e.g. "No workbook
+  evidence located") rather than inventing the other side.
+- You land on a dedicated results page. The record is saved to
+  `data/deal_lab.db`, so refreshing the page or restarting the app never
+  loses a completed reconciliation.
+
+**Provider file cleanup:** every Excel workbook uploaded for a
+reconciliation run gets its own delete attempt afterward - on success, and
+on every failure path (a provider error, a parsing failure, or an
+unexpected exception) - and each workbook's cleanup outcome is recorded and
+shown independently, the same way as single-workbook inspection. See
+"Inspecting an Excel workbook with Claude" above for what a successful
+delete does and does not imply about Anthropic's broader data retention for
+the Files API and code execution; the same caveats apply here.
+
+This action does not locally extract PDF text, convert spreadsheets to
+CSV/JSON, perform OCR, or use retrieval/embeddings - the app's role is
+transport, validation, persistence, and mechanical citation checking; all
+semantic understanding and reconciliation is Claude's.
+
 ## AI connection
 
 On the home page, the **AI connection** card has a **Test AI connection**
