@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Validation Lab - Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="card" id="validation-intro-card">
+      <h2>Validation Lab</h2>
+      <p class="section-hint">
+        Tests whether Claude can reliably find material issues in a completed deal without being
+        told what those issues are. Prepare a private answer key, lock it, run the normal
+        cross-format reconciliation blind, then score the findings yourself. The answer key never
+        leaves this computer.
+      </p>
+      <button type="button" id="new-case-button">New validation case</button>
+    </div>
+
+    <div class="card" id="cases-card">
+      <h2>Validation cases</h2>
+      <div class="table-scroll">
+      <table class="documents-table" id="cases-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Answer key</th>
+            <th>Runs</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="cases-tbody"></tbody>
+      </table>
+      </div>
+      <div class="empty-state" id="cases-empty" hidden>
+        <p>No validation cases yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="new-case-dialog" class="modal">
+    <form id="new-case-form">
+      <h2>New validation case</h2>
+      <div class="field">
+        <label for="case-name">Name</label>
+        <input type="text" id="case-name" name="name" maxlength="200" required />
+      </div>
+      <div class="field">
+        <label for="case-description">Description (optional)</label>
+        <textarea id="case-description" name="description" maxlength="2000" rows="2"></textarea>
+      </div>
+      <p class="section-hint">
+        Select at least one PDF and one Excel workbook. This is the same document selection the
+        blind run will later be sent - only these files, nothing else in the project.
+      </p>
+      <ul class="cross-select-list" id="new-case-doc-list"></ul>
+      <div class="error" id="new-case-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-new-case">Cancel</button>
+        <button type="submit" id="create-case-button">Create case</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/validation.js"></script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Validation Evaluation - Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="card inspection-meta" id="run-meta-card">
+      <div class="skeleton-line title"></div>
+      <div class="skeleton-line w-60"></div>
+    </div>
+
+    <div class="card" id="pending-card" hidden>
+      <h2>Analysis not complete yet</h2>
+      <p class="section-hint">Reload this page once the run finishes.</p>
+    </div>
+
+    <div class="card" id="answer-key-reveal-card" hidden>
+      <h2>Answer key (revealed now that the analysis is complete)</h2>
+      <div id="expected-issues-list"></div>
+      <h3>Must-not-claim (reference only)</h3>
+      <div id="must-not-claim-reference-list"></div>
+    </div>
+
+    <div class="card" id="findings-card" hidden>
+      <h2>Claude's findings</h2>
+      <div id="findings-list"></div>
+    </div>
+
+    <div class="card" id="metrics-card" hidden>
+      <h2>Metrics</h2>
+      <div id="metrics-list"></div>
+    </div>
+
+    <div class="card" id="conclusion-card" hidden>
+      <h2>Human conclusion</h2>
+      <div class="field">
+        <label for="human-conclusion">Conclusion</label>
+        <textarea id="human-conclusion" rows="4"></textarea>
+      </div>
+      <div class="field">
+        <label for="material-limitations">Material limitations</label>
+        <textarea id="material-limitations" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label for="recommended-improvements">Recommended product or mandate improvements</label>
+        <textarea id="recommended-improvements" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label for="final-status">Final status</label>
+        <select id="final-status">
+          <option value="">— Not yet decided —</option>
+          <option value="passed">Passed this validation case</option>
+          <option value="passed_with_limitations">Passed with material limitations</option>
+          <option value="failed">Failed this validation case</option>
+          <option value="incomplete_review">Incomplete human review</option>
+          <option value="not_a_blind_test">Not a genuinely blind test</option>
+        </select>
+      </div>
+      <div class="error" id="save-error"></div>
+      <div class="modal-actions">
+        <button type="button" id="save-evaluation-button">Save evaluation</button>
+      </div>
+      <p class="section-hint" id="save-status"></p>
+    </div>
+  </div>
+
+  <script src="/validation-evaluation.js"></script>
+</body>
+</html>

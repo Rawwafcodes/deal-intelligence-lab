@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Validation Case - Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" id="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="card" id="case-meta-card">
+      <div class="skeleton-line title"></div>
+      <div class="skeleton-line w-60"></div>
+    </div>
+
+    <div class="card" id="answer-key-card" hidden>
+      <h2>Private answer key</h2>
+      <p class="section-hint">
+        Prepared independently, before the blind run. Stays on this computer - never sent to
+        Anthropic in any form.
+      </p>
+
+      <div id="answer-key-locked-banner" class="section-hint" hidden></div>
+
+      <h3>Expected issues</h3>
+      <div id="issues-list"></div>
+      <button type="button" id="add-issue-button" class="button-secondary">Add expected issue</button>
+
+      <h3>Must-not-claim</h3>
+      <p class="section-hint">Conclusions that would be false or unsupported if Claude stated them.</p>
+      <div id="must-not-claim-list"></div>
+      <button type="button" id="add-must-not-claim-button" class="button-secondary">Add must-not-claim item</button>
+
+      <div class="error" id="answer-key-error"></div>
+      <div class="modal-actions" id="answer-key-actions">
+        <button type="button" id="save-draft-button">Save draft</button>
+        <button type="button" id="lock-button" class="button-secondary">Lock answer key</button>
+      </div>
+      <button type="button" id="revise-button" class="button-secondary" hidden>Create revision to edit</button>
+    </div>
+
+    <div class="card" id="run-card" hidden>
+      <h2>Run the blind analysis</h2>
+      <p class="section-hint" id="run-hint"></p>
+      <div class="modal-actions">
+        <button type="button" id="start-run-button">Run blind reconciliation</button>
+        <button type="button" id="attach-existing-button" class="button-secondary">Attach an existing analysis</button>
+      </div>
+      <div class="error" id="run-error"></div>
+    </div>
+
+    <div class="card" id="runs-card" hidden>
+      <h2>Validation runs</h2>
+      <div class="table-scroll">
+      <table class="documents-table" id="runs-table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Blind</th>
+            <th>Started</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="runs-tbody"></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="run-confirm-dialog" class="modal">
+    <form id="run-confirm-form">
+      <h2>Confirm blind reconciliation</h2>
+      <p class="section-hint" id="run-confirm-text"></p>
+      <ul class="cross-confirm-list" id="run-confirm-list"></ul>
+      <div class="error" id="run-confirm-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-run-confirm">Cancel</button>
+        <button type="submit" id="send-run-confirm">Send to Claude</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lock-confirm-dialog" class="modal">
+    <form id="lock-confirm-form">
+      <h2>Lock the answer key?</h2>
+      <p class="section-hint">
+        It cannot be edited afterward - you would need to create a new revision instead. It stays
+        on this computer and is never transmitted to Anthropic.
+      </p>
+      <div class="error" id="lock-confirm-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-lock-confirm">Cancel</button>
+        <button type="submit" id="send-lock-confirm">Lock answer key</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="revise-confirm-dialog" class="modal">
+    <form id="revise-confirm-form">
+      <h2>Create a new revision?</h2>
+      <p class="section-hint">
+        The original locked version and its checksum are preserved and never overwritten - this
+        creates a new editable draft version instead.
+      </p>
+      <div class="error" id="revise-confirm-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-revise-confirm">Cancel</button>
+        <button type="submit" id="send-revise-confirm">Create revision</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="attach-existing-dialog" class="modal">
+    <form id="attach-existing-form">
+      <h2>Attach an existing analysis</h2>
+      <p class="section-hint">
+        Links an already-completed reconciliation from this project instead of transmitting a new
+        one. Only counts as blind if the answer key was locked before that analysis was created.
+      </p>
+      <div class="field">
+        <label for="existing-analysis-select">Existing analysis</label>
+        <select id="existing-analysis-select"></select>
+      </div>
+      <div class="error" id="attach-existing-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-attach-existing">Cancel</button>
+        <button type="submit" id="confirm-attach-existing">Attach</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/validation-case.js"></script>
+</body>
+</html>

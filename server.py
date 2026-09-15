@@ -18,15 +18,19 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 import ai_client
+import answer_keys
 import cross_analyses
 import cross_document_analysis
 import cross_format_analyses
 import cross_format_analysis
 import documents
+import evaluations
 import inspections
 import multipart
 import pdf_inspection
 import store
+import validation_cases
+import validation_runs
 import xlsx_inspection
 import xlsx_inspections
 
@@ -48,6 +52,20 @@ _XLSX_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect
 _XLSX_INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workbook-inspections/([^/]+)$")
 _RECONCILIATION_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/reconciliation$")
 _RECONCILIATION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/reconciliations/([^/]+)$")
+_CROSS_FORMAT_ANALYSES_LIST_RE = re.compile(r"^/api/projects/([^/]+)/cross-format-analyses$")
+
+_VALIDATION_CASES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases$")
+_VALIDATION_CASE_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)$")
+_VALIDATION_CASE_DOCUMENTS_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/documents$")
+_ANSWER_KEY_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/answer-key$")
+_ANSWER_KEY_LOCK_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/answer-key/lock$")
+_ANSWER_KEY_REVISE_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/answer-key/revise$")
+_VALIDATION_RUNS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs$")
+_VALIDATION_RUN_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs/([^/]+)$")
+_VALIDATION_EVALUATION_RE = re.compile(
+    r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs/([^/]+)/evaluation$"
+)
+_VALIDATION_REPORT_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs/([^/]+)/report$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -156,6 +174,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static_file("reconcile.html")
             return
 
+        if path == "/validation.html":
+            self._send_static_file("validation.html")
+            return
+
+        if path == "/validation-case.html":
+            self._send_static_file("validation-case.html")
+            return
+
+        if path == "/validation-evaluation.html":
+            self._send_static_file("validation-evaluation.html")
+            return
+
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
@@ -225,6 +255,73 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "reconciliation not found"})
                 return
             self._send_json(200, reconciliation_record.to_dict())
+            return
+
+        cross_format_list_match = _CROSS_FORMAT_ANALYSES_LIST_RE.match(path)
+        if cross_format_list_match:
+            (project_id,) = cross_format_list_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            records = cross_format_analyses.list_cross_format_analyses(project_id)
+            self._send_json(200, [r.to_dict() for r in records])
+            return
+
+        evaluation_match = _VALIDATION_EVALUATION_RE.match(path)
+        if evaluation_match:
+            project_id, validation_case_id, run_id = evaluation_match.groups()
+            self._handle_get_evaluation(project_id, validation_case_id, run_id)
+            return
+
+        report_match = _VALIDATION_REPORT_RE.match(path)
+        if report_match:
+            project_id, validation_case_id, run_id = report_match.groups()
+            self._handle_get_report(project_id, validation_case_id, run_id)
+            return
+
+        validation_run_item_match = _VALIDATION_RUN_ITEM_RE.match(path)
+        if validation_run_item_match:
+            project_id, validation_case_id, run_id = validation_run_item_match.groups()
+            case = self._get_owned_validation_case(project_id, validation_case_id)
+            if case is None:
+                return
+            run = validation_runs.get_run(validation_case_id, run_id)
+            if run is None:
+                self._send_json(404, {"error": "validation run not found"})
+                return
+            self._send_json(200, run.to_dict())
+            return
+
+        validation_runs_collection_match = _VALIDATION_RUNS_COLLECTION_RE.match(path)
+        if validation_runs_collection_match:
+            project_id, validation_case_id = validation_runs_collection_match.groups()
+            case = self._get_owned_validation_case(project_id, validation_case_id)
+            if case is None:
+                return
+            runs = validation_runs.list_runs_for_case(validation_case_id)
+            self._send_json(200, [r.to_dict() for r in runs])
+            return
+
+        answer_key_match = _ANSWER_KEY_RE.match(path)
+        if answer_key_match:
+            project_id, validation_case_id = answer_key_match.groups()
+            self._handle_get_answer_key(project_id, validation_case_id)
+            return
+
+        validation_case_item_match = _VALIDATION_CASE_ITEM_RE.match(path)
+        if validation_case_item_match:
+            project_id, validation_case_id = validation_case_item_match.groups()
+            self._handle_get_validation_case(project_id, validation_case_id)
+            return
+
+        validation_cases_collection_match = _VALIDATION_CASES_COLLECTION_RE.match(path)
+        if validation_cases_collection_match:
+            (project_id,) = validation_cases_collection_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            cases = validation_cases.list_validation_cases(project_id)
+            self._send_json(200, [c.to_dict() for c in cases])
             return
 
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
@@ -317,6 +414,48 @@ class Handler(BaseHTTPRequestHandler):
         if reconciliation_match:
             (project_id,) = reconciliation_match.groups()
             self._handle_reconciliation(project_id)
+            return
+
+        validation_cases_collection_match = _VALIDATION_CASES_COLLECTION_RE.match(path)
+        if validation_cases_collection_match:
+            (project_id,) = validation_cases_collection_match.groups()
+            self._handle_create_validation_case(project_id)
+            return
+
+        validation_case_documents_match = _VALIDATION_CASE_DOCUMENTS_RE.match(path)
+        if validation_case_documents_match:
+            project_id, validation_case_id = validation_case_documents_match.groups()
+            self._handle_update_validation_case_documents(project_id, validation_case_id)
+            return
+
+        answer_key_lock_match = _ANSWER_KEY_LOCK_RE.match(path)
+        if answer_key_lock_match:
+            project_id, validation_case_id = answer_key_lock_match.groups()
+            self._handle_lock_answer_key(project_id, validation_case_id)
+            return
+
+        answer_key_revise_match = _ANSWER_KEY_REVISE_RE.match(path)
+        if answer_key_revise_match:
+            project_id, validation_case_id = answer_key_revise_match.groups()
+            self._handle_revise_answer_key(project_id, validation_case_id)
+            return
+
+        answer_key_match = _ANSWER_KEY_RE.match(path)
+        if answer_key_match:
+            project_id, validation_case_id = answer_key_match.groups()
+            self._handle_update_answer_key(project_id, validation_case_id)
+            return
+
+        validation_runs_collection_match = _VALIDATION_RUNS_COLLECTION_RE.match(path)
+        if validation_runs_collection_match:
+            project_id, validation_case_id = validation_runs_collection_match.groups()
+            self._handle_start_validation_run(project_id, validation_case_id)
+            return
+
+        evaluation_match = _VALIDATION_EVALUATION_RE.match(path)
+        if evaluation_match:
+            project_id, validation_case_id, run_id = evaluation_match.groups()
+            self._handle_update_evaluation(project_id, validation_case_id, run_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -586,6 +725,361 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
+    # -- Validation Lab (Milestone 8) --------------------------------------
+
+    def _get_owned_validation_case(self, project_id: str, validation_case_id: str):
+        """Project-isolation + existence check shared by every validation
+        endpoint. Sends the 404 response itself and returns None when the
+        project or case doesn't exist (or the case belongs to a different
+        project) - callers should `if case is None: return`."""
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return None
+        case = validation_cases.get_validation_case(project_id, validation_case_id)
+        if case is None:
+            self._send_json(404, {"error": "validation case not found"})
+            return None
+        return case
+
+    def _answer_key_response_dict(self, validation_case_id: str) -> dict | None:
+        """Implements the blindness-preserving reveal rule: an unlocked
+        draft is always visible (the user is still writing it), but once
+        locked, content is withheld from this general endpoint until at
+        least one validation run has actually been executed against that
+        *exact* locked version - never merely because the case exists or a
+        run against some other version happened."""
+        version = answer_keys.get_current_version(validation_case_id)
+        if version is None:
+            return None
+        revealed = True
+        if version.is_locked:
+            runs = validation_runs.list_runs_for_case(validation_case_id)
+            revealed = any(r.answer_key_version_id == version.id for r in runs)
+        out = version.to_dict(include_content=revealed)
+        out["content_hidden"] = not revealed
+        return out
+
+    def _handle_create_validation_case(self, project_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+
+        name = str(data.get("name", "")).strip()
+        description = str(data.get("description", "")).strip()
+        pdf_ids = data.get("pdf_document_ids")
+        excel_ids = data.get("excel_document_ids")
+
+        if not name:
+            self._send_json(400, {"error": "name is required"})
+            return
+        if not isinstance(pdf_ids, list) or not all(isinstance(d, str) for d in pdf_ids):
+            self._send_json(400, {"error": "pdf_document_ids must be a list of document id strings"})
+            return
+        if not isinstance(excel_ids, list) or not all(isinstance(d, str) for d in excel_ids):
+            self._send_json(400, {"error": "excel_document_ids must be a list of document id strings"})
+            return
+        combined = pdf_ids + excel_ids
+        if len(combined) != len(set(combined)):
+            self._send_json(400, {"error": "duplicate document selected"})
+            return
+        if len(pdf_ids) < 1 or len(excel_ids) < 1:
+            self._send_json(400, {"error": "select at least one PDF and one Excel workbook"})
+            return
+
+        for document_id in pdf_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": f"document not found: {document_id}"})
+                return
+            if document.extension != ".pdf":
+                self._send_json(400, {"error": f"document is not a PDF: {document_id}"})
+                return
+        for document_id in excel_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": f"document not found: {document_id}"})
+                return
+            if document.extension not in (".xlsx", ".xls"):
+                self._send_json(400, {"error": f"document is not an Excel workbook: {document_id}"})
+                return
+
+        case = validation_cases.create_validation_case(
+            project_id=project_id,
+            name=name,
+            description=description,
+            pdf_document_ids=pdf_ids,
+            excel_document_ids=excel_ids,
+        )
+        answer_keys.create_initial_version(case.id)
+        self._send_json(201, case.to_dict())
+
+    def _handle_get_validation_case(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        answer_key = self._answer_key_response_dict(validation_case_id)
+        runs = validation_runs.list_runs_for_case(validation_case_id)
+        self._send_json(
+            200, {"case": case.to_dict(), "answer_key": answer_key, "runs": [r.to_dict() for r in runs]}
+        )
+
+    def _handle_update_validation_case_documents(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        if validation_runs.list_runs_for_case(validation_case_id):
+            self._send_json(409, {"error": "documents cannot be changed once a run exists for this case"})
+            return
+
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        pdf_ids = data.get("pdf_document_ids")
+        excel_ids = data.get("excel_document_ids")
+        if not isinstance(pdf_ids, list) or not all(isinstance(d, str) for d in pdf_ids):
+            self._send_json(400, {"error": "pdf_document_ids must be a list of document id strings"})
+            return
+        if not isinstance(excel_ids, list) or not all(isinstance(d, str) for d in excel_ids):
+            self._send_json(400, {"error": "excel_document_ids must be a list of document id strings"})
+            return
+        combined = pdf_ids + excel_ids
+        if len(combined) != len(set(combined)):
+            self._send_json(400, {"error": "duplicate document selected"})
+            return
+        if len(pdf_ids) < 1 or len(excel_ids) < 1:
+            self._send_json(400, {"error": "select at least one PDF and one Excel workbook"})
+            return
+
+        for document_id in pdf_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None or document.extension != ".pdf":
+                self._send_json(400, {"error": f"invalid PDF selection: {document_id}"})
+                return
+        for document_id in excel_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None or document.extension not in (".xlsx", ".xls"):
+                self._send_json(400, {"error": f"invalid Excel selection: {document_id}"})
+                return
+
+        updated = validation_cases.update_selected_documents(
+            project_id, validation_case_id, pdf_document_ids=pdf_ids, excel_document_ids=excel_ids
+        )
+        assert updated is not None
+        self._send_json(200, updated.to_dict())
+
+    def _handle_get_answer_key(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        out = self._answer_key_response_dict(validation_case_id)
+        if out is None:
+            self._send_json(404, {"error": "answer key not found"})
+            return
+        self._send_json(200, out)
+
+    def _handle_update_answer_key(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        content = data.get("content")
+        if (
+            not isinstance(content, dict)
+            or not isinstance(content.get("issues"), list)
+            or not isinstance(content.get("must_not_claim"), list)
+        ):
+            self._send_json(400, {"error": "content must include 'issues' and 'must_not_claim' lists"})
+            return
+
+        version = answer_keys.get_current_version(validation_case_id)
+        if version is None:
+            self._send_json(404, {"error": "answer key not found"})
+            return
+        try:
+            updated = answer_keys.update_draft_content(validation_case_id, version.id, content)
+        except answer_keys.AnswerKeyLockedError as exc:
+            self._send_json(409, {"error": str(exc)})
+            return
+        self._send_json(200, updated.to_dict(include_content=True))
+
+    def _handle_lock_answer_key(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "locking requires {\"confirm\": true} in the request body"})
+            return
+
+        version = answer_keys.get_current_version(validation_case_id)
+        if version is None:
+            self._send_json(404, {"error": "answer key not found"})
+            return
+        if version.is_locked:
+            self._send_json(409, {"error": "this answer-key version is already locked"})
+            return
+        if not version.content.get("issues") and not version.content.get("must_not_claim"):
+            self._send_json(400, {"error": "add at least one expected issue or must-not-claim item before locking"})
+            return
+
+        try:
+            locked = answer_keys.lock_version(validation_case_id, version.id)
+        except answer_keys.AnswerKeyLockedError as exc:
+            self._send_json(409, {"error": str(exc)})
+            return
+        self._send_json(200, locked.to_dict(include_content=True))
+
+    def _handle_revise_answer_key(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "revising requires {\"confirm\": true} in the request body"})
+            return
+        try:
+            revision = answer_keys.create_revision(validation_case_id)
+        except (ValueError, answer_keys.AnswerKeyLockedError) as exc:
+            self._send_json(409, {"error": str(exc)})
+            return
+        self._send_json(201, revision.to_dict(include_content=True))
+
+    def _handle_start_validation_run(self, project_id: str, validation_case_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "starting a run requires {\"confirm\": true} in the request body"})
+            return
+
+        mode = body.get("mode", "new")
+        if mode not in ("new", "existing"):
+            self._send_json(400, {"error": "mode must be 'new' or 'existing'"})
+            return
+
+        if mode == "existing":
+            analysis_id = body.get("cross_format_analysis_id")
+            if not isinstance(analysis_id, str) or not analysis_id:
+                self._send_json(400, {"error": "cross_format_analysis_id is required for mode 'existing'"})
+                return
+            analysis = cross_format_analyses.get_cross_format_analysis(project_id, analysis_id)
+            if analysis is None:
+                self._send_json(404, {"error": "cross-format analysis not found in this project"})
+                return
+            try:
+                run = validation_runs.attach_existing_analysis(validation_case_id, analysis)
+            except validation_runs.ValidationRunError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            evaluations.create_evaluation(run.id)
+            self._send_json(201, run.to_dict())
+            return
+
+        selected = []
+        for document_id in case.pdf_document_ids + case.excel_document_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": f"selected document no longer exists: {document_id}"})
+                return
+            selected.append(document)
+
+        try:
+            run, outcome = validation_runs.start_new_run(validation_case_id, selected)
+        except validation_runs.ValidationRunError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        evaluations.create_evaluation(run.id)
+        self._send_json(200 if outcome.success else 502, run.to_dict())
+
+    def _handle_get_evaluation(self, project_id: str, validation_case_id: str, run_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        run = validation_runs.get_run(validation_case_id, run_id)
+        if run is None:
+            self._send_json(404, {"error": "validation run not found"})
+            return
+        evaluation = evaluations.get_evaluation(run.id)
+        if evaluation is None:
+            self._send_json(404, {"error": "evaluation not found"})
+            return
+        self._send_json(200, evaluation.to_dict())
+
+    def _handle_update_evaluation(self, project_id: str, validation_case_id: str, run_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        run = validation_runs.get_run(validation_case_id, run_id)
+        if run is None:
+            self._send_json(404, {"error": "validation run not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            updated = evaluations.update_evaluation(run.id, data, is_blind=run.is_blind)
+        except evaluations.EvaluationValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        self._send_json(200, updated.to_dict())
+
+    def _handle_get_report(self, project_id: str, validation_case_id: str, run_id: str) -> None:
+        case = self._get_owned_validation_case(project_id, validation_case_id)
+        if case is None:
+            return
+        run = validation_runs.get_run(validation_case_id, run_id)
+        if run is None:
+            self._send_json(404, {"error": "validation run not found"})
+            return
+        analysis = cross_format_analyses.get_cross_format_analysis(project_id, run.cross_format_analysis_id)
+        if analysis is None:
+            self._send_json(404, {"error": "linked analysis not found"})
+            return
+        evaluation = evaluations.get_evaluation(run.id)
+        if evaluation is None:
+            self._send_json(404, {"error": "evaluation not found"})
+            return
+        answer_key_version = answer_keys.get_version(validation_case_id, run.answer_key_version_id)
+        if answer_key_version is None:
+            self._send_json(404, {"error": "answer key version not found"})
+            return
+
+        # The run this report describes is already complete, so revealing
+        # the exact locked answer-key version it was checked against here
+        # is precisely "reveal the answer key only after analysis has
+        # completed" - not a bypass of that rule.
+        findings = evaluations.extract_findings(analysis.segments)
+        metrics = evaluations.compute_metrics(
+            answer_key_content=answer_key_version.content, findings=findings, evaluation=evaluation
+        )
+        self._send_json(
+            200,
+            {
+                "case": case.to_dict(),
+                "run": run.to_dict(),
+                "analysis": analysis.to_dict(),
+                "answer_key": answer_key_version.to_dict(include_content=True),
+                "findings": findings,
+                "evaluation": evaluation.to_dict(),
+                "metrics": metrics,
+            },
+        )
+
 
 def main() -> None:
     store.init_db()
@@ -594,6 +1088,10 @@ def main() -> None:
     cross_analyses.init_cross_analyses_db()
     xlsx_inspections.init_xlsx_inspections_db()
     cross_format_analyses.init_cross_format_analyses_db()
+    validation_cases.init_validation_cases_db()
+    answer_keys.init_answer_keys_db()
+    validation_runs.init_validation_runs_db()
+    evaluations.init_evaluations_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

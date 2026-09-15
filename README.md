@@ -279,6 +279,94 @@ CSV/JSON, perform OCR, or use retrieval/embeddings - the app's role is
 transport, validation, persistence, and mechanical citation checking; all
 semantic understanding and reconciliation is Claude's.
 
+## Validation Lab: blind-testing Claude against a completed deal
+
+Milestone 7 proved this app can produce strong PDF–Excel deal analysis.
+The **Validation Lab** (reachable from a project page) exists to answer a
+harder question: can Claude reliably find the material issues in a
+*completed* deal *without being told what those issues are first*? This
+is a evaluation harness, not another analysis feature — it doesn't change
+how Claude analyzes anything.
+
+### How blindness is protected
+
+The core rule: a private **answer key** — the issues a human evaluator
+already knows are in a deal, prepared independently before the run — must
+never influence the analysis under test.
+
+- Answer-key content lives in its own database table, never in the
+  documents table, never inside a project's `originals` folder on disk,
+  and is never read by any code path that builds a request to Anthropic.
+  `validation_runs.py` (the only module that starts a run) only ever
+  touches an answer key's *metadata* — its lock timestamp, version number,
+  and checksum — never its content.
+- **A run cannot start until its answer key is locked.** Locking stamps a
+  timestamp and a SHA-256 checksum of the key's exact content and freezes
+  it permanently: after that, only a brand-new version (with its own
+  checksum) can hold different content — the original locked version and
+  its checksum are never overwritten.
+- Every validation run records whether it was genuinely blind: locked
+  *before* the analysis started (or, for an already-completed analysis you
+  attach retrospectively, locked before that analysis was originally run).
+  A run attached to an analysis that predates the lock is labeled
+  **retrospective** and can never be marked "passed" or "failed" — only
+  "incomplete review" or "not a genuinely blind test".
+- The app also won't re-display a locked answer key's content to you until
+  a run against that exact version has completed — the same discipline a
+  human blind reviewer would apply to themselves.
+- An automated test (`tests/test_validation_endpoints.py`,
+  `test_full_blind_workflow_and_secret_marker_never_leaks`) plants a
+  unique secret marker inside a locked answer key and proves it in the
+  mocked Anthropic request, the uploaded workbook bytes, application
+  stdout/stderr, and the analysis result.
+
+### The workflow
+
+On a project page, **Validation Lab** lets you:
+
+1. Create a validation case: a name, an optional description, and a
+   selection of that project's PDFs and Excel workbooks (at least one of
+   each).
+2. Write a private answer key: expected issues (title, description,
+   expected classification and severity, why it's material, known
+   source/page/sheet/cell, expected corrected value, evaluator notes), and
+   a separate **must-not-claim** list for conclusions that would be false
+   or unsupported if Claude stated them (e.g. asserting a relationship the
+   documents never establish, or presenting a calculated value as if it
+   were a source value).
+3. Lock the answer key. You'll see its checksum immediately as
+   confirmation; it stays on this computer.
+4. Run the normal Milestone 7 cross-format reconciliation — exactly the
+   same mandate, model, citation validation, provider-file cleanup, and
+   error handling as the plain reconciliation flow, unmodified. You can
+   also attach an already-completed analysis from the project instead of
+   transmitting a new one (useful for retrospective scoring, and always
+   labeled accordingly).
+5. Once the run completes, the answer key is revealed and you score it
+   yourself: mark each expected issue found completely / partially /
+   missed / not applicable and link it to the Claude findings that found
+   it; rate each Claude finding correct-and-material / correct-but-
+   immaterial / partially correct / unsupported / false / needs a
+   specialist; separately check citation accuracy, calculation
+   reproducibility, severity appropriateness, and recommended-action
+   usefulness; and classify any finding *not* linked to an expected issue
+   as a newly verified issue, a valid-but-immaterial observation,
+   unsupported, false, or needing further investigation. None of this
+   scoring is automatic — no keyword matching, no second LLM grading it.
+6. Read the computed metrics (critical/high/overall recall, reviewed-
+   finding precision, false positives, citation and calculation accuracy,
+   severity agreement, verified unexpected findings) — always shown as
+   "N of M", and explicitly marked **provisional** while any finding
+   remains unreviewed.
+7. Record your own conclusion, material limitations, recommended
+   improvements, and a final status: passed / passed with material
+   limitations / failed / incomplete human review / not a genuinely blind
+   test. A human always sets this — the software never declares a result.
+
+Everything persists in `data/deal_lab.db` (outside git, like every other
+audit record in this app) — refreshing or restarting the app never loses
+a case, an answer key, a run, or an evaluation.
+
 ## AI connection
 
 On the home page, the **AI connection** card has a **Test AI connection**

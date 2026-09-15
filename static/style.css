@@ -385,6 +385,7 @@ textarea:focus-visible,
   color: var(--text-muted);
   font-size: 0.85rem;
   margin: -8px 0 16px;
+  overflow-wrap: anywhere;
 }
 
 .skeleton-line {
@@ -749,6 +750,7 @@ dialog.modal h2 {
 
 .inspection-facts dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .inspection-error-text {

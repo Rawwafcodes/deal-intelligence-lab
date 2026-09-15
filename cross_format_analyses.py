@@ -252,6 +252,22 @@ def create_cross_format_analysis(
     return record
 
 
+def list_cross_format_analyses(project_id: str) -> list[CrossFormatAnalysis]:
+    """Added for Milestone 8's Validation Lab, which lets an evaluator
+    attach an already-completed cross-format analysis (run through the
+    plain Milestone 7 flow) to a validation case for retrospective scoring,
+    instead of always transmitting a fresh request. Read-only; does not
+    change how analyses are created or run."""
+    conn = store.get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM cross_format_analyses WHERE project_id = ? ORDER BY created_at DESC", (project_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_cross_format_analysis(row) for row in rows]
+
+
 def get_cross_format_analysis(project_id: str, cross_format_analysis_id: str) -> CrossFormatAnalysis | None:
     conn = store.get_connection()
     try:

@@ -38,6 +38,8 @@ const xlsxInspectDialogTextEl = document.getElementById("xlsx-inspect-dialog-tex
 const xlsxInspectErrorEl = document.getElementById("xlsx-inspect-error");
 const cancelXlsxInspectButtonEl = document.getElementById("cancel-xlsx-inspect");
 const confirmXlsxInspectButtonEl = document.getElementById("confirm-xlsx-inspect");
+const validationLabCardEl = document.getElementById("validation-lab-card");
+const validationLabLinkEl = document.getElementById("validation-lab-link");
 const reconcileCardEl = document.getElementById("reconcile-card");
 const reconcileUnavailableHintEl = document.getElementById("reconcile-unavailable-hint");
 const reconcileOpenButtonEl = document.getElementById("reconcile-open-button");
@@ -249,6 +251,9 @@ async function loadDocuments() {
   latestDocuments = docs;
   renderDocuments(docs);
   updateCrossAnalysisAvailability();
+
+  validationLabCardEl.hidden = false;
+  validationLabLinkEl.href = `/validation.html?project=${encodeURIComponent(projectId)}`;
 }
 
 function updateCrossAnalysisAvailability() {
