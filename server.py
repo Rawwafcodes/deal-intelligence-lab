@@ -18,6 +18,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 import ai_client
+import cross_analyses
+import cross_document_analysis
 import documents
 import inspections
 import multipart
@@ -36,6 +38,8 @@ _DOCUMENT_DOWNLOAD_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/do
 _DOCUMENT_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect$")
 _DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
 _INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/inspections/([^/]+)$")
+_CROSS_ANALYSIS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/cross-analysis$")
+_CROSS_ANALYSIS_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/cross-analyses/([^/]+)$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -132,6 +136,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static_file("inspect.html")
             return
 
+        if path == "/cross-analysis.html":
+            self._send_static_file("cross-analysis.html")
+            return
+
         if path == "/api/projects":
             projects = [p.to_dict() for p in store.list_projects()]
             self._send_json(200, projects)
@@ -162,6 +170,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "inspection not found"})
                 return
             self._send_json(200, inspection.to_dict())
+            return
+
+        cross_analysis_match = _CROSS_ANALYSIS_ITEM_RE.match(path)
+        if cross_analysis_match:
+            project_id, cross_analysis_id = cross_analysis_match.groups()
+            if store.get_project(project_id) is None:
+                self._send_json(404, {"error": "project not found"})
+                return
+            record = cross_analyses.get_cross_analysis(project_id, cross_analysis_id)
+            if record is None:
+                self._send_json(404, {"error": "cross-document analysis not found"})
+                return
+            self._send_json(200, record.to_dict())
             return
 
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
@@ -236,6 +257,12 @@ class Handler(BaseHTTPRequestHandler):
         if inspect_match:
             project_id, document_id = inspect_match.groups()
             self._handle_document_inspect(project_id, document_id)
+            return
+
+        cross_analysis_match = _CROSS_ANALYSIS_COLLECTION_RE.match(path)
+        if cross_analysis_match:
+            (project_id,) = cross_analysis_match.groups()
+            self._handle_cross_analysis(project_id)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -351,11 +378,60 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
+    def _handle_cross_analysis(self, project_id: str) -> None:
+        if store.get_project(project_id) is None:
+            self._send_json(404, {"error": "project not found"})
+            return
+
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(
+                400, {"error": "cross-document analysis requires {\"confirm\": true} in the request body"}
+            )
+            return
+
+        document_ids = body.get("document_ids")
+        if not isinstance(document_ids, list) or not all(isinstance(d, str) for d in document_ids):
+            self._send_json(400, {"error": "document_ids must be a list of document id strings"})
+            return
+        if len(document_ids) != len(set(document_ids)):
+            self._send_json(400, {"error": "duplicate document selected"})
+            return
+
+        selected = []
+        for document_id in document_ids:
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": f"document not found: {document_id}"})
+                return
+            selected.append(document)
+
+        outcome = cross_document_analysis.run_cross_analysis(selected)
+        record = cross_analyses.create_cross_analysis(
+            project_id=project_id,
+            document_ids=[d.id for d in selected],
+            document_filenames=[d.original_filename for d in selected],
+            document_checksums=[d.sha256 for d in selected],
+            status="success" if outcome.success else "error",
+            transmitted=outcome.transmitted,
+            analysis_seconds=outcome.analysis_seconds,
+            model=outcome.model,
+            mandate_version=cross_document_analysis.MANDATE_VERSION,
+            stop_reason=outcome.stop_reason,
+            input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+            output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+            error_type=outcome.error_type,
+            error_message=outcome.error_message,
+            segments=[s.to_dict() for s in outcome.segments] if outcome.segments else None,
+        )
+        self._send_json(200 if outcome.success else 502, record.to_dict())
+
 
 def main() -> None:
     store.init_db()
     documents.init_documents_db()
     inspections.init_inspections_db()
+    cross_analyses.init_cross_analyses_db()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")

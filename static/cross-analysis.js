@@ -1,16 +1,17 @@
-// Inspection results page: shows one PDF-inspection record, including
-// Claude's native citations linked back to the original PDF.
+// Cross-document analysis results page: shows one cross-analysis record
+// covering several original PDFs, with Claude's native citations linked
+// back to whichever original PDF each citation actually came from.
 
-const metaEl = document.getElementById("inspection-meta");
-const errorCardEl = document.getElementById("inspection-error-card");
-const errorTextEl = document.getElementById("inspection-error-text");
-const resultsCardEl = document.getElementById("inspection-results-card");
-const segmentsEl = document.getElementById("inspection-segments");
+const metaEl = document.getElementById("cross-analysis-meta");
+const errorCardEl = document.getElementById("cross-analysis-error-card");
+const errorTextEl = document.getElementById("cross-analysis-error-text");
+const resultsCardEl = document.getElementById("cross-analysis-results-card");
+const segmentsEl = document.getElementById("cross-analysis-segments");
 const breadcrumbEl = document.getElementById("app-breadcrumb");
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("project");
-const inspectionId = params.get("inspection");
+const analysisId = params.get("analysis");
 
 const ERROR_LABELS = {
   missing_api_key: "No Anthropic API key is configured.",
@@ -19,15 +20,18 @@ const ERROR_LABELS = {
   rate_limit: "Anthropic's rate limit was reached.",
   network_error: "Could not reach the Anthropic API.",
   model_unavailable: "The configured Claude model is not available.",
-  missing_file: "The stored file for this document is missing on disk.",
-  oversized_pdf: "This PDF is too large to send for inspection.",
-  encrypted_pdf: "This PDF is password-protected or encrypted.",
-  malformed_pdf: "This PDF could not be read.",
-  invalid_pdf: "Claude could not process this PDF.",
-  refused: "Claude declined to analyze this document.",
+  missing_file: "A stored file for one of the selected documents is missing on disk.",
+  too_few_documents: "At least two documents are needed for cross-document analysis.",
+  too_many_documents: "Too many documents were selected for one run.",
+  not_pdf: "Only PDF documents can be included in cross-document analysis.",
+  oversized_total: "The selected documents are too large to send in one request.",
+  encrypted_pdf: "One of the selected PDFs is password-protected or encrypted.",
+  malformed_pdf: "One of the selected PDFs could not be read.",
+  invalid_pdf: "Claude could not process one of the selected PDFs.",
+  refused: "Claude declined to analyze these documents.",
   truncated_response: "Claude's analysis was cut off before finishing.",
   empty_response: "Claude returned no analysis text.",
-  unexpected_error: "The inspection failed unexpectedly.",
+  unexpected_error: "The cross-document analysis failed unexpectedly.",
 };
 
 function formatDate(isoString) {
@@ -61,7 +65,7 @@ function setBreadcrumb(projectName) {
 
   const current = document.createElement("span");
   current.className = "current";
-  current.textContent = "Inspection";
+  current.textContent = "Cross-document analysis";
 
   breadcrumbEl.append(homeLink, sep1, projectLink, sep2, current);
 }
@@ -77,22 +81,31 @@ function renderMeta(record) {
 
   const title = document.createElement("div");
   title.className = "name";
-  title.textContent = record.document_filename;
+  title.textContent = `Cross-document analysis (${record.document_filenames.length} documents)`;
   metaEl.appendChild(title);
 
-  const viewLink = document.createElement("a");
-  viewLink.href = pdfViewUrl(record.document_id);
-  viewLink.target = "_blank";
-  viewLink.rel = "noopener";
-  viewLink.className = "link-action";
-  viewLink.textContent = "View original PDF";
-  metaEl.appendChild(viewLink);
+  const docList = document.createElement("ul");
+  docList.className = "cross-confirm-list";
+  record.document_filenames.forEach((filename, index) => {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = pdfViewUrl(record.document_ids[index]);
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.className = "link-action";
+    link.textContent = filename;
+    link.title = `SHA-256: ${record.document_checksums[index]}`;
+    item.appendChild(link);
+    docList.appendChild(item);
+  });
+  metaEl.appendChild(docList);
 
   const list = document.createElement("dl");
   list.className = "inspection-facts";
 
   const facts = [
     ["Model", record.model],
+    ["Mandate version", record.mandate_version],
     ["Sent to Anthropic", record.transmitted ? "Yes" : "No"],
     [
       "Tokens used",
@@ -114,7 +127,12 @@ function renderMeta(record) {
   metaEl.appendChild(list);
 }
 
-function renderCitations(container, citations, documentId) {
+function shortTitle(title) {
+  if (!title) return "document";
+  return title.length > 22 ? `${title.slice(0, 19)}…` : title;
+}
+
+function renderCitations(container, citations) {
   if (!citations || citations.length === 0) return;
   const wrap = document.createElement("span");
   wrap.className = "citation-list";
@@ -123,12 +141,20 @@ function renderCitations(container, citations, documentId) {
     link.className = "citation-badge";
     link.target = "_blank";
     link.rel = "noopener";
-    link.href = pdfViewUrl(documentId, citation.start_page);
-    link.title = citation.cited_text;
-    link.textContent =
+    if (citation.document_id) {
+      link.href = pdfViewUrl(citation.document_id, citation.start_page);
+    } else {
+      // The API returned a citation we can't map to a known document -
+      // never guess which file it means; show it unlinked instead.
+      link.removeAttribute("target");
+      link.classList.add("citation-badge-unresolved");
+    }
+    link.title = `${citation.document_title || "document"} — ${citation.cited_text}`;
+    const pageLabel =
       citation.end_page && citation.end_page !== citation.start_page
         ? `p. ${citation.start_page}–${citation.end_page}`
         : `p. ${citation.start_page}`;
+    link.textContent = `${shortTitle(citation.document_title)} ${pageLabel}`;
     wrap.appendChild(link);
   });
   container.appendChild(wrap);
@@ -157,8 +183,10 @@ function appendInlineFormatted(container, text) {
 }
 
 // Like appendInlineFormatted, but also breaks to a new line before each
-// "\n"-separated piece - used so labeled fields (e.g. "**Label:**") each
-// start on their own line instead of running together (see joinTextParts).
+// "\n"-separated piece - used so the labeled fields of a finding template
+// (**Title:**, **Classification:**, ...) each start on their own line
+// instead of running together as one wall of text, even though the API
+// merged them into a single uncited content block (see joinTextParts).
 function appendMultilineFormatted(container, text) {
   text.split("\n").forEach((line, index) => {
     if (index > 0) container.appendChild(document.createElement("br"));
@@ -169,8 +197,9 @@ function appendMultilineFormatted(container, text) {
 const FIELD_LABEL_RE = /^\*\*[^*]+:\*\*/;
 
 // Joins a block's buffered lines back into one string, but starts a new
-// line before any piece that looks like a "**Label:**" field, so such
-// fields render as a scannable list rather than run together.
+// line before any piece that looks like a "**Label:**" finding field
+// (e.g. the review mandate's Title/Classification/Severity/... template),
+// so those fields render as a scannable list rather than run together.
 function joinTextParts(parts) {
   return parts.reduce((acc, part, index) => {
     if (index === 0) return part;
@@ -178,7 +207,7 @@ function joinTextParts(parts) {
   }, "");
 }
 
-function renderContentBlock(text, citations, section, documentId) {
+function renderContentBlock(text, citations, section) {
   const isBullet = LIST_ITEM_RE.test(text);
   const wrapper = document.createElement(isBullet ? "div" : "p");
   wrapper.className = isBullet ? "inspection-bullet" : "inspection-paragraph";
@@ -187,10 +216,13 @@ function renderContentBlock(text, citations, section, documentId) {
   appendMultilineFormatted(textSpan, isBullet ? text.replace(LIST_ITEM_RE, "") : text);
   wrapper.appendChild(textSpan);
 
-  renderCitations(wrapper, citations, documentId);
+  renderCitations(wrapper, citations);
 
-  const isMaterialStatement = isBullet && section.toLowerCase().includes("material factual statements");
-  if (isMaterialStatement && (!citations || citations.length === 0)) {
+  const isFinding =
+    isBullet &&
+    (section.toLowerCase().includes("potential inconsistencies") ||
+      section.toLowerCase().includes("unsupported cross-document claims"));
+  if (isFinding && (!citations || citations.length === 0)) {
     const uncited = document.createElement("span");
     uncited.className = "citation-badge uncited";
     uncited.textContent = "uncited";
@@ -200,17 +232,14 @@ function renderContentBlock(text, citations, section, documentId) {
   segmentsEl.appendChild(wrapper);
 }
 
-// Concatenating every text block's `text` in order reproduces Claude's
-// full reply exactly - citations only annotate substrings of that one
-// continuous stream (confirmed against a live response: a citation's
-// span can land on a trailing "(page 1)" note rather than the factual
-// sentence right before it, because that's just where the API's citation
-// boundary happened to fall in the stream, not a paragraph or bullet
-// boundary). So markdown structure (headings, blank-line paragraph
-// breaks, "- " bullets) has to be found by re-splitting that reconstructed
-// stream into lines, not by treating each API block as a rendering unit.
-// Each resulting line keeps the citations of every block that contributed
-// characters to it, so a citation is never dropped or misattached.
+// Concatenating every text block's `text` in order reproduces Claude's full
+// reply exactly - citations only annotate substrings of that one continuous
+// stream, not paragraph/heading/bullet boundaries (see inspect.js for the
+// single-document version of this same finding). So markdown structure has
+// to be found by re-splitting the reconstructed stream into lines, not by
+// treating each API content block as its own rendering unit. Each line
+// keeps the citations (and, here, the source document) of every block that
+// contributed characters to it.
 function streamToLines(segments) {
   const lines = [[]];
   segments.forEach((segment) => {
@@ -237,7 +266,7 @@ function renderSegments(record) {
     const text = joinTextParts(block.textParts).trim();
     const citations = block.citations;
     block = null;
-    if (text) renderContentBlock(text, citations, section, record.document_id);
+    if (text) renderContentBlock(text, citations, section);
   };
 
   lines.forEach((line) => {
@@ -291,31 +320,31 @@ function renderError(record) {
   }
 }
 
-async function loadInspection() {
-  if (!projectId || !inspectionId) {
+async function loadCrossAnalysis() {
+  if (!projectId || !analysisId) {
     metaEl.textContent = "";
     const p = document.createElement("p");
-    p.textContent = "Missing project or inspection reference.";
+    p.textContent = "Missing project or analysis reference.";
     metaEl.appendChild(p);
     return;
   }
 
-  const [projectRes, inspectionRes] = await Promise.all([
+  const [projectRes, analysisRes] = await Promise.all([
     fetch(`/api/projects/${encodeURIComponent(projectId)}`),
-    fetch(`/api/projects/${encodeURIComponent(projectId)}/inspections/${encodeURIComponent(inspectionId)}`),
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/cross-analyses/${encodeURIComponent(analysisId)}`),
   ]);
 
   setBreadcrumb(projectRes.ok ? (await projectRes.json()).name : "Project");
 
-  if (!inspectionRes.ok) {
+  if (!analysisRes.ok) {
     metaEl.textContent = "";
     const p = document.createElement("p");
-    p.textContent = "Inspection not found.";
+    p.textContent = "Cross-document analysis not found.";
     metaEl.appendChild(p);
     return;
   }
 
-  const record = await inspectionRes.json();
+  const record = await analysisRes.json();
   renderMeta(record);
 
   if (record.status === "success") {
@@ -326,4 +355,4 @@ async function loadInspection() {
   }
 }
 
-loadInspection();
+loadCrossAnalysis();

@@ -16,6 +16,27 @@ const inspectDialogTextEl = document.getElementById("inspect-dialog-text");
 const inspectErrorEl = document.getElementById("inspect-error");
 const cancelInspectButtonEl = document.getElementById("cancel-inspect");
 const confirmInspectButtonEl = document.getElementById("confirm-inspect");
+const crossAnalysisCardEl = document.getElementById("cross-analysis-card");
+const crossAnalysisUnavailableHintEl = document.getElementById("cross-analysis-unavailable-hint");
+const crossAnalysisOpenButtonEl = document.getElementById("cross-analysis-open-button");
+const crossSelectDialogEl = document.getElementById("cross-select-dialog");
+const crossSelectFormEl = document.getElementById("cross-select-form");
+const crossSelectListEl = document.getElementById("cross-select-list");
+const crossSelectTotalEl = document.getElementById("cross-select-total");
+const crossSelectErrorEl = document.getElementById("cross-select-error");
+const cancelCrossSelectButtonEl = document.getElementById("cancel-cross-select");
+const continueCrossSelectButtonEl = document.getElementById("continue-cross-select");
+const crossConfirmDialogEl = document.getElementById("cross-confirm-dialog");
+const crossConfirmFormEl = document.getElementById("cross-confirm-form");
+const crossConfirmListEl = document.getElementById("cross-confirm-list");
+const crossConfirmErrorEl = document.getElementById("cross-confirm-error");
+const backCrossConfirmButtonEl = document.getElementById("back-cross-confirm");
+const sendCrossConfirmButtonEl = document.getElementById("send-cross-confirm");
+
+// Must match cross_document_analysis.MAX_TOTAL_SOURCE_BYTES on the server -
+// this is only used here to give the user an early, friendly heads-up;
+// the server enforces the real limit regardless.
+const CROSS_ANALYSIS_MAX_TOTAL_BYTES = 23 * 1024 * 1024;
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
@@ -189,11 +210,23 @@ function renderDocuments(docs) {
   });
 }
 
+let latestDocuments = [];
+
 async function loadDocuments() {
   const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/documents`);
   if (!res.ok) return;
   const docs = await res.json();
+  latestDocuments = docs;
   renderDocuments(docs);
+  updateCrossAnalysisAvailability();
+}
+
+function updateCrossAnalysisAvailability() {
+  const pdfCount = latestDocuments.filter((d) => d.extension === ".pdf").length;
+  crossAnalysisCardEl.hidden = false;
+  const available = pdfCount >= 2;
+  crossAnalysisOpenButtonEl.hidden = !available;
+  crossAnalysisUnavailableHintEl.hidden = available;
 }
 
 async function removeDocument(doc) {
@@ -374,6 +407,136 @@ inspectFormEl.addEventListener("submit", async (event) => {
     confirmInspectButtonEl.disabled = false;
     cancelInspectButtonEl.disabled = false;
     confirmInspectButtonEl.textContent = "Send to Claude";
+  }
+});
+
+// Cross-document analysis
+
+function closeOnBackdropClick(dialogEl) {
+  dialogEl.addEventListener("click", (event) => {
+    const rect = dialogEl.getBoundingClientRect();
+    const inDialog =
+      rect.top <= event.clientY &&
+      event.clientY <= rect.top + rect.height &&
+      rect.left <= event.clientX &&
+      event.clientX <= rect.left + rect.width;
+    if (!inDialog) dialogEl.close();
+  });
+}
+
+closeOnBackdropClick(crossSelectDialogEl);
+closeOnBackdropClick(crossConfirmDialogEl);
+
+function selectedCrossDocuments() {
+  const checked = crossSelectListEl.querySelectorAll("input[type=checkbox]:checked");
+  return Array.from(checked).map((input) => latestDocuments.find((d) => d.id === input.value));
+}
+
+function updateCrossSelectTotal() {
+  const selected = selectedCrossDocuments();
+  const totalBytes = selected.reduce((sum, d) => sum + d.size_bytes, 0);
+  const overBudget = totalBytes > CROSS_ANALYSIS_MAX_TOTAL_BYTES;
+
+  crossSelectTotalEl.textContent =
+    `Selected: ${selected.length} file${selected.length === 1 ? "" : "s"}, ` +
+    `${formatSize(totalBytes)} of a ${formatSize(CROSS_ANALYSIS_MAX_TOTAL_BYTES)} combined limit ` +
+    `(Anthropic's own request limit is 32 MB, ~600 pages total).`;
+  crossSelectTotalEl.classList.toggle("over-budget", overBudget);
+
+  continueCrossSelectButtonEl.disabled = selected.length < 2 || overBudget;
+}
+
+function openCrossSelectDialog() {
+  crossSelectListEl.textContent = "";
+  crossSelectErrorEl.textContent = "";
+
+  latestDocuments
+    .filter((d) => d.extension === ".pdf")
+    .forEach((doc) => {
+      const item = document.createElement("li");
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = doc.id;
+      checkbox.addEventListener("change", updateCrossSelectTotal);
+
+      const text = document.createElement("span");
+      text.textContent = `${doc.original_filename} — ${formatSize(doc.size_bytes)}`;
+
+      label.append(checkbox, text);
+      item.appendChild(label);
+      crossSelectListEl.appendChild(item);
+    });
+
+  updateCrossSelectTotal();
+  crossSelectDialogEl.showModal();
+}
+
+crossAnalysisOpenButtonEl.addEventListener("click", openCrossSelectDialog);
+cancelCrossSelectButtonEl.addEventListener("click", () => crossSelectDialogEl.close());
+
+let pendingCrossSelection = [];
+
+crossSelectFormEl.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const selected = selectedCrossDocuments();
+  if (selected.length < 2) {
+    crossSelectErrorEl.textContent = "Select at least two PDFs.";
+    return;
+  }
+
+  pendingCrossSelection = selected;
+  crossSelectDialogEl.close();
+
+  crossConfirmListEl.textContent = "";
+  selected.forEach((doc) => {
+    const item = document.createElement("li");
+    item.textContent = doc.original_filename;
+    crossConfirmListEl.appendChild(item);
+  });
+  crossConfirmErrorEl.textContent = "";
+  sendCrossConfirmButtonEl.disabled = false;
+  sendCrossConfirmButtonEl.textContent = "Send to Claude";
+  crossConfirmDialogEl.showModal();
+});
+
+backCrossConfirmButtonEl.addEventListener("click", () => {
+  crossConfirmDialogEl.close();
+  crossSelectDialogEl.showModal();
+});
+
+crossConfirmFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (pendingCrossSelection.length < 2) return;
+
+  crossConfirmErrorEl.textContent = "";
+  sendCrossConfirmButtonEl.disabled = true;
+  backCrossConfirmButtonEl.disabled = true;
+  sendCrossConfirmButtonEl.textContent = "Analyzing… this can take a few minutes";
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/cross-analysis`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_ids: pendingCrossSelection.map((d) => d.id),
+        confirm: true,
+      }),
+    });
+    const record = await res.json().catch(() => null);
+
+    if (!record || !record.id) {
+      crossConfirmErrorEl.textContent = (record && record.error) || "The analysis request failed.";
+      return;
+    }
+
+    window.location.href = `/cross-analysis.html?project=${encodeURIComponent(projectId)}&analysis=${encodeURIComponent(record.id)}`;
+  } catch (err) {
+    crossConfirmErrorEl.textContent = "Could not reach the local app server.";
+  } finally {
+    sendCrossConfirmButtonEl.disabled = false;
+    backCrossConfirmButtonEl.disabled = false;
+    sendCrossConfirmButtonEl.textContent = "Send to Claude";
   }
 });
 

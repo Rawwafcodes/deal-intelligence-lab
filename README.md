@@ -129,8 +129,47 @@ being silently mishandled.
 
 **Design note:** the PDF is sent inline (base64) in the request rather
 than uploaded to Anthropic's Files API first, since each inspection is a
-one-off analysis of a single document — this keeps no remote copy on
-Anthropic's side to track or delete afterwards.
+one-off analysis of a single document — this avoids creating a
+*persistent* copy on Anthropic's side that the app would need to track
+or delete. It is not a claim of zero data retention: like any API call,
+the request itself remains subject to Anthropic's standard API data
+retention and privacy terms.
+
+## Comparing several PDFs with Claude
+
+On a project's page, the **Run cross-document analysis** action lets you
+select two or more uploaded PDFs — say, an NDA and a term sheet for the
+same deal — and have Claude read them together as parts of one
+transaction, rather than one at a time.
+
+- A picker lists every PDF in the project with its size and a running
+  total against the combined size limit, so you can see before
+  confirming whether the selection fits in one request.
+- A second, explicit step lists every filename that will be sent before
+  anything is transmitted. No other project documents are included.
+- Claude builds a connected understanding of the documents, then reports
+  material facts, potential inconsistencies, unsupported cross-document
+  claims, missing information, ambiguities, and recommended follow-up
+  questions — deliberately avoiding the assumption that every difference
+  between documents is a contradiction (a date, scope, or definitions
+  mismatch might explain it).
+- Each finding (an inconsistency or an unsupported claim) is broken out
+  with a title, classification, severity, explanation, commercial
+  relevance, an explicit uncertainty note, and a recommended action. A
+  cross-document inconsistency is only presented as grounded once every
+  side of it is cited — citations always link back to the exact original
+  PDF and page they came from, using Anthropic's native citation
+  metadata (never a reference the app invented).
+- Every run is recorded as an immutable entry in `data/deal_lab.db`: the
+  exact document IDs and checksums selected, the model, the review
+  mandate version, token usage, stop reason, and timing — so there is a
+  permanent record of exactly what was sent and what came back, even if
+  a document is later changed or removed from the project.
+
+Like single-document inspection, this sends each selected PDF inline
+(base64) rather than through the Files API, and the same 32 MB /
+~600-page combined request limits apply — now shared across every
+document you select, not just one.
 
 ## AI connection
 

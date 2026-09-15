@@ -6,11 +6,15 @@ Design decision (base64 vs. Files API): this sends the PDF inline as a
 base64 `document` content block rather than uploading it to Anthropic's
 Files API first. Each inspection is a one-shot, single-document request —
 there is no reuse across multiple calls that would justify uploading and
-keeping a remote copy. Base64 input keeps zero remote state on Anthropic's
-side (nothing to track or delete afterwards), matching "least unnecessary
-remote persistence." If a future milestone needs repeated analysis of the
-same document, revisit this and use the Files API (with explicit deletion
-of the remote copy once done).
+keeping a remote copy. Base64 input avoids creating a *persistent* copy of
+the file on Anthropic's side via the Files API (there is nothing for this
+app to track or explicitly delete afterwards) — but this is not a claim of
+zero data retention: the request itself is still subject to Anthropic's
+standard API data retention and privacy terms (see
+platform.claude.com/docs/en/manage-claude/api-and-data-retention), the
+same as any other API call. If a future milestone needs repeated analysis
+of the same document, revisit this and use the Files API (with explicit
+deletion of the remote copy once done).
 
 Provider limits this module works within (see Anthropic's PDF support
 docs): 32 MB maximum request size, 600 pages maximum per request (100 on

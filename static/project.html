@@ -69,6 +69,18 @@
         <p>No documents uploaded yet.</p>
       </div>
     </div>
+
+    <div class="card" id="cross-analysis-card" hidden>
+      <h2>Cross-document analysis</h2>
+      <p class="section-hint">
+        Have Claude read a small group of this project's original PDFs together, as parts of one
+        transaction, to compare them and surface inconsistencies.
+      </p>
+      <button type="button" id="cross-analysis-open-button">Run cross-document analysis</button>
+      <p class="section-hint" id="cross-analysis-unavailable-hint" hidden>
+        Needs at least two uploaded PDF documents.
+      </p>
+    </div>
   </div>
 
   <dialog id="inspect-dialog" class="modal">
@@ -83,6 +95,36 @@
       <div class="modal-actions">
         <button type="button" class="button-secondary" id="cancel-inspect">Cancel</button>
         <button type="submit" id="confirm-inspect">Send to Claude</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cross-select-dialog" class="modal">
+    <form id="cross-select-form">
+      <h2>Select documents to compare</h2>
+      <p class="section-hint">Choose at least two PDFs. All selected files are sent together in one request.</p>
+      <ul class="cross-select-list" id="cross-select-list"></ul>
+      <p class="cross-select-total" id="cross-select-total"></p>
+      <div class="error" id="cross-select-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-cross-select">Cancel</button>
+        <button type="submit" id="continue-cross-select">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cross-confirm-dialog" class="modal">
+    <form id="cross-confirm-form">
+      <h2>Confirm cross-document analysis</h2>
+      <p class="section-hint">
+        These original PDF files will be sent directly to Anthropic's Claude API together, for one
+        combined analysis. No other documents in this project are sent.
+      </p>
+      <ul class="cross-confirm-list" id="cross-confirm-list"></ul>
+      <div class="error" id="cross-confirm-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="back-cross-confirm">Back</button>
+        <button type="submit" id="send-cross-confirm">Send to Claude</button>
       </div>
     </form>
   </dialog>
