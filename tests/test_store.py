@@ -1,8 +1,8 @@
-"""Tests for store.py (SQLite persistence layer)."""
+"""Tests for store.py (Task 11.3a: PostgreSQL persistence layer)."""
 
 import sys
-import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,14 +12,15 @@ import store
 
 class StoreTests(unittest.TestCase):
     def setUp(self):
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self._original_db_path = store.DB_PATH
-        store.DB_PATH = Path(self._tmpdir.name) / "test.db"
+        self._schema = f"test_{uuid.uuid4().hex}"
+        self._original_schema = store.SCHEMA
+        store.ensure_schema(self._schema)
+        store.SCHEMA = self._schema
         store.init_db()
 
     def tearDown(self):
-        store.DB_PATH = self._original_db_path
-        self._tmpdir.cleanup()
+        store.SCHEMA = self._original_schema
+        store.drop_schema(self._schema)
 
     def test_create_and_get_project(self):
         created = store.create_project("Acme Merger", "Acquisition of Acme Corp")

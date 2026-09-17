@@ -347,18 +347,38 @@ def _open_workbook_structure(path: Path, extension: str) -> dict[str, _SheetStru
         except ImportError as exc:  # pragma: no cover - dependency always installed
             raise WorkbookVerificationUnavailable("openpyxl_unavailable") from exc
 
-        try:
-            workbook = openpyxl.load_workbook(path, read_only=True, data_only=False)
-        except zipfile.BadZipFile as exc:
-            header = path.read_bytes()[:8]
-            if header.startswith(_OLE2_SIGNATURE):
-                raise WorkbookVerificationUnavailable("encrypted_workbook") from exc
-            raise WorkbookVerificationUnavailable("malformed_workbook") from exc
-        except Exception as exc:
-            raise WorkbookVerificationUnavailable("malformed_workbook") from exc
+        def _load(read_only: bool):
+            try:
+                return openpyxl.load_workbook(path, read_only=read_only, data_only=False)
+            except zipfile.BadZipFile as exc:
+                header = path.read_bytes()[:8]
+                if header.startswith(_OLE2_SIGNATURE):
+                    raise WorkbookVerificationUnavailable("encrypted_workbook") from exc
+                raise WorkbookVerificationUnavailable("malformed_workbook") from exc
+            except Exception as exc:
+                raise WorkbookVerificationUnavailable("malformed_workbook") from exc
 
+        workbook = _load(read_only=True)
         try:
             structure = {}
+            # openpyxl's read-only mode takes each sheet's used range from the
+            # file's stored <dimension> declaration rather than scanning cells,
+            # for speed. A workbook saved by a tool that omits or mis-states
+            # that declaration (confirmed live: not every workbook that opens
+            # cleanly writes one) makes max_row/max_column come back None for
+            # every sheet - silently coercing that to "1 row, 1 column" would
+            # then reject every real citation into the file as out of range.
+            # Reopen in normal mode (which computes bounds by scanning, not by
+            # trusting the declaration) only when that happens, so a citation
+            # is never marked non-existent because of how the file was saved
+            # rather than what it actually contains.
+            needs_full_scan = any(
+                worksheet.max_row is None or worksheet.max_column is None
+                for worksheet in workbook.worksheets
+            )
+            if needs_full_scan:
+                workbook.close()
+                workbook = _load(read_only=False)
             for worksheet in workbook.worksheets:
                 structure[worksheet.title] = _SheetStructure(
                     hidden=worksheet.sheet_state != "visible",

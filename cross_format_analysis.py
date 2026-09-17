@@ -94,10 +94,14 @@ DEFAULT_MODEL = pdf_inspection.DEFAULT_MODEL
 MIN_PDF_DOCUMENTS = 1
 MIN_EXCEL_DOCUMENTS = 1
 
-# "A small, reviewable selection" per the milestone scope, not a provider
-# limit - keeps the confirmation dialog and analysis time reasonable.
-MAX_PDF_DOCUMENTS = int(os.environ.get("DEAL_LAB_MAX_RECONCILE_PDF_DOCUMENTS", 8))
-MAX_EXCEL_DOCUMENTS = int(os.environ.get("DEAL_LAB_MAX_RECONCILE_EXCEL_DOCUMENTS", 6))
+# Anthropic does not impose a document-*count* limit for either mechanism -
+# only the aggregate PDF byte/page limits (MAX_TOTAL_PDF_SOURCE_BYTES below)
+# and, per workbook, the Files API's own size limit apply. These counts are
+# purely a generous app-side sanity ceiling against a pathological selection
+# (e.g. hundreds of files fat-fingered into one run), not a provider number -
+# raise them freely via the env vars if a real data room needs more.
+MAX_PDF_DOCUMENTS = int(os.environ.get("DEAL_LAB_MAX_RECONCILE_PDF_DOCUMENTS", 40))
+MAX_EXCEL_DOCUMENTS = int(os.environ.get("DEAL_LAB_MAX_RECONCILE_EXCEL_DOCUMENTS", 20))
 
 # Same reasoning as cross_document_analysis.MAX_TOTAL_SOURCE_BYTES: the
 # inline base64 PDF blocks share Anthropic's 32 MB whole-request limit, so

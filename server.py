@@ -10,8 +10,10 @@ Then open http://localhost:8765 in a browser.
 
 from __future__ import annotations
 
+import http.cookies
 import json
 import mimetypes
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,9 +25,12 @@ import cross_analyses
 import cross_document_analysis
 import cross_format_analyses
 import cross_format_analysis
+import deal_briefs
 import documents
 import evaluations
+import identity
 import inspections
+import mandates
 import multipart
 import pdf_inspection
 import store
@@ -33,6 +38,7 @@ import validation_cases
 import validation_runs
 import workspace_exports
 import workspaces
+import workstreams
 import xlsx_inspection
 import xlsx_inspections
 
@@ -43,9 +49,39 @@ MAX_NAME_LENGTH = 200
 MAX_DESCRIPTION_LENGTH = 5000
 MAX_BODY_BYTES = 1_000_000
 
+SESSION_COOKIE_NAME = "dl_session"
+
+# Origins this local dev tool itself is served from - the static pages
+# directly (127.0.0.1/localhost:8765) and the frontend/ scaffold's Vite dev
+# server, which proxies /api requests server-to-server (see
+# frontend/vite.config.ts) so the browser's own Origin header still reads
+# as the Vite origin, not this server's. A mutating request carrying any
+# other Origin is rejected (docs/06-security-and-collaboration.md: "Protect
+# local mutation endpoints from cross-origin requests and CSRF; local
+# binding alone is not a full defense").
+_ALLOWED_ORIGINS = {
+    f"http://127.0.0.1:{PORT}",
+    f"http://localhost:{PORT}",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+}
+
+# Task 11.3b: dev-only identity switching (docs/06: "explicit, disabled
+# outside development, loopback-only, and absent from production routes").
+# This app has no production deployment (see AGENTS.md/CLAUDE.md - none is
+# authorized), so there is no separate prod mode to gate against yet;
+# defaulting to enabled keeps the app usable without extra setup, while
+# still enforcing the loopback check unconditionally and honoring an
+# explicit opt-out via this env var for whoever eventually adds one.
+_DEV_AUTH_DISABLED_VALUES = {"0", "false", "no", ""}
+
 _DOCUMENTS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/documents$")
 _DOCUMENT_DOWNLOAD_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/download$")
 _DOCUMENT_INSPECT_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/inspect$")
+_DOCUMENT_VERSIONS_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/versions$")
+_DOCUMENT_VERSION_DOWNLOAD_RE = re.compile(
+    r"^/api/projects/([^/]+)/documents/([^/]+)/versions/([^/]+)/download$"
+)
 _DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
 _INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/inspections/([^/]+)$")
 _CROSS_ANALYSIS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/cross-analysis$")
@@ -83,20 +119,222 @@ _WORKSPACE_MEMO_APPROVE_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/
 _WORKSPACE_AUDIT_LOG_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/audit-log$")
 _WORKSPACE_EXPORT_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/export/([a-z.]+)$")
 
+_BRIEF_RE = re.compile(r"^/api/projects/([^/]+)/brief$")
+_BRIEF_VERSIONS_RE = re.compile(r"^/api/projects/([^/]+)/brief/versions$")
+_BRIEF_VERSION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/brief/versions/([^/]+)$")
+
+_WORKSTREAMS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workstreams$")
+_WORKSTREAM_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workstreams/([^/]+)$")
+_WORKSTREAM_ASSIGNMENTS_RE = re.compile(r"^/api/projects/([^/]+)/workstreams/([^/]+)/assignments$")
+_WORKSTREAM_ASSIGNMENT_ITEM_RE = re.compile(
+    r"^/api/projects/([^/]+)/workstreams/([^/]+)/assignments/([^/]+)$"
+)
+
+_MANDATE_TEMPLATES_RE = re.compile(r"^/api/mandate-templates$")
+_MANDATES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/mandates$")
+_MANDATE_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)$")
+_MANDATE_PLAN_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/plan$")
+_MANDATE_PLAN_PROPOSE_AI_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/plan/propose-ai$")
+_MANDATE_PLAN_APPROVE_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/plan/approve$")
+_MANDATE_PLAN_REJECT_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/plan/reject$")
+_MANDATE_RUNS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs$")
+_MANDATE_RUN_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)$")
+_MANDATE_RUN_RESUME_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)/resume$")
+_MANDATE_RUN_CANCEL_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)/cancel$")
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "DealLab/0.1"
 
+    # Set by _resolve_identity() at the top of every do_GET/do_POST/
+    # do_DELETE, before any route runs.
+    current_user_id: str
+    _new_session_token: str | None
+
     def log_message(self, format: str, *args) -> None:  # quieter default logging
         pass
 
+    # -- identity and authorization -----------------------------------
+
+    def _client_is_loopback(self) -> bool:
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
+    def _dev_auth_enabled(self) -> bool:
+        raw = os.environ.get("DEAL_LAB_DEV_AUTH", "1").strip().lower()
+        return raw not in _DEV_AUTH_DISABLED_VALUES and self._client_is_loopback()
+
+    def _get_session_cookie_token(self) -> str | None:
+        header = self.headers.get("Cookie")
+        if not header:
+            return None
+        jar: http.cookies.SimpleCookie = http.cookies.SimpleCookie()
+        try:
+            jar.load(header)
+        except Exception:
+            return None
+        morsel = jar.get(SESSION_COOKIE_NAME)
+        return morsel.value if morsel else None
+
+    def _resolve_identity(self) -> None:
+        """Resolves the caller's identity for this request. A valid
+        session cookie wins; otherwise this transparently mints a session
+        for the bootstrap default identity (see identity.py's module
+        docstring) rather than rejecting the request, so the existing
+        static pages - which have no login UI - keep working unchanged.
+        Explicitly switching identity (POST /api/dev/session) is what
+        actually exercises differentiated access."""
+        self._new_session_token = None
+        token = self._get_session_cookie_token()
+        if token:
+            session = identity.get_session(token)
+            if session is not None:
+                self.current_user_id = session.user_id
+                return
+        new_session = identity.create_session(identity.get_default_user_id())
+        self.current_user_id = new_session.user_id
+        self._new_session_token = new_session.token
+
+    def _check_origin_for_mutation(self) -> bool:
+        """CSRF mitigation for mutating requests (docs/06: local binding
+        alone is not a full defense). Only rejects when an Origin header
+        is present and doesn't match one of this app's own dev origins -
+        a request with no Origin header at all (plain same-origin script,
+        curl, tests) is unaffected."""
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        return origin in _ALLOWED_ORIGINS
+
+    def _authorized_project(self, project_id: str) -> "store.Project | None":
+        """Existence + membership check shared by every project-scoped
+        route. Sends 404 and returns None either when the project doesn't
+        exist or when the caller has no active deal membership on it -
+        deliberately the same response either way, so a denied caller
+        can't distinguish 'not yours' from 'doesn't exist'
+        (docs/06-security-and-collaboration.md)."""
+        project = store.get_project(project_id)
+        if project is None or not identity.has_deal_access(project_id, self.current_user_id):
+            self._send_json(404, {"error": "project not found"})
+            return None
+        return project
+
+    # -- identity endpoints (Task 11.3b) --------------------------------
+
+    def _session_dict(self, user_id: str) -> dict:
+        user = identity.get_user(user_id)
+        assert user is not None
+        memberships = identity.list_organization_memberships_for_user(user_id)
+        organizations = []
+        for membership in memberships:
+            org = identity.get_organization(membership.organization_id)
+            if org is not None:
+                organizations.append({"organization": org.to_dict(), "role": membership.role})
+        return {"user": user.to_dict(), "organizations": organizations}
+
+    def _handle_get_session(self) -> None:
+        self._send_json(200, self._session_dict(self.current_user_id))
+
+    # -- workstreams (Task 11.4) -----------------------------------------
+
+    def _assignments_with_users(self, workstream_id: str) -> list[dict]:
+        """Every active assignment, each carrying the assignee's own
+        display info inline (a plain composition of workstreams.py +
+        identity.py at the API boundary - neither module depends on the
+        other) so the frontend never needs a second round trip per row."""
+        out = []
+        for assignment in workstreams.list_active_assignments(workstream_id):
+            user = identity.get_user(assignment.user_id)
+            row = assignment.to_dict()
+            row["user"] = user.to_dict() if user is not None else None
+            out.append(row)
+        return out
+
+    def _workstream_with_assignments(self, workstream: workstreams.Workstream) -> dict:
+        out = workstream.to_dict()
+        out["assignments"] = self._assignments_with_users(workstream.id)
+        return out
+
+    # -- mandates (Task 12.1) --------------------------------------------
+
+    def _mandate_with_plans(self, mandate: mandates.Mandate) -> dict:
+        out = mandate.to_dict()
+        out["plans"] = [p.to_dict() for p in mandates.list_plans(mandate.id)]
+        out["runs"] = [self._run_with_attempts(r) for r in mandates.list_runs(mandate.id)]
+        return out
+
+    def _run_with_attempts(self, run: mandates.Run) -> dict:
+        out = run.to_dict()
+        out["attempts"] = [a.to_dict() for a in mandates.list_attempts(run.id)]
+        return out
+
+    def _handle_list_dev_identities(self) -> None:
+        """Dev-only: lists every seeded identity with its org memberships,
+        for the frontend's identity switcher. Absent (404) unless dev auth
+        is enabled and the request is from loopback - see docs/06-
+        security-and-collaboration.md."""
+        if not self._dev_auth_enabled():
+            self._send_json(404, {"error": "not found"})
+            return
+        identities = []
+        for user in identity.list_users():
+            memberships = identity.list_organization_memberships_for_user(user.id)
+            organizations = []
+            for membership in memberships:
+                org = identity.get_organization(membership.organization_id)
+                if org is not None:
+                    organizations.append({"organization": org.to_dict(), "role": membership.role})
+            identities.append({"user": user.to_dict(), "organizations": organizations})
+        self._send_json(200, identities)
+
+    def _handle_dev_session_login(self) -> None:
+        if not self._dev_auth_enabled():
+            self._send_json(404, {"error": "not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        user_id = data.get("user_id")
+        if not isinstance(user_id, str) or identity.get_user(user_id) is None:
+            self._send_json(400, {"error": "user_id must be an existing user id"})
+            return
+        new_session = identity.create_session(user_id)
+        self._new_session_token = new_session.token
+        self._send_json(200, self._session_dict(user_id))
+
+    def _handle_dev_session_clear(self) -> None:
+        if not self._dev_auth_enabled():
+            self._send_json(404, {"error": "not found"})
+            return
+        token = self._get_session_cookie_token()
+        if token:
+            identity.delete_session(token)
+        self._new_session_token = None
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        body = json.dumps({"cleared": True}).encode("utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header(
+            "Set-Cookie", f"{SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+        )
+        self.end_headers()
+        self.wfile.write(body)
+
     # -- helpers -----------------------------------------------------
+
+    def _apply_session_cookie(self) -> None:
+        if self._new_session_token:
+            self.send_header(
+                "Set-Cookie",
+                f"{SESSION_COOKIE_NAME}={self._new_session_token}; HttpOnly; SameSite=Strict; Path=/",
+            )
 
     def _send_json(self, status: int, payload) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self._apply_session_cookie()
         self.end_headers()
         self.wfile.write(body)
 
@@ -107,6 +345,7 @@ class Handler(BaseHTTPRequestHandler):
         if filename:
             self.send_header("Content-Disposition", self._content_disposition(filename, "attachment"))
             self.send_header("X-Content-Type-Options", "nosniff")
+        self._apply_session_cookie()
         self.end_headers()
         self.wfile.write(data)
 
@@ -123,6 +362,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
+        self._apply_session_cookie()
         self.end_headers()
         self.wfile.write(body)
 
@@ -143,20 +383,23 @@ class Handler(BaseHTTPRequestHandler):
         return f'{disposition_type}; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
 
     def _send_file_download(self, document, inline: bool = False) -> None:
-        path = documents.stored_file_path(document)
+        self._send_stored_file(
+            documents.stored_file_path(document), document.original_filename, document.extension, inline
+        )
+
+    def _send_stored_file(self, path: Path, download_filename: str, extension: str, inline: bool = False) -> None:
         if not path.is_file():
             self._send_json(404, {"error": "stored file is missing"})
             return
         body = path.read_bytes()
-        content_type = documents.ALLOWED_EXTENSIONS.get(document.extension, "application/octet-stream")
+        content_type = documents.ALLOWED_EXTENSIONS.get(extension, "application/octet-stream")
         disposition_type = "inline" if inline else "attachment"
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header(
-            "Content-Disposition", self._content_disposition(document.original_filename, disposition_type)
-        )
+        self.send_header("Content-Disposition", self._content_disposition(download_filename, disposition_type))
         self.send_header("X-Content-Type-Options", "nosniff")
+        self._apply_session_cookie()
         self.end_headers()
         self.wfile.write(body)
 
@@ -173,8 +416,17 @@ class Handler(BaseHTTPRequestHandler):
     # -- routing -------------------------------------------------------
 
     def do_GET(self) -> None:
+        self._resolve_identity()
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/session":
+            self._handle_get_session()
+            return
+
+        if path == "/api/dev/identities":
+            self._handle_list_dev_identities()
+            return
 
         if path == "/":
             self._send_static_file("index.html")
@@ -217,15 +469,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/projects":
-            projects = [p.to_dict() for p in store.list_projects()]
+            accessible = identity.list_accessible_project_ids(self.current_user_id)
+            projects = [p.to_dict() for p in store.list_projects() if p.id in accessible]
             self._send_json(200, projects)
             return
 
         download_match = _DOCUMENT_DOWNLOAD_RE.match(path)
         if download_match:
             project_id, document_id = download_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -235,11 +487,40 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file_download(document, inline=inline)
             return
 
+        version_download_match = _DOCUMENT_VERSION_DOWNLOAD_RE.match(path)
+        if version_download_match:
+            project_id, document_id, version_id = version_download_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+            version = documents.get_version(document_id, version_id)
+            if version is None:
+                self._send_json(404, {"error": "document version not found"})
+                return
+            inline = parse_qs(parsed.query).get("inline", ["0"])[0] == "1"
+            version_path = documents.version_file_path(document, version)
+            self._send_stored_file(version_path, document.original_filename, document.extension, inline=inline)
+            return
+
+        versions_match = _DOCUMENT_VERSIONS_RE.match(path)
+        if versions_match:
+            project_id, document_id = versions_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            if documents.get_document(project_id, document_id) is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+            versions = documents.list_versions(document_id)
+            self._send_json(200, [v.to_dict() for v in versions])
+            return
+
         inspection_match = _INSPECTION_ITEM_RE.match(path)
         if inspection_match:
             project_id, inspection_id = inspection_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             inspection = inspections.get_inspection(project_id, inspection_id)
             if inspection is None:
@@ -251,8 +532,7 @@ class Handler(BaseHTTPRequestHandler):
         cross_analysis_match = _CROSS_ANALYSIS_ITEM_RE.match(path)
         if cross_analysis_match:
             project_id, cross_analysis_id = cross_analysis_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             record = cross_analyses.get_cross_analysis(project_id, cross_analysis_id)
             if record is None:
@@ -264,8 +544,7 @@ class Handler(BaseHTTPRequestHandler):
         xlsx_inspection_match = _XLSX_INSPECTION_ITEM_RE.match(path)
         if xlsx_inspection_match:
             project_id, xlsx_inspection_id = xlsx_inspection_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             xlsx_record = xlsx_inspections.get_xlsx_inspection(project_id, xlsx_inspection_id)
             if xlsx_record is None:
@@ -277,8 +556,7 @@ class Handler(BaseHTTPRequestHandler):
         reconciliation_match = _RECONCILIATION_ITEM_RE.match(path)
         if reconciliation_match:
             project_id, reconciliation_id = reconciliation_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             reconciliation_record = cross_format_analyses.get_cross_format_analysis(project_id, reconciliation_id)
             if reconciliation_record is None:
@@ -290,8 +568,7 @@ class Handler(BaseHTTPRequestHandler):
         cross_format_list_match = _CROSS_FORMAT_ANALYSES_LIST_RE.match(path)
         if cross_format_list_match:
             (project_id,) = cross_format_list_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             records = cross_format_analyses.list_cross_format_analyses(project_id)
             self._send_json(200, [r.to_dict() for r in records])
@@ -385,8 +662,7 @@ class Handler(BaseHTTPRequestHandler):
         validation_cases_collection_match = _VALIDATION_CASES_COLLECTION_RE.match(path)
         if validation_cases_collection_match:
             (project_id,) = validation_cases_collection_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             cases = validation_cases.list_validation_cases(project_id)
             self._send_json(200, [c.to_dict() for c in cases])
@@ -395,18 +671,127 @@ class Handler(BaseHTTPRequestHandler):
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
         if collection_match:
             (project_id,) = collection_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             docs = [d.to_dict() for d in documents.list_documents(project_id)]
             self._send_json(200, docs)
             return
 
+        brief_versions_match = _BRIEF_VERSIONS_RE.match(path)
+        if brief_versions_match:
+            (project_id,) = brief_versions_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            brief_versions = deal_briefs.list_versions(project_id)
+            self._send_json(200, [v.to_dict() for v in brief_versions])
+            return
+
+        brief_version_item_match = _BRIEF_VERSION_ITEM_RE.match(path)
+        if brief_version_item_match:
+            project_id, version_id = brief_version_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            brief_version = deal_briefs.get_version(project_id, version_id)
+            if brief_version is None:
+                self._send_json(404, {"error": "brief version not found"})
+                return
+            self._send_json(200, brief_version.to_dict())
+            return
+
+        brief_match = _BRIEF_RE.match(path)
+        if brief_match:
+            (project_id,) = brief_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            current = deal_briefs.get_current_version(project_id)
+            self._send_json(200, current.to_dict() if current else None)
+            return
+
+        workstream_assignments_match = _WORKSTREAM_ASSIGNMENTS_RE.match(path)
+        if workstream_assignments_match:
+            project_id, workstream_id = workstream_assignments_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            if workstreams.get_workstream(project_id, workstream_id) is None:
+                self._send_json(404, {"error": "workstream not found"})
+                return
+            self._send_json(200, self._assignments_with_users(workstream_id))
+            return
+
+        workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
+        if workstream_item_match:
+            project_id, workstream_id = workstream_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            workstream = workstreams.get_workstream(project_id, workstream_id)
+            if workstream is None:
+                self._send_json(404, {"error": "workstream not found"})
+                return
+            self._send_json(200, self._workstream_with_assignments(workstream))
+            return
+
+        workstreams_collection_match = _WORKSTREAMS_COLLECTION_RE.match(path)
+        if workstreams_collection_match:
+            (project_id,) = workstreams_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [self._workstream_with_assignments(w) for w in workstreams.list_workstreams(project_id)]
+            self._send_json(200, out)
+            return
+
+        if _MANDATE_TEMPLATES_RE.match(path):
+            self._send_json(200, [t.to_dict() for t in mandates.list_templates()])
+            return
+
+        mandate_run_item_match = _MANDATE_RUN_ITEM_RE.match(path)
+        if mandate_run_item_match:
+            project_id, mandate_id, run_id = mandate_run_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            mandate_run = mandates.get_run(mandate_id, run_id)
+            if mandate_run is None:
+                self._send_json(404, {"error": "run not found"})
+                return
+            self._send_json(200, self._run_with_attempts(mandate_run))
+            return
+
+        mandate_runs_collection_match = _MANDATE_RUNS_COLLECTION_RE.match(path)
+        if mandate_runs_collection_match:
+            project_id, mandate_id = mandate_runs_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            if mandates.get_mandate(project_id, mandate_id) is None:
+                self._send_json(404, {"error": "mandate not found"})
+                return
+            out = [self._run_with_attempts(r) for r in mandates.list_runs(mandate_id)]
+            self._send_json(200, out)
+            return
+
+        mandate_item_match = _MANDATE_ITEM_RE.match(path)
+        if mandate_item_match:
+            project_id, mandate_id = mandate_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            mandate = mandates.get_mandate(project_id, mandate_id)
+            if mandate is None:
+                self._send_json(404, {"error": "mandate not found"})
+                return
+            self._send_json(200, self._mandate_with_plans(mandate))
+            return
+
+        mandates_collection_match = _MANDATES_COLLECTION_RE.match(path)
+        if mandates_collection_match:
+            (project_id,) = mandates_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [m.to_dict() for m in mandates.list_mandates(project_id)]
+            self._send_json(200, out)
+            return
+
         if path.startswith("/api/projects/"):
             project_id = path.removeprefix("/api/projects/")
-            project = store.get_project(project_id)
+            project = self._authorized_project(project_id)
             if project is None:
-                self._send_json(404, {"error": "project not found"})
                 return
             self._send_json(200, project.to_dict())
             return
@@ -419,7 +804,20 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        self._resolve_identity()
         path = urlparse(self.path).path
+
+        if not self._check_origin_for_mutation():
+            self._send_json(403, {"error": "cross-origin request rejected"})
+            return
+
+        if path == "/api/dev/session":
+            self._handle_dev_session_login()
+            return
+
+        if path == "/api/dev/session/clear":
+            self._handle_dev_session_clear()
+            return
 
         if path == "/api/ai/test-connection":
             length = int(self.headers.get("Content-Length", 0))
@@ -437,6 +835,7 @@ class Handler(BaseHTTPRequestHandler):
 
             name = str(data.get("name", "")).strip()
             description = str(data.get("description", "")).strip()
+            organization_id = data.get("organization_id")
 
             if not name:
                 self._send_json(400, {"error": "name is required"})
@@ -450,7 +849,20 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
 
+            caller_orgs = identity.list_organization_memberships_for_user(self.current_user_id)
+            if organization_id is not None:
+                if not isinstance(organization_id, str) or organization_id not in {m.organization_id for m in caller_orgs}:
+                    self._send_json(400, {"error": "organization_id must be one of the caller's own organizations"})
+                    return
+            elif caller_orgs:
+                organization_id = caller_orgs[0].organization_id
+            else:
+                self._send_json(400, {"error": "caller has no organization to create this project in"})
+                return
+
             project = store.create_project(name, description)
+            identity.assign_project_organization(project.id, organization_id)
+            identity.add_deal_membership(project.id, self.current_user_id, "deal_lead")
             self._send_json(201, project.to_dict())
             return
 
@@ -458,6 +870,78 @@ class Handler(BaseHTTPRequestHandler):
         if collection_match:
             (project_id,) = collection_match.groups()
             self._handle_document_upload(project_id)
+            return
+
+        new_version_match = _DOCUMENT_VERSIONS_RE.match(path)
+        if new_version_match:
+            project_id, document_id = new_version_match.groups()
+            self._handle_add_document_version(project_id, document_id)
+            return
+
+        brief_match = _BRIEF_RE.match(path)
+        if brief_match:
+            (project_id,) = brief_match.groups()
+            self._handle_create_brief_version(project_id)
+            return
+
+        workstreams_collection_match = _WORKSTREAMS_COLLECTION_RE.match(path)
+        if workstreams_collection_match:
+            (project_id,) = workstreams_collection_match.groups()
+            self._handle_create_workstream(project_id)
+            return
+
+        workstream_assignments_match = _WORKSTREAM_ASSIGNMENTS_RE.match(path)
+        if workstream_assignments_match:
+            project_id, workstream_id = workstream_assignments_match.groups()
+            self._handle_create_assignment(project_id, workstream_id)
+            return
+
+        mandate_run_cancel_match = _MANDATE_RUN_CANCEL_RE.match(path)
+        if mandate_run_cancel_match:
+            project_id, mandate_id, run_id = mandate_run_cancel_match.groups()
+            self._handle_cancel_run(project_id, mandate_id, run_id)
+            return
+
+        mandate_run_resume_match = _MANDATE_RUN_RESUME_RE.match(path)
+        if mandate_run_resume_match:
+            project_id, mandate_id, run_id = mandate_run_resume_match.groups()
+            self._handle_resume_run(project_id, mandate_id, run_id)
+            return
+
+        mandate_runs_collection_match = _MANDATE_RUNS_COLLECTION_RE.match(path)
+        if mandate_runs_collection_match:
+            project_id, mandate_id = mandate_runs_collection_match.groups()
+            self._handle_start_run(project_id, mandate_id)
+            return
+
+        mandate_plan_reject_match = _MANDATE_PLAN_REJECT_RE.match(path)
+        if mandate_plan_reject_match:
+            project_id, mandate_id = mandate_plan_reject_match.groups()
+            self._handle_reject_plan(project_id, mandate_id)
+            return
+
+        mandate_plan_approve_match = _MANDATE_PLAN_APPROVE_RE.match(path)
+        if mandate_plan_approve_match:
+            project_id, mandate_id = mandate_plan_approve_match.groups()
+            self._handle_approve_plan(project_id, mandate_id)
+            return
+
+        mandate_plan_propose_ai_match = _MANDATE_PLAN_PROPOSE_AI_RE.match(path)
+        if mandate_plan_propose_ai_match:
+            project_id, mandate_id = mandate_plan_propose_ai_match.groups()
+            self._handle_propose_plan_llm(project_id, mandate_id)
+            return
+
+        mandate_plan_match = _MANDATE_PLAN_RE.match(path)
+        if mandate_plan_match:
+            project_id, mandate_id = mandate_plan_match.groups()
+            self._handle_propose_plan(project_id, mandate_id)
+            return
+
+        mandates_collection_match = _MANDATES_COLLECTION_RE.match(path)
+        if mandates_collection_match:
+            (project_id,) = mandates_collection_match.groups()
+            self._handle_create_mandate(project_id)
             return
 
         inspect_match = _DOCUMENT_INSPECT_RE.match(path)
@@ -577,13 +1061,17 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_DELETE(self) -> None:
+        self._resolve_identity()
         path = urlparse(self.path).path
+
+        if not self._check_origin_for_mutation():
+            self._send_json(403, {"error": "cross-origin request rejected"})
+            return
 
         item_match = _DOCUMENT_ITEM_RE.match(path)
         if item_match:
             project_id, document_id = item_match.groups()
-            if store.get_project(project_id) is None:
-                self._send_json(404, {"error": "project not found"})
+            if self._authorized_project(project_id) is None:
                 return
             if documents.get_document(project_id, document_id) is None:
                 self._send_json(404, {"error": "document not found"})
@@ -604,11 +1092,40 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_delete_human_finding(project_id, workspace_id, finding_id)
             return
 
+        assignment_item_match = _WORKSTREAM_ASSIGNMENT_ITEM_RE.match(path)
+        if assignment_item_match:
+            project_id, workstream_id, user_id = assignment_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            if workstreams.get_workstream(project_id, workstream_id) is None:
+                self._send_json(404, {"error": "workstream not found"})
+                return
+            revoked = workstreams.revoke_assignment(workstream_id, user_id)
+            if not revoked:
+                self._send_json(404, {"error": "active assignment not found"})
+                return
+            self._send_json(200, {"revoked": True})
+            return
+
+        workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
+        if workstream_item_match:
+            project_id, workstream_id = workstream_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            body = self._read_json_body()
+            if not body or body.get("confirm") is not True:
+                self._send_json(400, {"error": "deletion requires {\"confirm\": true} in the request body"})
+                return
+            if not workstreams.delete_workstream(project_id, workstream_id):
+                self._send_json(404, {"error": "workstream not found"})
+                return
+            self._send_json(200, {"deleted": True})
+            return
+
         self._send_json(404, {"error": "not found"})
 
     def _handle_document_upload(self, project_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         content_type_header = self.headers.get("Content-Type", "")
@@ -656,9 +1173,291 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json(200, {"results": results})
 
+    def _handle_add_document_version(self, project_id: str, document_id: str) -> None:
+        """Task 11.4: explicitly replaces one already-known document's
+        content with a new immutable version - a deliberately separate,
+        single-file action from the bulk upload endpoint (see
+        documents.save_uploaded_file's docstring for why the two are not
+        merged)."""
+        if self._authorized_project(project_id) is None:
+            return
+        if documents.get_document(project_id, document_id) is None:
+            self._send_json(404, {"error": "document not found"})
+            return
+
+        content_type_header = self.headers.get("Content-Type", "")
+        if not content_type_header.lower().startswith("multipart/form-data"):
+            self._send_json(400, {"error": "expected multipart/form-data"})
+            return
+
+        try:
+            boundary = multipart.parse_boundary(content_type_header)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        body = self._read_multipart_body()
+        if body is None:
+            return  # 413 already sent
+
+        try:
+            parts = multipart.parse_multipart(body, boundary)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": f"malformed upload: {exc}"})
+            return
+
+        file_parts = [p for p in parts if p.name == "file" and p.filename]
+        if not file_parts:
+            self._send_json(400, {"error": "no file was included in the upload"})
+            return
+
+        result = documents.add_version(project_id, document_id, file_parts[0].data)
+        status_code = {"new_version": 201, "duplicate": 409, "failed": 500}.get(result.status, 500)
+        self._send_json(status_code, result.to_dict())
+
+    # -- deal brief (Task 11.4) -------------------------------------------
+
+    def _handle_create_brief_version(self, project_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        fields = {k: v for k, v in data.items() if k in deal_briefs.BRIEF_FIELDS}
+        if not fields:
+            self._send_json(400, {"error": f"body must include at least one of {deal_briefs.BRIEF_FIELDS}"})
+            return
+        version = deal_briefs.create_version(project_id, fields, created_by=self.current_user_id)
+        self._send_json(201, version.to_dict())
+
+    # -- workstreams (Task 11.4) ------------------------------------------
+
+    def _handle_create_workstream(self, project_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            workstream = workstreams.create_workstream(
+                project_id, str(data.get("name", "")), str(data.get("description", ""))
+            )
+        except workstreams.WorkstreamValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._workstream_with_assignments(workstream))
+
+    def _handle_create_assignment(self, project_id: str, workstream_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        if workstreams.get_workstream(project_id, workstream_id) is None:
+            self._send_json(404, {"error": "workstream not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        user_id = data.get("user_id")
+        if not isinstance(user_id, str) or identity.get_user(user_id) is None:
+            self._send_json(400, {"error": "user_id must be an existing user id"})
+            return
+        try:
+            workstreams.assign(workstream_id, user_id, str(data.get("role_label", "")))
+        except workstreams.WorkstreamValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._assignments_with_users(workstream_id))
+
+    # -- mandates (Task 12.1) --------------------------------------------
+
+    def _handle_create_mandate(self, project_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            mandate = mandates.create_mandate(
+                project_id, str(data.get("objective", "")), created_by=self.current_user_id
+            )
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._mandate_with_plans(mandate))
+
+    def _handle_propose_plan(self, project_id: str, mandate_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        template_key = data.get("template_key")
+        if not isinstance(template_key, str):
+            self._send_json(400, {"error": "template_key is required"})
+            return
+        stage_inputs = data.get("stage_inputs")
+        if stage_inputs is not None and not isinstance(stage_inputs, dict):
+            self._send_json(400, {"error": "stage_inputs must be an object keyed by stage id"})
+            return
+        try:
+            plan = mandates.propose_plan(project_id, mandate_id, template_key, stage_inputs=stage_inputs)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except (mandates.MandateValidationError, mandates.PlanValidationError) as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, plan.to_dict())
+
+    def _handle_propose_plan_llm(self, project_id: str, mandate_id: str) -> None:
+        # Task 12.4: a real model proposes template + (for a capability
+        # that needs one) a source document selection - see
+        # mandates.propose_plan_llm's own docstring for the two independent
+        # verification layers this goes through before anything is
+        # persisted. Optional `feedback`: a human's requested change to a
+        # prior proposal (docs/04: "AI can request adaptation... Record a
+        # new plan revision") - always produces a brand new PlanRevision,
+        # never mutates one already on record.
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body() or {}
+        feedback = data.get("feedback")
+        if feedback is not None and not isinstance(feedback, str):
+            self._send_json(400, {"error": "feedback must be a string"})
+            return
+        try:
+            result = mandates.propose_plan_llm(project_id, mandate_id, feedback=feedback)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        if result.status == "error":
+            # The planning call itself failed (missing key, rate limit, a
+            # malformed reply...) - a provider-side failure, not a plan
+            # decision, so this mirrors _handle_reconciliation's own
+            # success-vs-provider-error status code split (200 vs 502).
+            self._send_json(502, result.to_dict())
+            return
+        if result.status == "unsupported":
+            # A considered "no confident plan" outcome, not an error - 200,
+            # same as any other successful call that simply has nothing to
+            # approve yet. No PlanRevision was created.
+            self._send_json(200, result.to_dict())
+            return
+        self._send_json(201, result.to_dict())
+
+    def _handle_approve_plan(self, project_id: str, mandate_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        plan_id = data.get("plan_id")
+        if not isinstance(plan_id, str):
+            self._send_json(400, {"error": "plan_id is required"})
+            return
+        try:
+            plan = mandates.approve_plan(project_id, mandate_id, plan_id, approved_by=self.current_user_id)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, plan.to_dict())
+
+    def _handle_reject_plan(self, project_id: str, mandate_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        plan_id = data.get("plan_id")
+        if not isinstance(plan_id, str):
+            self._send_json(400, {"error": "plan_id is required"})
+            return
+        try:
+            plan = mandates.reject_plan(project_id, mandate_id, plan_id)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, plan.to_dict())
+
+    def _handle_start_run(self, project_id: str, mandate_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        # Task 12.2: an optional per-run budget_limit - the minimal ledger
+        # is enforced against whatever is passed here (or unlimited, if
+        # omitted). No body at all is valid (budget is optional), so an
+        # empty/unparsable body is treated as "no budget_limit", not a 400.
+        data = self._read_json_body() or {}
+        budget_limit_raw = data.get("budget_limit")
+        budget_limit: float | None = None
+        if budget_limit_raw is not None:
+            if isinstance(budget_limit_raw, bool) or not isinstance(budget_limit_raw, (int, float)):
+                self._send_json(400, {"error": "budget_limit must be a number"})
+                return
+            budget_limit = float(budget_limit_raw)
+        try:
+            run = mandates.execute_run(project_id, mandate_id, budget_limit=budget_limit)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        # 202, not 201: the run is persisted and accepted for processing,
+        # not completed - Task 12.2 moved execution off this request
+        # entirely, onto the durable Worker (see mandates.py).
+        self._send_json(202, self._run_with_attempts(run))
+
+    def _handle_resume_run(self, project_id: str, mandate_id: str, run_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        stage_id = data.get("stage_id")
+        if not isinstance(stage_id, str):
+            self._send_json(400, {"error": "stage_id is required"})
+            return
+        try:
+            run = mandates.resume_run(project_id, mandate_id, run_id, stage_id, str(data.get("decision", "")))
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, self._run_with_attempts(run))
+
+    def _handle_cancel_run(self, project_id: str, mandate_id: str, run_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        try:
+            run = mandates.cancel_run(project_id, mandate_id, run_id)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except mandates.MandateValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, self._run_with_attempts(run))
+
     def _handle_document_inspect(self, project_id: str, document_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         document = documents.get_document(project_id, document_id)
@@ -694,8 +1493,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_cross_analysis(self, project_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         body = self._read_json_body()
@@ -742,8 +1540,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_workbook_inspect(self, project_id: str, document_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         document = documents.get_document(project_id, document_id)
@@ -789,8 +1586,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_reconciliation(self, project_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         body = self._read_json_body()
@@ -854,8 +1650,7 @@ class Handler(BaseHTTPRequestHandler):
         endpoint. Sends the 404 response itself and returns None when the
         project or case doesn't exist (or the case belongs to a different
         project) - callers should `if case is None: return`."""
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return None
         case = validation_cases.get_validation_case(project_id, validation_case_id)
         if case is None:
@@ -882,8 +1677,7 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def _handle_create_validation_case(self, project_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
 
         data = self._read_json_body()
@@ -1208,8 +2002,7 @@ class Handler(BaseHTTPRequestHandler):
     def _get_owned_workspace(self, project_id: str, workspace_id: str) -> workspaces.Workspace | None:
         """Project-isolation + existence check shared by every workspace
         endpoint, same shape as _get_owned_validation_case."""
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return None
         workspace = workspaces.get_workspace(project_id, workspace_id)
         if workspace is None:
@@ -1229,8 +2022,7 @@ class Handler(BaseHTTPRequestHandler):
         return analysis
 
     def _handle_open_workspace(self, project_id: str, analysis_id: str) -> None:
-        if store.get_project(project_id) is None:
-            self._send_json(404, {"error": "project not found"})
+        if self._authorized_project(project_id) is None:
             return
         analysis = cross_format_analyses.get_cross_format_analysis(project_id, analysis_id)
         if analysis is None:
@@ -1275,10 +2067,17 @@ class Handler(BaseHTTPRequestHandler):
         if data is None:
             self._send_json(400, {"error": "invalid JSON body"})
             return
+        expected_revision = data.get("revision")
+        if expected_revision is not None and not isinstance(expected_revision, int):
+            self._send_json(400, {"error": "revision must be an integer"})
+            return
         try:
-            workspaces.update_finding_workflow(workspace_id, finding_id, data)
+            workspaces.update_finding_workflow(workspace_id, finding_id, data, expected_revision=expected_revision)
         except ValueError as exc:
             self._send_json(404, {"error": str(exc)})
+            return
+        except workspaces.FindingRevisionConflictError as exc:
+            self._send_json(409, {"error": str(exc), "current": exc.current})
             return
         except workspaces.WorkspaceValidationError as exc:
             self._send_json(400, {"error": str(exc)})
@@ -1508,6 +2307,20 @@ def main() -> None:
     validation_runs.init_validation_runs_db()
     evaluations.init_evaluations_db()
     workspaces.init_workspaces_db()
+    identity.init_identity_db()
+    deal_briefs.init_deal_briefs_db()
+    workstreams.init_workstreams_db()
+    mandates.init_mandates_db()
+    # Task 12.2: the durable local worker - a real background thread,
+    # independent of any HTTP request, that executes queued/resumed
+    # mandate runs (see mandates.py's own module docstring and Worker
+    # class). Poll interval is configurable so a real, observable "kill
+    # the server after a run is accepted but before the worker has polled"
+    # window can be demonstrated live without touching production defaults.
+    mandate_worker = mandates.Worker(
+        poll_interval=float(os.environ.get("DEAL_LAB_MANDATE_WORKER_POLL_SECONDS", "0.5"))
+    )
+    mandate_worker.start()
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop.")
@@ -1516,6 +2329,7 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        mandate_worker.stop()
         httpd.server_close()
 
 

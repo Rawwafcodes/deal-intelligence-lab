@@ -6,6 +6,25 @@
 // editable. See workspaces.py for why: AI content is re-derived from the
 // immutable analysis record on every load, never stored by this page.
 
+// Pure, DOM-free logic pulled to the top of the file so it can be loaded
+// standalone by tests/frontend/workspace.logic.test.mjs (Node's built-in
+// test runner, no jsdom/bundler) without executing the browser-only code
+// below. The `module.exports` guard is a no-op in the browser (`module` is
+// undefined there) and lets Node's CJS/ESM interop pick up the named export.
+function buildFindingUpdatePayload(values) {
+  return { ...values, adjusted_severity: values.adjusted_severity || null };
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { buildFindingUpdatePayload };
+}
+
+// Everything below this point is the actual page: DOM lookups and
+// listener wiring that run immediately at script-parse time (this file is
+// loaded as a plain classic <script>, not a module). Guarded so importing
+// this file's top-level export above from Node (no `document`) doesn't
+// also execute the browser-only bootstrapping.
+if (typeof document !== "undefined") {
 const breadcrumbEl = document.getElementById("app-breadcrumb");
 const loadingCardEl = document.getElementById("workspace-loading-card");
 const errorCardEl = document.getElementById("workspace-error-card");
@@ -525,11 +544,18 @@ function buildWorkflowForm(finding) {
       const res = await fetch(`${apiBase()}/findings/${encodeURIComponent(finding.id)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, adjusted_severity: values.adjusted_severity || null }),
+        body: JSON.stringify({ ...buildFindingUpdatePayload(values), revision: finding.revision }),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        saveHint.textContent = (payload && payload.error) || "Could not save.";
+        // Task 11.5: a stale `revision` (someone else saved this finding
+        // after this row was loaded) is a distinct, explicit conflict -
+        // never silently overwritten. Reloading (not attempted
+        // automatically here) picks up their change and a fresh revision.
+        saveHint.textContent =
+          res.status === 409
+            ? "Someone else updated this finding since you opened it. Reload the page to see the latest version before saving again."
+            : (payload && payload.error) || "Could not save.";
         saveHint.style.color = "var(--danger)";
         return;
       }
@@ -590,15 +616,20 @@ function renderFindings() {
   list.forEach((finding) => {
     const row = document.createElement("tr");
     row.className = `ws-finding-row${finding.is_duplicate ? " is-duplicate" : ""}`;
-    row.tabIndex = 0;
-    row.setAttribute("role", "button");
-    row.setAttribute("aria-expanded", String(expandedFindingId === finding.id));
 
+    const isExpanded = expandedFindingId === finding.id;
     const expandTd = document.createElement("td");
+    const expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "ws-expand-toggle";
+    expandButton.setAttribute("aria-expanded", String(isExpanded));
+    expandButton.setAttribute("aria-label", `${isExpanded ? "Collapse" : "Expand"} details for ${finding.title || "this finding"}`);
     const expandIcon = document.createElement("span");
     expandIcon.className = "ws-expand-icon";
     expandIcon.textContent = "▸";
-    expandTd.appendChild(expandIcon);
+    expandIcon.setAttribute("aria-hidden", "true");
+    expandButton.appendChild(expandIcon);
+    expandTd.appendChild(expandButton);
     row.appendChild(expandTd);
 
     const sevTd = document.createElement("td");
@@ -633,13 +664,10 @@ function renderFindings() {
       expandedFindingId = expandedFindingId === finding.id ? null : finding.id;
       renderFindings();
     };
+    // The button's own click (mouse or keyboard-activated via Enter/Space)
+    // bubbles up to this listener, so mouse clicks anywhere else in the row
+    // and keyboard activation of the button both funnel through one toggle.
     row.addEventListener("click", toggle);
-    row.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        toggle();
-      }
-    });
 
     tbody.appendChild(row);
 
@@ -986,6 +1014,8 @@ function requestCard(request) {
       saveHint.textContent = `Saved at ${formatDate(payload.updated_at)}.`;
       saveHint.style.color = "var(--success)";
       headerStatusBadge.textContent = REQUEST_STATUS_LABELS[payload.status] || payload.status;
+      // Keep both calls here: dropping loadWorkspace() leaves report.summary stale
+      // after a request mutation. Regression test: tests/frontend/workspace.logic.test.mjs.
       await Promise.all([loadRequests(), loadWorkspace()]);
       renderSummary();
     } finally {
@@ -1054,6 +1084,8 @@ requestFormEl.addEventListener("submit", async (event) => {
       return;
     }
     requestDialogEl.close();
+    // Keep both calls here: dropping loadWorkspace() leaves report.summary stale
+    // after a request mutation. Regression test: tests/frontend/workspace.logic.test.mjs.
     await Promise.all([loadRequests(), loadWorkspace()]);
     renderRequests();
     renderSummary();
@@ -1196,3 +1228,4 @@ async function init() {
 }
 
 init();
+} // end of the `if (typeof document !== "undefined")` guard opened above

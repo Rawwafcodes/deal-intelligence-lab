@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "deal-lab",
+      "runtimeExecutable": "venv/bin/python3",
+      "runtimeArgs": ["server.py"],
+      "port": 8765
+    },
+    {
+      "name": "deal-lab-frontend",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["scripts/run-frontend.sh"],
+      "port": 5173
+    }
+  ]
+}

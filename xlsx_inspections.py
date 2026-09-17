@@ -212,7 +212,7 @@ def create_xlsx_inspection(
                 created_at, completed_at, analysis_seconds, model, mandate_version,
                 stop_reason, input_tokens, output_tokens, code_execution_requests,
                 error_type, error_message, segments_json, tool_trace_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 record.id,
@@ -252,7 +252,7 @@ def get_xlsx_inspection(project_id: str, xlsx_inspection_id: str) -> XlsxInspect
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM xlsx_inspections WHERE project_id = ? AND id = ?", (project_id, xlsx_inspection_id)
+            "SELECT * FROM xlsx_inspections WHERE project_id = %s AND id = %s", (project_id, xlsx_inspection_id)
         ).fetchone()
     finally:
         conn.close()

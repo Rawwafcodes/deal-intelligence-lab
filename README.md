@@ -38,17 +38,19 @@ once:
 
 Every time you want to run the app:
 
-1. Open the Terminal app.
-2. Go to this folder and activate the virtual environment:
+1. Start the local database (it doesn't start automatically) — see
+   [POSTGRES.md](POSTGRES.md) for the exact command.
+2. Open the Terminal app.
+3. Go to this folder and activate the virtual environment:
    ```
    cd ~/Projects/deal-intelligence-lab
    source venv/bin/activate
    ```
-3. Start the app:
+4. Start the app:
    ```
    python3 server.py
    ```
-4. Open your browser to:
+5. Open your browser to:
    ```
    http://localhost:8765
    ```
@@ -58,8 +60,11 @@ click back in that Terminal window and press `Ctrl+C`.
 
 ## Your data
 
-Your projects (name, description) are saved in `data/deal_lab.db` inside
-this folder. It stays there between restarts.
+Your projects, documents metadata, analyses, and deal workspaces are saved
+in a local PostgreSQL database (see [POSTGRES.md](POSTGRES.md)) — it stays
+there between restarts. (Earlier versions of this app used a SQLite file at
+`data/deal_lab.db`; that file is kept on disk as a historical record but is
+no longer read by the running app.)
 
 **Uploaded documents are stored separately**, outside this app folder, at:
 
@@ -449,6 +454,9 @@ only your own computer reads it. Restart the app (`Ctrl+C`, then
 for the test; leave it as-is unless you have a reason to change it.
 
 ## Running the tests (optional)
+
+Requires the local PostgreSQL server to be running first — see
+[POSTGRES.md](POSTGRES.md) if it isn't already started.
 
 If you want to double-check everything still works after any changes
 (this uses a stand-in for the AI connection, so it never contacts the

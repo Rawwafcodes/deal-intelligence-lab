@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -60,10 +61,12 @@ class ValidationRunTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
         documents.init_documents_db()
         validation_cases.init_validation_cases_db()
@@ -74,7 +77,8 @@ class ValidationRunTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 

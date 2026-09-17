@@ -146,6 +146,15 @@ def requests_export_rows(requests: list[workspaces.WorkspaceRequest]) -> list[di
     ]
 
 
+def _safe_cell_text(value: str) -> str:
+    """Prefix a leading formula-trigger character (=, +, -, @, tab, CR) with
+    a literal quote so free text a reviewer typed can never be interpreted
+    as a live spreadsheet formula when the export is opened elsewhere."""
+    if value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{value}"
+    return value
+
+
 def _write_header_sheet(ws: Worksheet, project: store.Project, analysis: cross_format_analyses.CrossFormatAnalysis, workspace: workspaces.Workspace, export_kind: str) -> int:
     bold = Font(bold=True)
     now = datetime.now(timezone.utc).isoformat()
@@ -159,11 +168,11 @@ def _write_header_sheet(ws: Worksheet, project: store.Project, analysis: cross_f
     row = 1
     for label, value in lines:
         ws.cell(row=row, column=1, value=label).font = bold
-        ws.cell(row=row, column=2, value=value)
+        ws.cell(row=row, column=2, value=_safe_cell_text(value))
         row += 1
     row += 1
     ws.cell(row=row, column=1, value="Disclaimer:").font = bold
-    ws.cell(row=row + 1, column=1, value=DISCLAIMER)
+    ws.cell(row=row + 1, column=1, value=_safe_cell_text(DISCLAIMER))
     ws.cell(row=row + 1, column=1).alignment = Alignment(wrap_text=True)
     ws.merge_cells(start_row=row + 1, start_column=1, end_row=row + 1, end_column=len(_FINDINGS_COLUMNS) or 2)
     return row + 3
@@ -176,7 +185,10 @@ def _write_table(ws: Worksheet, start_row: int, columns: list[tuple[str, str]], 
         cell.font = bold
     for row_offset, row_data in enumerate(rows, start=1):
         for col_index, (_, key) in enumerate(columns, start=1):
-            ws.cell(row=start_row + row_offset, column=col_index, value=row_data.get(key, ""))
+            value = row_data.get(key, "")
+            if isinstance(value, str):
+                value = _safe_cell_text(value)
+            ws.cell(row=start_row + row_offset, column=col_index, value=value)
     for col_index in range(1, len(columns) + 1):
         ws.column_dimensions[chr(64 + col_index) if col_index <= 26 else "A"].width = 24
 

@@ -2,16 +2,17 @@
 
 import json
 import sys
-import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import identity
 import server
 import store
 
@@ -23,10 +24,12 @@ class ServerTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
+        identity.init_identity_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
@@ -37,8 +40,8 @@ class ServerTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
-        store.DB_PATH = cls._original_db_path
-        cls._tmpdir.cleanup()
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
 
     def _url(self, path: str) -> str:
         return f"http://127.0.0.1:{self.port}{path}"

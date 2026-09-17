@@ -15,6 +15,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -25,6 +26,7 @@ from openpyxl import load_workbook
 
 import cross_format_analyses
 import documents
+import identity
 import server
 import store
 import workspaces
@@ -90,11 +92,14 @@ class WorkspaceEndpointTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
         store.init_db()
+        identity.init_identity_db()
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
@@ -113,7 +118,8 @@ class WorkspaceEndpointTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 
@@ -192,6 +198,14 @@ class WorkspaceEndpointTests(unittest.TestCase):
         workspace = json.loads(body)
         return analysis, workspace
 
+    def _finding_id(self, workspace_id: str, title: str) -> str:
+        """Task 11.2: finding ids are now minted UUIDs (`ai-<uuid>`), not
+        `ai-<index>`, so tests look a finding up by its known title instead
+        of assuming a literal id."""
+        _, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace_id}")
+        findings = json.loads(body)["findings"]
+        return next(f["id"] for f in findings if f["title"] == title)
+
     # -- creation / idempotency ---------------------------------------------
 
     def test_open_workspace_creates_then_idempotently_reopens(self):
@@ -224,7 +238,7 @@ class WorkspaceEndpointTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["total_findings"], 2)
         self.assertEqual(payload["summary"]["by_severity"]["critical"], 1)
 
-        first = next(f for f in payload["findings"] if f["id"] == "ai-0")
+        first = next(f for f in payload["findings"] if f["title"] == "Term-sheet price gap")
         self.assertEqual(first["pdf_citations"][0]["document_id"], self.pdf_doc.id)
         self.assertEqual(first["pdf_citations"][0]["document_title"], "im.pdf")
 
@@ -232,8 +246,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_update_finding_workflow_valid(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         status, body = self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "accepted", "adjusted_severity": "high", "assigned_owner": "J. Rivera"},
         )
         self.assertEqual(status, 200)
@@ -244,9 +259,84 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_update_finding_rejects_invalid_enum(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         status, _ = self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "maybe"},
+        )
+        self.assertEqual(status, 400)
+
+    # -- revision conflicts (Task 11.5) ---------------------------------------
+
+    def test_finding_starts_at_revision_one_and_increments_on_update(self):
+        analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace['id']}")
+        finding = next(f for f in json.loads(body)["findings"] if f["id"] == finding_id)
+        self.assertEqual(finding["revision"], 1)
+
+        status, body = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"review_status": "accepted", "revision": 1},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["revision"], 2)
+
+    def test_stale_revision_is_rejected_as_a_conflict_not_silently_overwritten(self):
+        analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+
+        # Two "sessions" load the same finding at revision 1.
+        first_status, first_body = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"assigned_owner": "J. Rivera", "revision": 1},
+        )
+        self.assertEqual(first_status, 200)
+        self.assertEqual(json.loads(first_body)["revision"], 2)
+
+        # The second session, still holding the now-stale revision 1,
+        # tries to save its own (different) change.
+        second_status, second_body = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"assigned_owner": "M. Chen", "revision": 1},
+        )
+        self.assertEqual(second_status, 409)
+        conflict = json.loads(second_body)
+        self.assertIn("current", conflict)
+        # The first session's write actually won - never silently
+        # overwritten by the second, stale-revision request.
+        self.assertEqual(conflict["current"]["assigned_owner"], "J. Rivera")
+
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace['id']}")
+        finding = next(f for f in json.loads(body)["findings"] if f["id"] == finding_id)
+        self.assertEqual(finding["assigned_owner"], "J. Rivera")
+        self.assertEqual(finding["revision"], 2)
+
+    def test_update_without_a_revision_skips_the_conflict_check(self):
+        """Backward compatibility: a caller that never sends `revision`
+        (there are none left in this codebase, but the parameter is
+        optional on principle) behaves exactly as before this task -
+        last-write-wins, no conflict raised."""
+        analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+
+        status1, _ = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"assigned_owner": "J. Rivera"},
+        )
+        status2, body2 = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"assigned_owner": "M. Chen"},
+        )
+        self.assertEqual((status1, status2), (200, 200))
+        self.assertEqual(json.loads(body2)["assigned_owner"], "M. Chen")
+
+    def test_non_integer_revision_is_rejected(self):
+        analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+        status, _ = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"review_status": "accepted", "revision": "not-a-number"},
         )
         self.assertEqual(status, 400)
 
@@ -291,8 +381,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_deleting_ai_finding_rejected(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         status, _ = self._delete_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0", {"confirm": True}
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}", {"confirm": True}
         )
         self.assertEqual(status, 400)
 
@@ -311,9 +402,11 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_mark_duplicate_via_http(self):
         analysis, workspace = self._open_workspace()
+        canonical_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+        duplicate_id = self._finding_id(workspace["id"], "Unsupported growth rate")
         status, body = self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-1/duplicate",
-            {"duplicate_of": "ai-0", "marked_by": "M. Diaz"},
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{duplicate_id}/duplicate",
+            {"duplicate_of": canonical_id, "marked_by": "M. Diaz"},
         )
         self.assertEqual(status, 200)
         finding = json.loads(body)
@@ -328,9 +421,10 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_request_lifecycle(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         status, body = self._post_json(
             f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/requests",
-            {"question": "Confirm FY25 revenue.", "priority": "high", "related_finding_ids": ["ai-0"]},
+            {"question": "Confirm FY25 revenue.", "priority": "high", "related_finding_ids": [finding_id]},
         )
         self.assertEqual(status, 201)
         request = json.loads(body)
@@ -356,8 +450,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_memo_get_edit_approve_reopen(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "accepted"},
         )
 
@@ -416,8 +511,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_audit_log_records_significant_actions(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "accepted"},
         )
         self._post_json(f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/memo")
@@ -431,8 +527,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_findings_export_xlsx_contents_and_no_secrets(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "accepted", "adjusted_severity": "medium"},
         )
         status, body, headers = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/export/findings.xlsx")
@@ -450,6 +547,26 @@ class WorkspaceEndpointTests(unittest.TestCase):
         self.assertIn("critical", all_text)  # original AI severity present
         self.assertIn("independent professional verification", all_text.lower())  # disclaimer present
         self.assertIn(analysis.id, all_text)  # identifier present
+
+    def test_findings_export_sanitizes_formula_injection(self):
+        # workspace_exports._safe_cell_text: a reviewer-typed value that looks
+        # like a spreadsheet formula must round-trip as literal text, not be
+        # written as a live formula that a downstream Excel/Sheets user's
+        # export could silently execute.
+        analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
+        self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
+            {"reviewer_notes": "=1+1"},
+        )
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/export/findings.xlsx")
+        self.assertEqual(status, 200)
+
+        wb = load_workbook(io.BytesIO(body))
+        ws = wb.active
+        notes_cells = [cell for row in ws.iter_rows() for cell in row if cell.value == "'=1+1"]
+        self.assertEqual(len(notes_cells), 1)
+        self.assertEqual(notes_cells[0].data_type, "s")  # stored as a plain string, never a formula
 
     def test_requests_export_xlsx_contents(self):
         analysis, workspace = self._open_workspace()
@@ -487,8 +604,9 @@ class WorkspaceEndpointTests(unittest.TestCase):
 
     def test_workspace_state_persists_across_a_server_restart(self):
         analysis, workspace = self._open_workspace()
+        finding_id = self._finding_id(workspace["id"], "Term-sheet price gap")
         self._post_json(
-            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/ai-0",
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings/{finding_id}",
             {"review_status": "accepted", "assigned_owner": "J. Rivera"},
         )
 
@@ -504,7 +622,7 @@ class WorkspaceEndpointTests(unittest.TestCase):
                 f"http://127.0.0.1:{temp_port}/api/projects/{self.project.id}/workspaces/{workspace['id']}"
             )
             payload = json.loads(res.read())
-            found = next(f for f in payload["findings"] if f["id"] == "ai-0")
+            found = next(f for f in payload["findings"] if f["id"] == finding_id)
             self.assertEqual(found["review_status"], "accepted")
             self.assertEqual(found["assigned_owner"], "J. Rivera")
         finally:

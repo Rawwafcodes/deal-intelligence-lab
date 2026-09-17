@@ -183,7 +183,7 @@ def _insert_run(
                 answer_key_version_number, answer_key_checksum, answer_key_locked_at, is_blind,
                 mandate_version, mandate_checksum, pdf_document_ids_json, excel_document_ids_json,
                 started_at, completed_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 run.id,
@@ -314,7 +314,7 @@ def list_runs_for_case(validation_case_id: str) -> list[ValidationRun]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM validation_runs WHERE validation_case_id = ? ORDER BY created_at DESC",
+            "SELECT * FROM validation_runs WHERE validation_case_id = %s ORDER BY created_at DESC",
             (validation_case_id,),
         ).fetchall()
     finally:
@@ -326,7 +326,7 @@ def get_run(validation_case_id: str, run_id: str) -> ValidationRun | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM validation_runs WHERE validation_case_id = ? AND id = ?",
+            "SELECT * FROM validation_runs WHERE validation_case_id = %s AND id = %s",
             (validation_case_id, run_id),
         ).fetchone()
     finally:

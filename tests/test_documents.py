@@ -8,12 +8,14 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import documents
+import identity
 import server
 import store
 from tests.test_multipart import build_body
@@ -48,11 +50,14 @@ class DocumentsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
+        identity.init_identity_db()
         documents.init_documents_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -66,7 +71,8 @@ class DocumentsTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 
@@ -222,12 +228,17 @@ class DocumentsTests(unittest.TestCase):
     def test_default_data_dir_is_outside_the_repo_and_home_based(self):
         # Import documents.py in a clean subprocess (no DEAL_LAB_DATA_DIR override)
         # to check the real default, independent of this test class's override.
+        # Uses sys.executable (this same interpreter/venv), not a bare "python3" -
+        # documents.py now transitively imports psycopg2 via store.py (Task 11.3a),
+        # which isn't guaranteed to be installed under whatever "python3" resolves
+        # to on PATH.
         import subprocess
+        import sys
 
         repo_root = Path(__file__).parent.parent.resolve()
         env = {k: v for k, v in __import__("os").environ.items() if k != "DEAL_LAB_DATA_DIR"}
         result = subprocess.run(
-            ["python3", "-c", "import documents; print(documents.DATA_DIR)"],
+            [sys.executable, "-c", "import documents; print(documents.DATA_DIR)"],
             cwd=str(repo_root),
             env=env,
             capture_output=True,

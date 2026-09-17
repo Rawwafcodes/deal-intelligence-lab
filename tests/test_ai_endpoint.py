@@ -11,6 +11,7 @@ import types
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -21,7 +22,9 @@ import anthropic
 import httpx2
 
 import ai_client
+import identity
 import server
+import store
 
 FAKE_SECRET = "sk-ant-api03-ENDPOINT-TEST-FAKE-SECRET-DO-NOT-LEAK"
 
@@ -49,6 +52,13 @@ class AiEndpointTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
+        store.init_db()
+        identity.init_identity_db()
+
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -58,6 +68,8 @@ class AiEndpointTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
 
     def setUp(self):
         self._env_patcher = patch.dict(

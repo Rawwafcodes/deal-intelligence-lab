@@ -168,7 +168,7 @@ def create_cross_analysis(
                 completed_at, analysis_seconds, model, mandate_version,
                 stop_reason, input_tokens, output_tokens, error_type,
                 error_message, segments_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 record.id,
@@ -202,7 +202,7 @@ def get_cross_analysis(project_id: str, cross_analysis_id: str) -> CrossAnalysis
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM cross_analyses WHERE project_id = ? AND id = ?", (project_id, cross_analysis_id)
+            "SELECT * FROM cross_analyses WHERE project_id = %s AND id = %s", (project_id, cross_analysis_id)
         ).fetchone()
     finally:
         conn.close()

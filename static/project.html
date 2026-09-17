@@ -23,6 +23,70 @@
       <div class="skeleton-line w-60"></div>
     </div>
 
+    <div class="card" id="brief-card" hidden>
+      <h2>Deal brief</h2>
+      <p class="section-hint">
+        Context for this deal - parties, objective, perspective, scope, periods, and known
+        uncertainties. Saving always adds a new version; earlier versions are kept, never overwritten.
+      </p>
+      <p class="section-hint" id="brief-version-label"></p>
+      <form id="brief-form">
+        <div class="field">
+          <label for="brief-parties">Parties</label>
+          <textarea id="brief-parties" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label for="brief-objective">Objective</label>
+          <textarea id="brief-objective" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label for="brief-perspective">Perspective</label>
+          <textarea id="brief-perspective" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label for="brief-scope">Scope</label>
+          <textarea id="brief-scope" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label for="brief-periods">Periods</label>
+          <textarea id="brief-periods" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label for="brief-uncertainties">Uncertainties</label>
+          <textarea id="brief-uncertainties" rows="2"></textarea>
+        </div>
+        <div class="modal-actions" style="justify-content: flex-start;">
+          <button type="submit">Save version</button>
+          <button type="button" class="button-secondary" id="brief-history-button" hidden>Version history</button>
+        </div>
+        <div id="brief-save-hint"></div>
+      </form>
+    </div>
+
+    <div class="card" id="workstreams-card" hidden>
+      <h2>Workstreams</h2>
+      <p class="section-hint">
+        Configurable areas of responsibility for this deal. Assigning someone to a workstream names
+        who is responsible for it - it does not grant or restrict document access.
+      </p>
+      <ul class="project-list" id="workstreams-list"></ul>
+      <div class="empty-state" id="workstreams-empty" hidden>
+        <p>No workstreams yet.</p>
+      </div>
+      <form id="workstream-form">
+        <div class="field">
+          <label for="workstream-name">New workstream name</label>
+          <input type="text" id="workstream-name" maxlength="200" />
+        </div>
+        <div class="field">
+          <label for="workstream-description">Description</label>
+          <input type="text" id="workstream-description" maxlength="2000" />
+        </div>
+        <button type="submit">Add workstream</button>
+        <div id="workstream-error" class="error"></div>
+      </form>
+    </div>
+
     <div class="card" id="upload-card" hidden>
       <h2>Upload documents</h2>
       <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, XLS, PPTX, TXT, and common image formats.</p>
@@ -44,16 +108,37 @@
 
     <div class="card" id="documents-card" hidden>
       <h2>Documents</h2>
+
+      <div class="card filter-bar" id="document-filters" hidden>
+        <div class="filter-field">
+          <label for="doc-filter-search">Search</label>
+          <input type="text" id="doc-filter-search" placeholder="Search filename" />
+        </div>
+        <div class="filter-field">
+          <label for="doc-filter-folder">Folder</label>
+          <select id="doc-filter-folder"><option value="all">All</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="doc-filter-type">Type</label>
+          <select id="doc-filter-type"><option value="all">All</option></select>
+        </div>
+        <div class="filter-actions">
+          <button type="button" class="button-secondary" id="doc-reset-filters">Reset filters</button>
+        </div>
+      </div>
+
+      <p class="section-hint" id="documents-count-hint" hidden></p>
+
       <div class="table-scroll">
       <table class="documents-table" id="documents-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Folder</th>
-            <th>Type</th>
-            <th>Size</th>
+            <th data-sort="original_filename">Name</th>
+            <th data-sort="relative_path">Folder</th>
+            <th data-sort="extension">Type</th>
+            <th data-sort="size_bytes">Size</th>
             <th>Checksum (SHA-256)</th>
-            <th>Uploaded</th>
+            <th data-sort="uploaded_at">Uploaded</th>
             <th></th>
           </tr>
         </thead>
@@ -66,7 +151,7 @@
           <path d="M13.5 3.5v4h4" />
           <path d="M8.5 13h7M8.5 16.5h4.5" />
         </svg>
-        <p>No documents uploaded yet.</p>
+        <p id="documents-empty-text">No documents uploaded yet.</p>
       </div>
     </div>
 
@@ -114,6 +199,23 @@
       <a class="button-like" id="validation-lab-link" href="#">Open Validation Lab</a>
     </div>
   </div>
+
+  <dialog id="brief-versions-dialog" class="modal">
+    <h2>Brief version history</h2>
+    <ul class="version-list" id="brief-versions-list"></ul>
+    <div class="modal-actions">
+      <button type="button" class="button-secondary" id="close-brief-versions">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="versions-dialog" class="modal">
+    <h2>Version history</h2>
+    <p class="section-hint" id="versions-dialog-name"></p>
+    <ul class="version-list" id="versions-list"></ul>
+    <div class="modal-actions">
+      <button type="button" class="button-secondary" id="close-versions">Close</button>
+    </div>
+  </dialog>
 
   <dialog id="inspect-dialog" class="modal">
     <form id="inspect-form">

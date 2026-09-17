@@ -215,7 +215,7 @@ def create_cross_format_analysis(
                 model, mandate_version, stop_reason, input_tokens, output_tokens,
                 code_execution_requests, error_type, error_message, segments_json,
                 tool_trace_json, excel_cleanup_json, excel_verification_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 record.id,
@@ -261,7 +261,7 @@ def list_cross_format_analyses(project_id: str) -> list[CrossFormatAnalysis]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM cross_format_analyses WHERE project_id = ? ORDER BY created_at DESC", (project_id,)
+            "SELECT * FROM cross_format_analyses WHERE project_id = %s ORDER BY created_at DESC", (project_id,)
         ).fetchall()
     finally:
         conn.close()
@@ -272,7 +272,7 @@ def get_cross_format_analysis(project_id: str, cross_format_analysis_id: str) ->
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM cross_format_analyses WHERE project_id = ? AND id = ?",
+            "SELECT * FROM cross_format_analyses WHERE project_id = %s AND id = %s",
             (project_id, cross_format_analysis_id),
         ).fetchone()
     finally:

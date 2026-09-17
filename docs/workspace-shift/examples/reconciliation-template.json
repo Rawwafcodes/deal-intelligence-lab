@@ -1,0 +1,72 @@
+{
+  "spec_version": "1.0.0",
+  "status": "illustrative_not_executable",
+  "template_key": "financial-reconciliation",
+  "template_version": 1,
+  "name": "Financial diligence and reconciliation",
+  "mode": "pipeline",
+  "objective": "Assess selected financial evidence, reconcile inconsistencies, and prepare a reviewable decision brief.",
+  "capabilities_required": [
+    "existing_cross_format_reconciliation",
+    "draft_from_reviewed_findings"
+  ],
+  "input_contract": {
+    "sources": "Pinned, authorized document versions; actual adapter checks supported formats",
+    "brief": "Pinned deal brief version"
+  },
+  "stages": [
+    {
+      "id": "reconcile",
+      "capability": "existing_cross_format_reconciliation",
+      "depends_on": [],
+      "outputs": [
+        "finding_observations",
+        "limitations"
+      ],
+      "approval_before": "plan_and_transmission"
+    },
+    {
+      "id": "review",
+      "kind": "human_checkpoint",
+      "depends_on": [
+        "reconcile"
+      ],
+      "outputs": [
+        "review_decisions"
+      ]
+    },
+    {
+      "id": "draft",
+      "capability": "draft_from_reviewed_findings",
+      "depends_on": [
+        "review"
+      ],
+      "outputs": [
+        "draft_deliverable"
+      ],
+      "constraints": [
+        "Include unresolved material matters explicitly",
+        "Do not invent citations",
+        "Do not approve or send"
+      ]
+    },
+    {
+      "id": "approve",
+      "kind": "human_checkpoint",
+      "depends_on": [
+        "draft"
+      ],
+      "outputs": [
+        "version_specific_approval"
+      ]
+    }
+  ],
+  "policy": {
+    "external_sending": false,
+    "automatic_paid_retry": false,
+    "allow_unregistered_tools": false,
+    "source_access": "intersection_of_user_access_and_approved_scope",
+    "budget": "requires_explicit_configuration"
+  },
+  "note": "A new template can reuse registered capabilities; names here are target contracts, not claims these adapters exist."
+}

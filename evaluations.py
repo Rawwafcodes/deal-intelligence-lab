@@ -94,6 +94,14 @@ def _citation_key(citation: dict) -> str:
     return json.dumps(citation, sort_keys=True)
 
 
+# Tags every snapshot workspaces.py persists from this parser's output.
+# Bump this whenever extract_findings's parsing rules change, so a stored
+# snapshot's provenance is always known and legacy re-extraction (see
+# migrate_finding_ids.py) can tell which parser version produced which
+# index mapping.
+EXTRACTION_VERSION = "v1"
+
+
 def extract_findings(segments: list[dict] | None) -> list[dict]:
     """Returns an ordered list of findings parsed out of the "##
     Reconciliation Findings" section of a cross_format_analyses record's
@@ -320,7 +328,7 @@ def create_evaluation(validation_run_id: str) -> Evaluation:
                 id, validation_run_id, expected_issue_ratings_json, finding_ratings_json,
                 unexpected_findings_json, human_conclusion, material_limitations,
                 recommended_improvements, final_status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 evaluation.id,
@@ -346,7 +354,7 @@ def get_evaluation(validation_run_id: str) -> Evaluation | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM evaluations WHERE validation_run_id = ?", (validation_run_id,)
+            "SELECT * FROM evaluations WHERE validation_run_id = %s", (validation_run_id,)
         ).fetchone()
     finally:
         conn.close()
@@ -427,10 +435,10 @@ def update_evaluation(validation_run_id: str, updates: dict, *, is_blind: bool) 
         conn.execute(
             """
             UPDATE evaluations SET
-                expected_issue_ratings_json = ?, finding_ratings_json = ?, unexpected_findings_json = ?,
-                human_conclusion = ?, material_limitations = ?, recommended_improvements = ?,
-                final_status = ?, updated_at = ?
-            WHERE validation_run_id = ?
+                expected_issue_ratings_json = %s, finding_ratings_json = %s, unexpected_findings_json = %s,
+                human_conclusion = %s, material_limitations = %s, recommended_improvements = %s,
+                final_status = %s, updated_at = %s
+            WHERE validation_run_id = %s
             """,
             (
                 json.dumps(existing.expected_issue_ratings),

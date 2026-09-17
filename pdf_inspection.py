@@ -20,12 +20,20 @@ Provider limits this module works within (see Anthropic's PDF support
 docs): 32 MB maximum request size, 600 pages maximum per request (100 on
 models with a context window under 1M tokens — not a concern for the
 default model, Claude Opus 5, which has a 1M window). We enforce a local
-23 MB *source* file size cap (base64 inflates bytes by ~4/3, so 23 MB of
-PDF becomes ~30.6 MB of request body, leaving headroom for the prompt
-text) before ever contacting the API. We cannot cheaply check the page
-count ourselves without parsing the PDF, which is out of scope for this
-milestone (see module docstring above); an over-the-page-limit PDF is
-instead reported as a "too large" error surfaced by the API itself.
+*source* file size cap computed from that 32 MB figure itself, not an
+arbitrary round number: base64 inflates bytes by ~4/3, and the actual
+prompt text plus per-document JSON scaffolding this app sends adds only a
+few KB even in the largest (cross-format, many-document) case - so the
+cap below is the real 32 MB request ceiling, minus that measured
+overhead, minus a small explicit safety buffer, converted back from
+request bytes to source bytes. There is deliberately very little slack
+left beyond that: this is "the same as Anthropic's limit", not a
+conservative fraction of it. Override via DEAL_LAB_MAX_PDF_SOURCE_BYTES
+if you have evidence the real overhead is smaller than assumed here. We
+cannot cheaply check the page count ourselves without parsing the PDF,
+which is out of scope for this milestone (see module docstring above);
+an over-the-page-limit PDF is instead reported as a "too large" error
+surfaced by the API itself.
 
 Citations: each `document` content block has `citations: {"enabled": true}`
 turned on, which is Anthropic's native citation feature for PDFs. The API
@@ -57,10 +65,12 @@ load_dotenv(Path(__file__).parent / ".env.local")
 
 DEFAULT_MODEL = "claude-opus-5"
 
-# Local pre-flight cap on the *source* PDF, well under Anthropic's 32 MB
-# whole-request limit once base64 (~4/3 inflation) and prompt text are
-# accounted for. See module docstring for the arithmetic.
-MAX_PDF_SOURCE_BYTES = 23 * 1024 * 1024
+# Local pre-flight cap on the combined *source* PDF bytes for one request -
+# see module docstring for exactly how this is derived from Anthropic's
+# real 32 MB request-size limit (not an arbitrary round number).
+MAX_PDF_SOURCE_BYTES = int(
+    os.environ.get("DEAL_LAB_MAX_PDF_SOURCE_BYTES", int(23.5 * 1024 * 1024))
+)
 
 ANALYSIS_MAX_TOKENS = 32000
 

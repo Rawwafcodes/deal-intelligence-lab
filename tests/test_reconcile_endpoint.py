@@ -12,6 +12,7 @@ import types
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -22,6 +23,7 @@ import openpyxl
 
 import cross_format_analyses
 import documents
+import identity
 import server
 import store
 
@@ -81,11 +83,14 @@ class ReconcileEndpointTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
+        identity.init_identity_db()
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
 
@@ -110,7 +115,8 @@ class ReconcileEndpointTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 

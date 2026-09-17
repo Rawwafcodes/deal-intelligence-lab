@@ -2,31 +2,43 @@
 reconciliation into a structured, human-controlled review workspace.
 
 Design principle - AI content is immutable by construction, not convention:
-this module never copies Claude's finding text into its own tables. Every
-AI-origin finding's content (title, classification, severity, explanation,
-evidence, citations, ...) is re-derived on every read from the write-once
-`cross_format_analyses` record via `evaluations.extract_findings`, the same
-parser Milestone 8 already built - this module does not implement a second
-one. What this module stores is only the human side: workflow state per
-finding (review status, human-adjusted severity, resolution, ownership,
-notes), duplicate relationships, human-added findings, information
-requests, the executive memo, and an audit log of who changed what.
+this module never lets an AI-origin finding's content be rewritten after
+the fact. Its content (title, classification, severity, explanation,
+evidence, citations, ...) is parsed out of the write-once
+`cross_format_analyses` record via `evaluations.extract_findings` exactly
+once, at workspace-creation time, and persisted as an immutable snapshot
+(`ai_snapshot_json`) - it is never re-parsed on a later read. What this
+module stores beyond that snapshot is only the human side: workflow state
+per finding (review status, human-adjusted severity, resolution,
+ownership, notes), duplicate relationships, human-added findings,
+information requests, the executive memo, and an audit log of who changed
+what.
 
 One workspace exists per analysis (enforced with a UNIQUE constraint on
 cross_format_analysis_id) and is created idempotently - opening an already-
 open workspace never re-creates or duplicates its findings, and never
 contacts Anthropic.
 
-Finding identity: an AI-origin finding's id is `ai-<index>`, where `index`
-is its stable position in `extract_findings`'s output (stable because the
-underlying analysis record never changes after creation). A human-added
-finding's id is `human-<uuid>`. Both kinds share one workflow-state row
-shape so the UI can treat them uniformly, while `origin` keeps them
-distinguishable everywhere they're displayed, counted, or exported.
+Finding identity: an AI-origin finding's id is `ai-<uuid>`, minted once at
+materialization time and never reused or recomputed - it carries no
+positional meaning (see Task 11.2: the prior scheme, `ai-<index>`, tied a
+finding's identity to its position in the parser's output, so a parser fix
+could silently reattach existing review state to different content; the
+migration from that scheme lives in `migrate_finding_ids.py`).
+`ai_finding_index` and `ai_extraction_version` are kept as provenance only
+- which position, under which parser version, produced this snapshot -
+never as identity or as a way to re-derive content. `ai_content_hash` is a
+sha256 of the snapshot, an integrity check, also not an identity. A
+human-added finding's id is `human-<uuid>` and already stores its own
+content directly (no snapshot columns needed). Both kinds share one
+workflow-state row shape so the UI can treat them uniformly, while
+`origin` keeps them distinguishable everywhere they're displayed, counted,
+or exported.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -57,7 +69,31 @@ class WorkspaceValidationError(Exception):
     pass
 
 
+class FindingRevisionConflictError(Exception):
+    """Task 11.5: raised instead of silently overwriting when a caller's
+    `expected_revision` no longer matches the finding's current revision -
+    someone else's update landed first. Carries the finding's current,
+    already-merged state so the caller can show the user what actually
+    changed and offer reload/reapply (docs/05-experience.md: 'Concurrent
+    writes produce an explicit conflict and allow reload/reapply'), rather
+    than just a bare error."""
+
+    def __init__(self, current: dict[str, Any]):
+        super().__init__("finding was updated by someone else - reload before saving again")
+        self.current = current
+
+
 # -- schema -------------------------------------------------------------
+
+
+def _ensure_finding_snapshot_columns(conn) -> None:
+    """Additive, idempotent: adds the Task 11.2 snapshot columns to a
+    workspace_findings table created before they existed. Postgres supports
+    `ADD COLUMN IF NOT EXISTS` natively (unlike SQLite, which needed a
+    PRAGMA-based existence check here before Task 11.3a) - running this
+    against an already-migrated table is a no-op."""
+    for column in ("ai_extraction_version", "ai_snapshot_json", "ai_content_hash"):
+        conn.execute(f"ALTER TABLE workspace_findings ADD COLUMN IF NOT EXISTS {column} TEXT")
 
 
 def init_workspaces_db() -> None:
@@ -83,6 +119,9 @@ def init_workspaces_db() -> None:
                 workspace_id TEXT NOT NULL,
                 origin TEXT NOT NULL,
                 ai_finding_index INTEGER,
+                ai_extraction_version TEXT,
+                ai_snapshot_json TEXT,
+                ai_content_hash TEXT,
                 human_title TEXT NOT NULL DEFAULT '',
                 human_classification TEXT NOT NULL DEFAULT '',
                 human_severity TEXT,
@@ -112,6 +151,12 @@ def init_workspaces_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_workspace_findings_workspace ON workspace_findings(workspace_id)"
         )
+        _ensure_finding_snapshot_columns(conn)
+        # Task 11.5: optimistic-concurrency revision counter. Additive,
+        # idempotent, same as the snapshot columns above - existing rows
+        # get DEFAULT 1, matching "the current, only version" exactly the
+        # same way Task 11.4's document version_number default did.
+        conn.execute("ALTER TABLE workspace_findings ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1")
 
         conn.execute(
             """
@@ -303,7 +348,7 @@ def _log_event(
     conn.execute(
         """
         INSERT INTO workspace_audit_log (id, workspace_id, event_type, entity_type, entity_id, detail_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
         (
             uuid.uuid4().hex,
@@ -330,7 +375,7 @@ def list_audit_log(workspace_id: str) -> list[AuditEvent]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM workspace_audit_log WHERE workspace_id = ? ORDER BY created_at ASC", (workspace_id,)
+            "SELECT * FROM workspace_audit_log WHERE workspace_id = %s ORDER BY created_at ASC", (workspace_id,)
         ).fetchall()
     finally:
         conn.close()
@@ -365,7 +410,7 @@ def get_workspace(project_id: str, workspace_id: str) -> Workspace | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM workspaces WHERE project_id = ? AND id = ?", (project_id, workspace_id)
+            "SELECT * FROM workspaces WHERE project_id = %s AND id = %s", (project_id, workspace_id)
         ).fetchone()
     finally:
         conn.close()
@@ -376,7 +421,7 @@ def get_workspace_for_analysis(project_id: str, cross_format_analysis_id: str) -
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM workspaces WHERE project_id = ? AND cross_format_analysis_id = ?",
+            "SELECT * FROM workspaces WHERE project_id = %s AND cross_format_analysis_id = %s",
             (project_id, cross_format_analysis_id),
         ).fetchone()
     finally:
@@ -411,7 +456,7 @@ def get_or_create_workspace(
     try:
         try:
             conn.execute(
-                "INSERT INTO workspaces (id, project_id, cross_format_analysis_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO workspaces (id, project_id, cross_format_analysis_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
                 (workspace.id, workspace.project_id, workspace.cross_format_analysis_id, workspace.created_at, workspace.updated_at),
             )
         except Exception:
@@ -424,7 +469,7 @@ def get_or_create_workspace(
             raise
 
         for finding in findings:
-            _insert_ai_finding_row(conn, workspace.id, finding["index"], now)
+            _insert_ai_finding_row(conn, workspace.id, finding, now)
 
         _log_event(
             conn,
@@ -441,16 +486,66 @@ def get_or_create_workspace(
     return workspace, True
 
 
-def _insert_ai_finding_row(conn, workspace_id: str, ai_index: int, now: str) -> None:
+# The snapshot persisted for every AI-origin finding - the same 12 keys
+# _merged_finding has always assembled as "content" for display, now
+# captured once at materialization time instead of recomputed on every read.
+_AI_SNAPSHOT_FIELDS = (
+    "title",
+    "classification",
+    "severity",
+    "explanation",
+    "pdf_evidence",
+    "workbook_evidence",
+    "commercial_relevance",
+    "uncertainty",
+    "recommended_action",
+    "raw_text",
+    "pdf_citations",
+    "excel_citations",
+)
+_AI_SNAPSHOT_LIST_FIELDS = {"pdf_citations", "excel_citations"}
+
+
+def _build_ai_snapshot(finding: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: finding.get(key, [] if key in _AI_SNAPSHOT_LIST_FIELDS else "")
+        for key in _AI_SNAPSHOT_FIELDS
+    }
+
+
+def _snapshot_hash(snapshot: dict[str, Any]) -> str:
+    """sha256 of the snapshot's canonical JSON - an integrity check
+    (detects unexpected changes to a supposedly-immutable row), not an
+    identity. See the module docstring's "Finding identity" note."""
+    canonical = json.dumps(snapshot, sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _insert_ai_finding_row(conn, workspace_id: str, finding: dict[str, Any], now: str) -> str:
+    """Mints a fresh UUID id and persists this finding's content as an
+    immutable snapshot. Returns the new finding id."""
+    finding_id = f"ai-{uuid.uuid4().hex}"
+    snapshot = _build_ai_snapshot(finding)
     conn.execute(
         """
         INSERT INTO workspace_findings (
-            id, workspace_id, origin, ai_finding_index,
+            id, workspace_id, origin, ai_finding_index, ai_extraction_version,
+            ai_snapshot_json, ai_content_hash,
             human_evidence_document_ids_json, created_at, updated_at
-        ) VALUES (?, ?, 'ai', ?, '[]', ?, ?)
+        ) VALUES (%s, %s, 'ai', %s, %s, %s, %s, '[]', %s, %s)
         """,
-        (f"ai-{ai_index}", workspace_id, ai_index, now, now),
+        (
+            finding_id,
+            workspace_id,
+            finding["index"],
+            evaluations.EXTRACTION_VERSION,
+            json.dumps(snapshot),
+            _snapshot_hash(snapshot),
+            now,
+            now,
+        ),
     )
+    return finding_id
 
 
 # -- findings -------------------------------------------------------------
@@ -462,6 +557,8 @@ def _row_to_finding_state(row) -> dict[str, Any]:
         "workspace_id": row["workspace_id"],
         "origin": row["origin"],
         "ai_finding_index": row["ai_finding_index"],
+        "ai_extraction_version": row["ai_extraction_version"],
+        "ai_snapshot": json.loads(row["ai_snapshot_json"]) if row["ai_snapshot_json"] else None,
         "human_content": {
             "title": row["human_title"],
             "classification": row["human_classification"],
@@ -486,6 +583,7 @@ def _row_to_finding_state(row) -> dict[str, Any]:
         "duplicate_marked_at": row["duplicate_marked_at"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "revision": row["revision"],
     }
 
 
@@ -493,7 +591,7 @@ def _list_finding_state_rows(workspace_id: str) -> list[dict[str, Any]]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM workspace_findings WHERE workspace_id = ? ORDER BY created_at ASC", (workspace_id,)
+            "SELECT * FROM workspace_findings WHERE workspace_id = %s ORDER BY created_at ASC", (workspace_id,)
         ).fetchall()
     finally:
         conn.close()
@@ -504,16 +602,21 @@ def _get_finding_state_row(workspace_id: str, finding_id: str) -> dict[str, Any]
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM workspace_findings WHERE workspace_id = ? AND id = ?", (workspace_id, finding_id)
+            "SELECT * FROM workspace_findings WHERE workspace_id = %s AND id = %s", (workspace_id, finding_id)
         ).fetchone()
     finally:
         conn.close()
     return _row_to_finding_state(row) if row else None
 
 
-def _merged_finding(state: dict[str, Any], ai_content_by_index: dict[int, dict]) -> dict[str, Any]:
+def _merged_finding(state: dict[str, Any]) -> dict[str, Any]:
     if state["origin"] == "ai":
-        ai = ai_content_by_index.get(state["ai_finding_index"], {})
+        # Content comes straight from the immutable snapshot persisted at
+        # materialization time (Task 11.2) - never re-parsed from the
+        # analysis record on a read. `ai` is {} only for a not-yet-migrated
+        # legacy row (see migrate_finding_ids.py), same as a missing key
+        # used to fall back to "" before.
+        ai = state["ai_snapshot"] or {}
         content = {
             "title": ai.get("title", ""),
             "classification": ai.get("classification", ""),
@@ -571,17 +674,20 @@ def _merged_finding(state: dict[str, Any], ai_content_by_index: dict[int, dict])
         "duplicate_marked_at": state["duplicate_marked_at"],
         "created_at": state["created_at"],
         "updated_at": state["updated_at"],
+        "revision": state["revision"],
     }
 
 
 def list_findings(workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis) -> list[dict[str, Any]]:
-    """Every finding, AI and human, with AI content re-derived fresh from
-    the immutable analysis record on every call - never stored, never
-    stale, never editable. Duplicate finding ids (for lineage) are
-    resolved into each canonical finding's `duplicate_finding_ids` here."""
-    ai_content_by_index = {f["index"]: f for f in evaluations.extract_findings(analysis.segments)}
+    """Every finding, AI and human. AI content comes from each row's
+    immutable snapshot (Task 11.2) - never re-parsed from the analysis
+    record on a read, never stale, never editable. `analysis` is accepted
+    for call-site symmetry (every caller already has it loaded for other
+    purposes) but is no longer read for finding content. Duplicate finding
+    ids (for lineage) are resolved into each canonical finding's
+    `duplicate_finding_ids` here."""
     states = _list_finding_state_rows(workspace.id)
-    merged = [_merged_finding(s, ai_content_by_index) for s in states]
+    merged = [_merged_finding(s) for s in states]
 
     duplicates_by_canonical: dict[str, list[str]] = {}
     for m in merged:
@@ -608,15 +714,30 @@ def get_finding(
     return None
 
 
-def update_finding_workflow(workspace_id: str, finding_id: str, updates: dict) -> dict[str, Any]:
+def update_finding_workflow(
+    workspace_id: str, finding_id: str, updates: dict, expected_revision: int | None = None
+) -> dict[str, Any]:
     """Merge-updates the workflow-state fields of one finding (AI or
     human). Never touches content fields - those are either re-derived
     (AI origin) or edited through update_human_finding_content (human
     origin) so this one function can't be used to quietly rewrite what
-    Claude said."""
+    Claude said.
+
+    Task 11.5: `expected_revision`, when supplied, must match the
+    finding's current `revision` or this raises FindingRevisionConflictError
+    instead of writing anything - no silent last-write-wins
+    (docs/03-domain-model.md: 'Updates supply expected revision; conflicts
+    return a recoverable conflict response'). Omitting it (None) skips the
+    check entirely, so any caller that doesn't yet know about revisions
+    (there are none left in this codebase, but the parameter is optional
+    on principle - see the same optionality reasoning used for other
+    additive fields in this app) behaves exactly as before this task."""
     existing = _get_finding_state_row(workspace_id, finding_id)
     if existing is None:
         raise ValueError("finding not found")
+
+    if expected_revision is not None and existing["revision"] != expected_revision:
+        raise FindingRevisionConflictError(current=_merged_finding(existing))
 
     changed: dict[str, Any] = {}
 
@@ -646,11 +767,11 @@ def update_finding_workflow(workspace_id: str, finding_id: str, updates: dict) -
         return existing
 
     now = datetime.now(timezone.utc).isoformat()
-    set_clause = ", ".join(f"{k} = ?" for k in changed) + ", updated_at = ?"
+    set_clause = ", ".join(f"{k} = %s" for k in changed) + ", updated_at = %s, revision = revision + 1"
     conn = store.get_connection()
     try:
         conn.execute(
-            f"UPDATE workspace_findings SET {set_clause} WHERE workspace_id = ? AND id = ?",
+            f"UPDATE workspace_findings SET {set_clause} WHERE workspace_id = %s AND id = %s",
             (*changed.values(), now, workspace_id, finding_id),
         )
         event_type = (
@@ -700,7 +821,7 @@ def create_human_finding(workspace_id: str, data: dict) -> dict[str, Any]:
                 human_commercial_relevance, human_uncertainty, human_recommended_action,
                 human_evidence_notes, human_evidence_document_ids_json,
                 created_at, updated_at
-            ) VALUES (?, ?, 'human', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, 'human', NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 finding_id,
@@ -744,11 +865,11 @@ def delete_human_finding(workspace_id: str, finding_id: str) -> None:
 
     conn = store.get_connection()
     try:
-        conn.execute("DELETE FROM workspace_findings WHERE workspace_id = ? AND id = ?", (workspace_id, finding_id))
+        conn.execute("DELETE FROM workspace_findings WHERE workspace_id = %s AND id = %s", (workspace_id, finding_id))
         # Clear lineage on anything that pointed at this finding as canonical.
         conn.execute(
             "UPDATE workspace_findings SET is_duplicate = 0, duplicate_of = NULL, duplicate_marked_by = NULL, "
-            "duplicate_marked_at = NULL WHERE workspace_id = ? AND duplicate_of = ?",
+            "duplicate_marked_at = NULL WHERE workspace_id = %s AND duplicate_of = %s",
             (workspace_id, finding_id),
         )
         _log_event(
@@ -784,8 +905,8 @@ def set_duplicate(workspace_id: str, finding_id: str, duplicate_of: str | None, 
         conn.execute(
             """
             UPDATE workspace_findings
-            SET is_duplicate = ?, duplicate_of = ?, duplicate_marked_by = ?, duplicate_marked_at = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ?
+            SET is_duplicate = %s, duplicate_of = %s, duplicate_marked_by = %s, duplicate_marked_at = %s, updated_at = %s
+            WHERE workspace_id = %s AND id = %s
             """,
             (
                 1 if duplicate_of else 0,
@@ -837,7 +958,7 @@ def list_requests(workspace_id: str) -> list[WorkspaceRequest]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM workspace_requests WHERE workspace_id = ? ORDER BY created_at ASC", (workspace_id,)
+            "SELECT * FROM workspace_requests WHERE workspace_id = %s ORDER BY created_at ASC", (workspace_id,)
         ).fetchall()
     finally:
         conn.close()
@@ -848,7 +969,7 @@ def get_request(workspace_id: str, request_id: str) -> WorkspaceRequest | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM workspace_requests WHERE workspace_id = ? AND id = ?", (workspace_id, request_id)
+            "SELECT * FROM workspace_requests WHERE workspace_id = %s AND id = %s", (workspace_id, request_id)
         ).fetchone()
     finally:
         conn.close()
@@ -887,7 +1008,7 @@ def create_request(workspace_id: str, data: dict) -> WorkspaceRequest:
             INSERT INTO workspace_requests (
                 id, workspace_id, question, related_finding_ids_json, priority, assigned_recipient,
                 status, management_response, reviewer_followup, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 request.id,
@@ -948,9 +1069,9 @@ def update_request(workspace_id: str, request_id: str, updates: dict) -> Workspa
         conn.execute(
             """
             UPDATE workspace_requests SET
-                question = ?, related_finding_ids_json = ?, priority = ?, assigned_recipient = ?,
-                status = ?, management_response = ?, reviewer_followup = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ?
+                question = %s, related_finding_ids_json = %s, priority = %s, assigned_recipient = %s,
+                status = %s, management_response = %s, reviewer_followup = %s, updated_at = %s
+            WHERE workspace_id = %s AND id = %s
             """,
             (
                 existing.question,
@@ -1006,7 +1127,7 @@ def _row_to_memo(row) -> WorkspaceMemo:
 def get_memo(workspace_id: str) -> WorkspaceMemo | None:
     conn = store.get_connection()
     try:
-        row = conn.execute("SELECT * FROM workspace_memos WHERE workspace_id = ?", (workspace_id,)).fetchone()
+        row = conn.execute("SELECT * FROM workspace_memos WHERE workspace_id = %s", (workspace_id,)).fetchone()
     finally:
         conn.close()
     return _row_to_memo(row) if row else None
@@ -1105,7 +1226,7 @@ def get_or_create_memo(
                 financial_valuation_implications, missing_information, confirmed_consistencies,
                 recommended_next_actions, overall_recommendation, status, approved_by, approved_at,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 memo.workspace_id,
@@ -1181,11 +1302,11 @@ def update_memo(workspace_id: str, updates: dict) -> WorkspaceMemo:
         conn.execute(
             """
             UPDATE workspace_memos SET
-                executive_conclusion = ?, transaction_overview = ?, critical_issues = ?, high_priority_issues = ?,
-                financial_valuation_implications = ?, missing_information = ?, confirmed_consistencies = ?,
-                recommended_next_actions = ?, overall_recommendation = ?, status = ?, approved_by = ?,
-                approved_at = ?, updated_at = ?
-            WHERE workspace_id = ?
+                executive_conclusion = %s, transaction_overview = %s, critical_issues = %s, high_priority_issues = %s,
+                financial_valuation_implications = %s, missing_information = %s, confirmed_consistencies = %s,
+                recommended_next_actions = %s, overall_recommendation = %s, status = %s, approved_by = %s,
+                approved_at = %s, updated_at = %s
+            WHERE workspace_id = %s
             """,
             (
                 existing.executive_conclusion,
@@ -1234,7 +1355,7 @@ def approve_memo(workspace_id: str, approver: str) -> WorkspaceMemo:
     conn = store.get_connection()
     try:
         conn.execute(
-            "UPDATE workspace_memos SET status = ?, approved_by = ?, approved_at = ?, updated_at = ? WHERE workspace_id = ?",
+            "UPDATE workspace_memos SET status = %s, approved_by = %s, approved_at = %s, updated_at = %s WHERE workspace_id = %s",
             (existing.status, existing.approved_by, existing.approved_at, existing.updated_at, workspace_id),
         )
         _log_event(

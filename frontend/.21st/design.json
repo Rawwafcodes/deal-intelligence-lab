@@ -1,0 +1,786 @@
+{
+  "version": 1,
+  "project": {
+    "name": "frontend",
+    "productType": "internal B2B diligence/workspace tool (M&A intelligence) \u2014 not a marketing or consumer product",
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v4",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [
+      "src/assets"
+    ],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light-and-dark",
+    "colors": {
+      "--background": {
+        "value": "#0a0a0c",
+        "source": "src/index.css"
+      },
+      "--foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--card-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--popover-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--primary": {
+        "value": "#ffffff",
+        "source": "src/index.css"
+      },
+      "--primary-foreground": {
+        "value": "#0a0a0c",
+        "source": "src/index.css"
+      },
+      "--secondary": {
+        "value": "#1b1b20",
+        "source": "src/index.css"
+      },
+      "--secondary-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--muted": {
+        "value": "#1b1b20",
+        "source": "src/index.css"
+      },
+      "--muted-foreground": {
+        "value": "#9a9aa2",
+        "source": "src/index.css"
+      },
+      "--accent": {
+        "value": "#1b1b20",
+        "source": "src/index.css"
+      },
+      "--accent-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--destructive": {
+        "value": "#f2867a",
+        "source": "src/index.css"
+      },
+      "--destructive-foreground": {
+        "value": "#ffffff",
+        "source": "src/index.css"
+      },
+      "--border": {
+        "value": "#26262c",
+        "source": "src/index.css"
+      },
+      "--ring": {
+        "value": "#3b82f6",
+        "source": "src/index.css"
+      },
+      "--chart-1": {
+        "value": "oklch(0.87 0 0)",
+        "source": "src/index.css"
+      },
+      "--chart-2": {
+        "value": "oklch(0.556 0 0)",
+        "source": "src/index.css"
+      },
+      "--chart-3": {
+        "value": "oklch(0.439 0 0)",
+        "source": "src/index.css"
+      },
+      "--chart-4": {
+        "value": "oklch(0.371 0 0)",
+        "source": "src/index.css"
+      },
+      "--chart-5": {
+        "value": "oklch(0.269 0 0)",
+        "source": "src/index.css"
+      },
+      "--sidebar-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary": {
+        "value": "#ffffff",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "#0a0a0c",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent": {
+        "value": "#1b1b20",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent-foreground": {
+        "value": "#f4f4f5",
+        "source": "src/index.css"
+      },
+      "--sidebar-border": {
+        "value": "#26262c",
+        "source": "src/index.css"
+      },
+      "--sidebar-ring": {
+        "value": "#3b82f6",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-ring": {
+        "value": "var(--sidebar-ring)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-border": {
+        "value": "var(--sidebar-border)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-accent-foreground": {
+        "value": "var(--sidebar-accent-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-accent": {
+        "value": "var(--sidebar-accent)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-primary-foreground": {
+        "value": "var(--sidebar-primary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-primary": {
+        "value": "var(--sidebar-primary)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-foreground": {
+        "value": "var(--sidebar-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar": {
+        "value": "var(--sidebar)",
+        "source": "src/index.css"
+      },
+      "--color-chart-5": {
+        "value": "var(--chart-5)",
+        "source": "src/index.css"
+      },
+      "--color-chart-4": {
+        "value": "var(--chart-4)",
+        "source": "src/index.css"
+      },
+      "--color-chart-3": {
+        "value": "var(--chart-3)",
+        "source": "src/index.css"
+      },
+      "--color-chart-2": {
+        "value": "var(--chart-2)",
+        "source": "src/index.css"
+      },
+      "--color-chart-1": {
+        "value": "var(--chart-1)",
+        "source": "src/index.css"
+      },
+      "--color-ring": {
+        "value": "var(--ring)",
+        "source": "src/index.css"
+      },
+      "--color-input": {
+        "value": "var(--input)",
+        "source": "src/index.css"
+      },
+      "--color-border": {
+        "value": "var(--border)",
+        "source": "src/index.css"
+      },
+      "--color-destructive": {
+        "value": "var(--destructive)",
+        "source": "src/index.css"
+      },
+      "--color-accent-foreground": {
+        "value": "var(--accent-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-accent": {
+        "value": "var(--accent)",
+        "source": "src/index.css"
+      },
+      "--color-muted-foreground": {
+        "value": "var(--muted-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-muted": {
+        "value": "var(--muted)",
+        "source": "src/index.css"
+      },
+      "--color-secondary-foreground": {
+        "value": "var(--secondary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-secondary": {
+        "value": "var(--secondary)",
+        "source": "src/index.css"
+      },
+      "--color-primary-foreground": {
+        "value": "var(--primary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-primary": {
+        "value": "var(--primary)",
+        "source": "src/index.css"
+      },
+      "--color-popover-foreground": {
+        "value": "var(--popover-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-popover": {
+        "value": "var(--popover)",
+        "source": "src/index.css"
+      },
+      "--color-card-foreground": {
+        "value": "var(--card-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-card": {
+        "value": "var(--card)",
+        "source": "src/index.css"
+      },
+      "--color-foreground": {
+        "value": "var(--foreground)",
+        "source": "src/index.css"
+      },
+      "--color-background": {
+        "value": "var(--background)",
+        "source": "src/index.css"
+      }
+    },
+    "typography": {
+      "--font-heading": {
+        "value": "\"Inter Tight\", \"Inter\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "source": "src/index.css"
+      },
+      "--font-body": {
+        "value": "\"Inter\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+        "source": "src/index.css"
+      },
+      "--font-sans": {
+        "value": "var(--font-body)",
+        "source": "src/index.css"
+      }
+    },
+    "spacing": {},
+    "radius": {
+      "--radius": {
+        "value": "0.5rem",
+        "source": "src/index.css"
+      },
+      "--radius-sm": {
+        "value": "calc(var(--radius) * 0.6)",
+        "source": "src/index.css"
+      },
+      "--radius-md": {
+        "value": "calc(var(--radius) * 0.8)",
+        "source": "src/index.css"
+      },
+      "--radius-lg": {
+        "value": "var(--radius)",
+        "source": "src/index.css"
+      },
+      "--radius-xl": {
+        "value": "calc(var(--radius) * 1.4)",
+        "source": "src/index.css"
+      },
+      "--radius-2xl": {
+        "value": "calc(var(--radius) * 1.8)",
+        "source": "src/index.css"
+      },
+      "--radius-3xl": {
+        "value": "calc(var(--radius) * 2.2)",
+        "source": "src/index.css"
+      },
+      "--radius-4xl": {
+        "value": "calc(var(--radius) * 2.6)",
+        "source": "src/index.css"
+      }
+    },
+    "shadows": {
+      "--shadow-elevation-1": {
+        "value": "0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.24)",
+        "source": "src/index.css"
+      },
+      "--shadow-elevation-2": {
+        "value": "0 6px 16px rgba(0, 0, 0, 0.34), 0 2px 4px rgba(0, 0, 0, 0.24)",
+        "source": "src/index.css"
+      },
+      "--shadow-elevation-3": {
+        "value": "0 16px 32px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.28)",
+        "source": "src/index.css"
+      }
+    },
+    "motion": {},
+    "density": "dense \u2014 data-heavy tables, findings lists, multi-stage workflows; not a spacious marketing layout"
+  },
+  "components": {
+    "installed": [
+      "button",
+      "card",
+      "dialog",
+      "input",
+      "label",
+      "skeleton",
+      "sonner",
+      "textarea",
+      "sidebar"
+    ],
+    "preferredPrimitives": [],
+    "patterns": [
+      {
+        "source": "https://21st.dev/@serafimcloud/components/badge-delta",
+        "name": "Badge Delta",
+        "fit": "good \u2014 direct fit for status/severity badges (findings, mandate/run status). Adopt structure, restyle to our token set.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@TomIsLoading/components/kanban",
+        "name": "Kanban",
+        "fit": "good \u2014 reference for Direction C (Stage Workflow board) if we build a status-column view of mandates/requests. Needs a real keyboard-operable status control, not drag-only.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@uniquesonu/components/dashboard-overview",
+        "name": "Dashboard Overview",
+        "fit": "possible fit for the roadmap's still-unbuilt M13.3 Workspace/Deal Overview screens \u2014 needs vetting against consumer-dashboard visual language before reuse.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@uilayout.contact/components/advanced-stats",
+        "name": "Advanced Stats",
+        "fit": "partial \u2014 the KPI-card layout is usable (this app already has a KPI summary strip on the workspace page); strip the animated area chart and scroll-triggered reveals, both decorative motion CLAUDE.md avoids.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@jatin-yadav05/components/mini-chart",
+        "name": "Mini Chart",
+        "fit": "partial \u2014 usable as a restrained, monochrome inline sparkline if kept static/low-motion; not as a decorative 'real-time' animated element.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@karthikmudunuri/components/animated-badge",
+        "name": "Animated Badge",
+        "fit": "partial \u2014 the pulsing-dot-for-a-live-status idea is legitimate signal (e.g. a running mandate); drop the decorative entrance animation.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ravikatiyar162/components/financial-dashboard",
+        "name": "Financial Dashboard",
+        "fit": "weak \u2014 consumer-finance-app hub, not a diligence tool; at most borrow the numeric-KPI layout, not its visual language.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@radu/components/colorful-bento-grid",
+        "name": "Colorful Bento Grid",
+        "fit": "avoid \u2014 explicitly a marketing/landing-page block (SaaS/agency feature showcase); conflicts with CLAUDE.md's avoid-consumer-visual-language and avoid-new-hues rules.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@manuarora700/components/bento-grid",
+        "name": "Bento Grid",
+        "fit": "avoid \u2014 decorative marketing/portfolio grid pattern, not a fit for dense data screens.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@lukacho/components/marquee",
+        "name": "Marquee",
+        "fit": "avoid \u2014 auto-scrolling ticker for social proof/logos; decorative motion with no legitimate use in this app.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@vgpu/components/black-hole",
+        "name": "Black Hole",
+        "fit": "avoid \u2014 raymarched 3D shader/hero background effect, purely decorative, no product relevance.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@n1m4mz/components/sonar-grid",
+        "name": "Sonar Grid",
+        "fit": "avoid \u2014 decorative interactive dot-grid background for hero/footer sections.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@dqnamo/components/agent-dock",
+        "name": "Agent Dock",
+        "fit": "partial \u2014 the compact 'active process status line' idea could map to a running-mandate indicator, but it's built on spring/crossfade animation (motion/react) that goes well past our motion budget; would need a fully static rebuild.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@hirael/components/comparison-03",
+        "name": "Comparison Section",
+        "fit": "avoid \u2014 marketing before/after section (old-way pain points vs. improvements); no equivalent concept in this product.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@Codehagen/components/pricing",
+        "name": "Pricing",
+        "fit": "avoid \u2014 SaaS pricing table with a confetti effect; this product has no pricing/billing concept at all.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@lovesickfromthe6ix/components/horizon-hero-section",
+        "name": "Horizon Hero Section",
+        "fit": "avoid \u2014 3D parallax marketing hero section.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@sh20raj/components/optimized-tilt-card",
+        "name": "Optimized Tilt Card",
+        "fit": "avoid \u2014 3D parallax tilt/hover card effect, purely decorative.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@carolinaraulino/components/draggable-widget-grid",
+        "name": "Draggable Widget Grid",
+        "fit": "partial \u2014 the 'customizable overview' idea is relevant to the roadmap's still-unbuilt M13.3 Workspace/Deal Overview screens, but drag-to-rearrange needs a genuine keyboard-operable alternative and a much quieter visual treatment before it fits here.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ln-dev7/components/register-16",
+        "name": "Centered Sign-Up Card",
+        "fit": "avoid \u2014 generic self-serve sign-up form; doesn't match this app's actual identity model (Organization/User/DealMembership, no self-serve signup in the domain model).",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@serafimcloud/components/splite",
+        "name": "Spline Scene",
+        "fit": "avoid \u2014 3D Spline scene with spotlight/gradient-text effects, marketing-hero pattern.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ruixen.ui/components/scroll-burn-text",
+        "name": "Scroll Burn Text",
+        "fit": "avoid \u2014 decorative scroll-triggered text effect.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@uilayout.contact/components/sparkles-title3",
+        "name": "Sparkles Title",
+        "fit": "avoid \u2014 decorative sparkle/particle title effect.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ruixen.ui/components/halo-reel",
+        "name": "Halo Reel",
+        "fit": "avoid \u2014 decorative image/media reel effect, marketing-site pattern.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@manuarora700/components/gooey-input",
+        "name": "Gooey Input",
+        "fit": "avoid \u2014 decorative gooey/blob input effect.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@manuarora700/components/floating-dock",
+        "name": "Floating Dock",
+        "fit": "avoid \u2014 macOS-style bouncing floating dock nav; playful/consumer interaction pattern, not this app's register.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@hyperiux/components/parallax-strip-slider",
+        "name": "Parallax Strip Slider",
+        "fit": "avoid \u2014 decorative parallax marketing slider.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@hyperiux/components/interactive-blur-reveal",
+        "name": "Interactive Blur Reveal",
+        "fit": "avoid \u2014 decorative blur/reveal hover effect.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@diarmuradi/components/pricing-8",
+        "name": "Animated Pricing Card",
+        "fit": "avoid \u2014 another SaaS pricing pattern; no billing concept in this product.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@kedhareswer/components/tile-scrollbar",
+        "name": "Tile Scrollbar",
+        "fit": "avoid \u2014 decorative custom-scrollbar effect for a tiled marketing layout.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@n1m4mz/components/moire-field",
+        "name": "Moir\u00e9 Field",
+        "fit": "avoid \u2014 decorative generative visual/shader background.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@diarmuradi/components/faq-13",
+        "name": "FAQ Snapshot Grid",
+        "fit": "avoid \u2014 marketing-site FAQ content block; no equivalent content type in this product.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@hyperiux/components/information-drawer",
+        "name": "Information Drawer",
+        "fit": "good \u2014 a slide-out detail panel is a genuinely common, restrained enterprise pattern; worth evaluating for a finding/document detail view instead of (or alongside) the existing expand-in-place row pattern.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@kedhareswer/components/caustic-pool",
+        "name": "Caustic Pool",
+        "fit": "avoid \u2014 WebGL fluid/caustics shader background, purely decorative.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@hyperiux/components/shiny-button",
+        "name": "Shiny Button",
+        "fit": "avoid \u2014 decorative shiny/gradient-sheen button effect; conflicts with the no-gradients-as-decoration constraint.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@makviesainte/components/builders-community-hero",
+        "name": "Builders Community Hero",
+        "fit": "avoid \u2014 marketing hero section for a community/builders product; no relevance.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@serafimcloud/components/alert-badge",
+        "name": "Alert Badge",
+        "fit": "good \u2014 another Tremor-inspired status badge, same direct fit as Badge Delta.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@moazamtrade/components/feature",
+        "name": "Feature",
+        "fit": "avoid \u2014 animated marketing 'featured cards' section.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@solaceui/components/auth-section-3",
+        "name": "Auth Section 3",
+        "fit": "avoid \u2014 consumer sign-up page with social login and a shader background; no social-login or self-serve-signup concept in this app's identity model.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ruixen.ui/components/features-detail",
+        "name": "FeaturesDetail",
+        "fit": "avoid \u2014 animated GSAP auto-sliding marketing carousel.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@solaceui/components/auth-section-1",
+        "name": "Auth Section 1",
+        "fit": "avoid \u2014 same reasoning as Auth Section 3 (animated consumer sign-up page).",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@lyanchouss/components/dock",
+        "name": "Dock (lyanchouss)",
+        "fit": "partial \u2014 a genuinely minimal quick-access nav dock for an internal console (closest of the dock variants to something usable); still needs checking against our motion budget before reuse.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@ayushmxxn/components/tubelight-navbar",
+        "name": "Tubelight Navbar",
+        "fit": "avoid \u2014 glowing light-trail nav indicator effect, decorative.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@uilayout.contact/components/stats-bento",
+        "name": "Stats Bento",
+        "fit": "partial \u2014 same as Advanced Stats: the mixed-size KPI-card idea is usable, the 'bento' marketing framing and awards/ratings content are not.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@vercel-crawled/components/announcement",
+        "name": "Announcement",
+        "fit": "partial \u2014 a plain sidebar system-notice banner could be legitimate (e.g. a dev-mode or maintenance notice); needs to stay text-only, no marketing tone.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@rayimanoj8/components/chat-template",
+        "name": "Chat template",
+        "fit": "good reference, not yet actionable \u2014 docs/04-mandate-engine.md describes an eventual 'optional steering within the mandate' chat concept, not built yet. Worth revisiting when that's scoped, not now.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@cnippet-dev/components/v-skeleton-8",
+        "name": "Sidebar Dashboard Skeleton",
+        "fit": "good \u2014 a real loading-skeleton pattern (nav rail, header actions, stat cards, list rows), not decorative. This app already uses skeleton loaders; directly reusable if we adopt a sidebar shell (Direction A).",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17",
+        "status": "not yet applied",
+        "note2": "the sidebar shell itself is built; a matching loading-skeleton state for it has not been added yet"
+      },
+      {
+        "source": "https://21st.dev/@manuarora700/components/sidebar",
+        "name": "Sidebar",
+        "fit": "good \u2014 directly relevant structural reference for Direction A (persistent sidebar shell). 'Expands on hover' needs a keyboard-operable equivalent, not hover-only.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17",
+        "status": "applied",
+        "appliedAs": "src/components/ui/sidebar.tsx + src/components/AppSidebar.tsx"
+      },
+      {
+        "source": "https://21st.dev/@ibelick/components/dock",
+        "name": "Dock (ibelick)",
+        "fit": "avoid \u2014 generic macOS-style dock; treat like Floating Dock unless proven restrained.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@originui/components/dialog",
+        "name": "Dialog",
+        "fit": "neutral \u2014 an alternate shadcn dialog skin; we already have dialog installed and in use, so no urgency to swap.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      },
+      {
+        "source": "https://21st.dev/@efferd/components/footer-section",
+        "name": "Footer Section",
+        "fit": "avoid \u2014 animated SaaS marketing footer.",
+        "bookmarkedByUser": true,
+        "checkedAt": "2026-09-17"
+      }
+    ]
+  },
+  "constraints": {
+    "must": [
+      "Keep color-scheme: dark \u2014 this is a committed identity (\"Meridian\", decision D12), not a light/dark toggle",
+      "Reuse the existing token set (--background/--card/--primary as white-pill CTA/--ring as the only blue accent) rather than introducing new brand colors",
+      "Reuse existing installed shadcn primitives (button, card, dialog, input, label, skeleton, sonner, textarea) before adding a new one",
+      "Inter / Inter Tight typography only",
+      "Optimize for dense, scannable data (tables, findings, multi-stage review flows), not generous marketing whitespace"
+    ],
+    "avoid": [
+      "Decorative motion, scroll-driven animation, parallax, or any 'awwwards-style' flourish \u2014 CLAUDE.md: clarity and professional credibility over visual flourish",
+      "Consumer/marketing visual language (hero sections, big illustration, gradients-as-decoration, glassmorphism)",
+      "New color hues beyond the existing near-black/white/blue-accent/muted-red-destructive palette",
+      "Playful or informal tone in copy or iconography \u2014 this is a diligence tool used by analysts and deal leads"
+    ]
+  },
+  "decisions": [
+    {
+      "date": "2026-09-17",
+      "decision": "Adopted Direction A (persistent sidebar shell) for frontend/ navigation, reimplemented from the Sidebar (id 1075, https://21st.dev/@manuarora700/components/sidebar) and Sidebar Dashboard Skeleton (id 19009) references rather than installed verbatim - the reference was Next.js + framer-motion with hover-only expand (no keyboard path); rebuilt as click-toggled, CSS-transition-only, styled from the existing --sidebar-* tokens, using react-router Link.",
+      "files": [
+        "src/components/ui/sidebar.tsx",
+        "src/components/AppSidebar.tsx",
+        "src/components/Layout.tsx",
+        "src/components/IdentityFooter.tsx",
+        "src/App.tsx"
+      ],
+      "removed": [
+        "src/components/AppHeader.tsx (content redistributed into AppSidebar + IdentityFooter)"
+      ],
+      "status": "applied"
+    },
+    {
+      "date": "2026-09-17",
+      "decision": "Direction B (dense filterable/sortable tables) for findings/documents. Found during scoping that findings (static/workspace.html/js) already had this exact pattern - search, 6 filters, sortable columns, severity/origin badges - built in Milestone 9, well before this design exploration started. Documents (static/project.html/js) did not: added search + folder/type filters + sortable columns (Name/Folder/Type/Size/Uploaded) + a count hint, mirroring the exact filters/sortState/visibleX() idiom findings already used. Generalized the shared filter-bar and sortable-table-header CSS out of workspace.css into style.css (.filter-bar/.filter-field/.filter-actions, .documents-table th[data-sort]) so both pages use one definition instead of two drifting copies; kept the sticky-positioning behavior opt-in (.filter-bar-sticky) since workspace.html is a dedicated page but project.html is one card among several.",
+      "files": [
+        "static/project.html",
+        "static/project.js",
+        "static/workspace.html",
+        "static/workspace.css",
+        "static/style.css"
+      ],
+      "status": "applied"
+    },
+    {
+      "date": "2026-09-17",
+      "decision": "Direction C (status-first board) for the mandate list. Grouped mandates into columns by lifecycle status (draft/awaiting_approval/active/under_review/completed/cancelled/failed - \"planning\" excluded, declared in mandates.py but never actually reachable). No drag-and-drop: status changes already happen via explicit actions on the mandate detail page, never from the list, so the board is a read-only grouped view of the same clickable cards - this sidesteps the kanban drag-accessibility risk entirely rather than needing a keyboard-operable alternative to dragging. Desktop: horizontal scrolling row of columns. Mobile: stacked full-width sections, not horizontal-scroll-only. Empty columns show explicit \"No mandates\" text rather than being hidden, so the whole pipeline shape is visible at a glance.",
+      "files": [
+        "src/routes/MandateList.tsx"
+      ],
+      "status": "reverted",
+      "revertedAt": "2026-09-17",
+      "revertReason": "Founder saw it live and didn't like the look - reverted MandateList.tsx to the flat list (STATUS_LABELS pill per row), same as before this decision. No other Direction C infrastructure existed elsewhere to unwind."
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light-and-dark",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v4",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-16T23:15:54.184Z"
+}

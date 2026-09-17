@@ -179,7 +179,7 @@ def create_initial_version(validation_case_id: str) -> AnswerKeyVersion:
             """
             INSERT INTO answer_key_versions
                 (id, validation_case_id, version_number, content_json, checksum, created_at, locked_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 version.id,
@@ -201,7 +201,7 @@ def get_current_version(validation_case_id: str) -> AnswerKeyVersion | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM answer_key_versions WHERE validation_case_id = ? "
+            "SELECT * FROM answer_key_versions WHERE validation_case_id = %s "
             "ORDER BY version_number DESC LIMIT 1",
             (validation_case_id,),
         ).fetchone()
@@ -214,7 +214,7 @@ def get_version(validation_case_id: str, version_id: str) -> AnswerKeyVersion | 
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM answer_key_versions WHERE validation_case_id = ? AND id = ?",
+            "SELECT * FROM answer_key_versions WHERE validation_case_id = %s AND id = %s",
             (validation_case_id, version_id),
         ).fetchone()
     finally:
@@ -226,7 +226,7 @@ def list_versions(validation_case_id: str) -> list[AnswerKeyVersion]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM answer_key_versions WHERE validation_case_id = ? ORDER BY version_number ASC",
+            "SELECT * FROM answer_key_versions WHERE validation_case_id = %s ORDER BY version_number ASC",
             (validation_case_id,),
         ).fetchall()
     finally:
@@ -247,7 +247,7 @@ def update_draft_content(validation_case_id: str, version_id: str, content: dict
     conn = store.get_connection()
     try:
         conn.execute(
-            "UPDATE answer_key_versions SET content_json = ? WHERE validation_case_id = ? AND id = ?",
+            "UPDATE answer_key_versions SET content_json = %s WHERE validation_case_id = %s AND id = %s",
             (canonical_json(content), validation_case_id, version_id),
         )
         conn.commit()
@@ -276,7 +276,7 @@ def lock_version(validation_case_id: str, version_id: str) -> AnswerKeyVersion:
     conn = store.get_connection()
     try:
         conn.execute(
-            "UPDATE answer_key_versions SET locked_at = ?, checksum = ? WHERE validation_case_id = ? AND id = ?",
+            "UPDATE answer_key_versions SET locked_at = %s, checksum = %s WHERE validation_case_id = %s AND id = %s",
             (locked_at, checksum, validation_case_id, version_id),
         )
         conn.commit()
@@ -314,7 +314,7 @@ def create_revision(validation_case_id: str) -> AnswerKeyVersion:
             """
             INSERT INTO answer_key_versions
                 (id, validation_case_id, version_number, content_json, checksum, created_at, locked_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 revision.id,

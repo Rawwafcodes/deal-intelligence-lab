@@ -94,7 +94,7 @@ def create_validation_case(
             """
             INSERT INTO validation_cases (
                 id, project_id, name, description, pdf_document_ids_json, excel_document_ids_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 case.id,
@@ -116,7 +116,7 @@ def list_validation_cases(project_id: str) -> list[ValidationCase]:
     conn = store.get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM validation_cases WHERE project_id = ? ORDER BY created_at DESC", (project_id,)
+            "SELECT * FROM validation_cases WHERE project_id = %s ORDER BY created_at DESC", (project_id,)
         ).fetchall()
     finally:
         conn.close()
@@ -127,7 +127,7 @@ def get_validation_case(project_id: str, validation_case_id: str) -> ValidationC
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM validation_cases WHERE project_id = ? AND id = ?", (project_id, validation_case_id)
+            "SELECT * FROM validation_cases WHERE project_id = %s AND id = %s", (project_id, validation_case_id)
         ).fetchone()
     finally:
         conn.close()
@@ -149,8 +149,8 @@ def update_selected_documents(
     conn = store.get_connection()
     try:
         conn.execute(
-            "UPDATE validation_cases SET pdf_document_ids_json = ?, excel_document_ids_json = ? "
-            "WHERE project_id = ? AND id = ?",
+            "UPDATE validation_cases SET pdf_document_ids_json = %s, excel_document_ids_json = %s "
+            "WHERE project_id = %s AND id = %s",
             (json.dumps(pdf_document_ids), json.dumps(excel_document_ids), project_id, validation_case_id),
         )
         conn.commit()

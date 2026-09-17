@@ -10,6 +10,7 @@ existing validation-lab tests.
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,6 +24,13 @@ import workspaces
 
 def _text_segment(text: str, pdf_citations=None) -> dict:
     return {"parts": [{"type": "text", "text": text}], "pdf_citations": pdf_citations or []}
+
+
+def _finding_ids_by_title(workspace, analysis) -> dict:
+    """Task 11.2: AI finding ids are minted UUIDs (`ai-<uuid>`), not
+    `ai-<index>`, so tests look a finding up by its known (deterministic)
+    title instead of assuming a literal id string."""
+    return {f["title"]: f["id"] for f in workspaces.list_findings(workspace, analysis)}
 
 
 SAMPLE_FINDINGS_TEXT = (
@@ -70,9 +78,11 @@ class WorkspaceTestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
         store.init_db()
         documents.init_documents_db()
@@ -81,7 +91,8 @@ class WorkspaceTestBase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 
@@ -131,7 +142,18 @@ class WorkspaceCreationTests(WorkspaceTestBase):
         self.assertEqual(workspace.cross_format_analysis_id, self.analysis.id)
         findings = workspaces.list_findings(workspace, self.analysis)
         self.assertEqual(len(findings), 4)
-        self.assertEqual({f["id"] for f in findings}, {"ai-0", "ai-1", "ai-2", "ai-3"})
+        self.assertEqual(
+            {f["title"] for f in findings},
+            {
+                "Term-sheet price gap",
+                "Unsupported growth rate",
+                "No evidence located for churn assumption",
+                "Headcount figures agree across sources",
+            },
+        )
+        ids = {f["id"] for f in findings}
+        self.assertEqual(len(ids), 4)  # every id distinct
+        self.assertTrue(all(finding_id.startswith("ai-") for finding_id in ids))
 
     def test_reopening_is_idempotent_and_does_not_duplicate_findings(self):
         workspace1, created1 = workspaces.get_or_create_workspace(self.project.id, self.analysis)
@@ -162,13 +184,14 @@ class ImmutableAiContentTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
+        self.finding_id = _finding_ids_by_title(self.workspace, self.analysis)["Term-sheet price gap"]
 
     def test_ai_content_matches_extract_findings_exactly(self):
         expected = evaluations.extract_findings(self.analysis.segments)
         findings = workspaces.list_findings(self.workspace, self.analysis)
-        by_id = {f["id"]: f for f in findings}
-        for i, exp in enumerate(expected):
-            got = by_id[f"ai-{i}"]
+        by_title = {f["title"]: f for f in findings}
+        for exp in expected:
+            got = by_title[exp["title"]]
             self.assertEqual(got["title"], exp["title"])
             self.assertEqual(got["classification"], exp["classification"])
             self.assertEqual(got["severity"], exp["severity"])
@@ -177,11 +200,11 @@ class ImmutableAiContentTests(WorkspaceTestBase):
             self.assertEqual(got["workbook_evidence"], exp["workbook_evidence"])
 
     def test_workflow_update_never_changes_ai_content_fields(self):
-        before = workspaces.get_finding(self.workspace, self.analysis, "ai-0")
+        before = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
         workspaces.update_finding_workflow(
-            self.workspace.id, "ai-0", {"review_status": "accepted", "adjusted_severity": "low"}
+            self.workspace.id, self.finding_id, {"review_status": "accepted", "adjusted_severity": "low"}
         )
-        after = workspaces.get_finding(self.workspace, self.analysis, "ai-0")
+        after = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
         self.assertEqual(before["title"], after["title"])
         self.assertEqual(before["severity"], after["severity"])  # original AI severity untouched
         self.assertEqual(after["adjusted_severity"], "low")
@@ -192,11 +215,12 @@ class HumanReviewWorkflowTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
+        self.finding_id = _finding_ids_by_title(self.workspace, self.analysis)["Term-sheet price gap"]
 
     def test_updates_review_and_resolution_fields(self):
         updated = workspaces.update_finding_workflow(
             self.workspace.id,
-            "ai-0",
+            self.finding_id,
             {
                 "review_status": "accepted",
                 "resolution_status": "awaiting_information",
@@ -211,32 +235,65 @@ class HumanReviewWorkflowTests(WorkspaceTestBase):
 
     def test_rejects_invalid_review_status(self):
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.update_finding_workflow(self.workspace.id, "ai-0", {"review_status": "bogus"})
+            workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"review_status": "bogus"})
 
     def test_rejects_invalid_adjusted_severity(self):
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.update_finding_workflow(self.workspace.id, "ai-0", {"adjusted_severity": "extreme"})
+            workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"adjusted_severity": "extreme"})
 
     def test_rejects_invalid_resolution_status(self):
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.update_finding_workflow(self.workspace.id, "ai-0", {"resolution_status": "bogus"})
+            workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"resolution_status": "bogus"})
 
     def test_updating_unknown_finding_raises_value_error(self):
         with self.assertRaises(ValueError):
             workspaces.update_finding_workflow(self.workspace.id, "ai-999", {"review_status": "accepted"})
 
     def test_severity_change_and_assignment_are_audited(self):
-        workspaces.update_finding_workflow(self.workspace.id, "ai-0", {"adjusted_severity": "medium"})
-        workspaces.update_finding_workflow(self.workspace.id, "ai-0", {"assigned_owner": "A. Chen"})
+        workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"adjusted_severity": "medium"})
+        workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"assigned_owner": "A. Chen"})
         events = [e.event_type for e in workspaces.list_audit_log(self.workspace.id)]
         self.assertIn("severity_changed", events)
         self.assertIn("assignment", events)
+
+    # -- revision conflicts (Task 11.5) ---------------------------------
+
+    def test_a_fresh_finding_starts_at_revision_one(self):
+        finding = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
+        self.assertEqual(finding["revision"], 1)
+
+    def test_matching_expected_revision_succeeds_and_increments(self):
+        updated = workspaces.update_finding_workflow(
+            self.workspace.id, self.finding_id, {"assigned_owner": "J. Rivera"}, expected_revision=1
+        )
+        self.assertEqual(updated["revision"], 2)
+
+    def test_stale_expected_revision_raises_conflict_without_writing(self):
+        workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"assigned_owner": "J. Rivera"})
+        with self.assertRaises(workspaces.FindingRevisionConflictError) as ctx:
+            workspaces.update_finding_workflow(
+                self.workspace.id, self.finding_id, {"assigned_owner": "M. Chen"}, expected_revision=1
+            )
+        # The conflict carries the finding's real current state...
+        self.assertEqual(ctx.exception.current["assigned_owner"], "J. Rivera")
+        self.assertEqual(ctx.exception.current["revision"], 2)
+        # ...and nothing was overwritten by the losing, stale-revision call.
+        after = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
+        self.assertEqual(after["assigned_owner"], "J. Rivera")
+
+    def test_no_expected_revision_supplied_never_conflicts(self):
+        workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"assigned_owner": "J. Rivera"})
+        updated = workspaces.update_finding_workflow(
+            self.workspace.id, self.finding_id, {"assigned_owner": "M. Chen"}
+        )
+        self.assertEqual(updated["assigned_owner"], "M. Chen")
 
 
 class HumanAddedFindingTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
+        self.finding_id = _finding_ids_by_title(self.workspace, self.analysis)["Term-sheet price gap"]
 
     def test_creates_human_finding_with_workflow_fields(self):
         created = workspaces.create_human_finding(
@@ -276,7 +333,7 @@ class HumanAddedFindingTests(WorkspaceTestBase):
 
     def test_ai_finding_cannot_be_deleted(self):
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.delete_human_finding(self.workspace.id, "ai-0")
+            workspaces.delete_human_finding(self.workspace.id, self.finding_id)
 
     def test_deleting_unknown_finding_raises_value_error(self):
         with self.assertRaises(ValueError):
@@ -294,26 +351,30 @@ class DuplicateFindingTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
+        by_title = _finding_ids_by_title(self.workspace, self.analysis)
+        self.id0 = by_title["Term-sheet price gap"]
+        self.id1 = by_title["Unsupported growth rate"]
+        self.id2 = by_title["No evidence located for churn assumption"]
 
     def test_marks_and_preserves_lineage(self):
-        updated = workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
+        updated = workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
         self.assertTrue(updated["is_duplicate"])
-        self.assertEqual(updated["duplicate_of"], "ai-0")
+        self.assertEqual(updated["duplicate_of"], self.id0)
         self.assertEqual(updated["duplicate_marked_by"], "M. Diaz")
         self.assertIsNotNone(updated["duplicate_marked_at"])
 
-        canonical = workspaces.get_finding(self.workspace, self.analysis, "ai-0")
-        self.assertIn("ai-1", canonical["duplicate_finding_ids"])
-        duplicate = workspaces.get_finding(self.workspace, self.analysis, "ai-1")
-        self.assertNotIn("ai-1", duplicate.get("duplicate_finding_ids", []))  # a duplicate isn't its own canonical
+        canonical = workspaces.get_finding(self.workspace, self.analysis, self.id0)
+        self.assertIn(self.id1, canonical["duplicate_finding_ids"])
+        duplicate = workspaces.get_finding(self.workspace, self.analysis, self.id1)
+        self.assertNotIn(self.id1, duplicate.get("duplicate_finding_ids", []))  # a duplicate isn't its own canonical
 
     def test_both_findings_remain_after_marking_no_destructive_merge(self):
-        workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
+        workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
         findings = workspaces.list_findings(self.workspace, self.analysis)
         self.assertEqual(len(findings), 4)  # nothing deleted or combined
 
     def test_duplicates_excluded_from_headline_counts_by_default(self):
-        workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
+        workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
         summary = workspaces.compute_summary(self.workspace, self.analysis, [])
         self.assertEqual(summary["total_findings"], 3)
         self.assertEqual(summary["total_findings_including_duplicates"], 4)
@@ -321,21 +382,21 @@ class DuplicateFindingTests(WorkspaceTestBase):
 
     def test_cannot_duplicate_a_finding_into_itself(self):
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.set_duplicate(self.workspace.id, "ai-0", "ai-0", "M. Diaz")
+            workspaces.set_duplicate(self.workspace.id, self.id0, self.id0, "M. Diaz")
 
     def test_cannot_chain_duplicates(self):
-        workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
+        workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
         with self.assertRaises(workspaces.WorkspaceValidationError):
-            workspaces.set_duplicate(self.workspace.id, "ai-2", "ai-1", "M. Diaz")
+            workspaces.set_duplicate(self.workspace.id, self.id2, self.id1, "M. Diaz")
 
     def test_unmarking_clears_fields(self):
-        workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
-        updated = workspaces.set_duplicate(self.workspace.id, "ai-1", None, "")
+        workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
+        updated = workspaces.set_duplicate(self.workspace.id, self.id1, None, "")
         self.assertFalse(updated["is_duplicate"])
         self.assertIsNone(updated["duplicate_of"])
 
     def test_duplicate_marking_is_audited(self):
-        workspaces.set_duplicate(self.workspace.id, "ai-1", "ai-0", "M. Diaz")
+        workspaces.set_duplicate(self.workspace.id, self.id1, self.id0, "M. Diaz")
         events = [e for e in workspaces.list_audit_log(self.workspace.id) if e.event_type == "duplicate_marking"]
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].detail["marked_by"], "M. Diaz")
@@ -345,11 +406,16 @@ class InformationRequestTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
+        self.finding_id = _finding_ids_by_title(self.workspace, self.analysis)["Term-sheet price gap"]
 
     def test_creates_and_lists_requests(self):
         request = workspaces.create_request(
             self.workspace.id,
-            {"question": "Please confirm the FY25 revenue figure.", "priority": "high", "related_finding_ids": ["ai-0"]},
+            {
+                "question": "Please confirm the FY25 revenue figure.",
+                "priority": "high",
+                "related_finding_ids": [self.finding_id],
+            },
         )
         self.assertEqual(request.status, "draft")
         self.assertEqual(workspaces.list_requests(self.workspace.id), [request])
@@ -388,8 +454,8 @@ class MemoLifecycleTests(WorkspaceTestBase):
     def setUp(self):
         super().setUp()
         self.workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
-        for finding_id in ("ai-0", "ai-1", "ai-2", "ai-3"):
-            workspaces.update_finding_workflow(self.workspace.id, finding_id, {"review_status": "accepted"})
+        for finding in workspaces.list_findings(self.workspace, self.analysis):
+            workspaces.update_finding_workflow(self.workspace.id, finding["id"], {"review_status": "accepted"})
 
     def test_generates_initial_draft_deterministically(self):
         memo = workspaces.get_or_create_memo(self.workspace, self.analysis)
@@ -456,7 +522,10 @@ class ProjectIsolationTests(WorkspaceTestBase):
 class PersistenceTests(WorkspaceTestBase):
     def test_findings_and_workflow_state_persist_across_reconnect(self):
         workspace, _ = workspaces.get_or_create_workspace(self.project.id, self.analysis)
-        workspaces.update_finding_workflow(workspace.id, "ai-0", {"review_status": "accepted", "assigned_owner": "J. Rivera"})
+        finding_id = _finding_ids_by_title(workspace, self.analysis)["Term-sheet price gap"]
+        workspaces.update_finding_workflow(
+            workspace.id, finding_id, {"review_status": "accepted", "assigned_owner": "J. Rivera"}
+        )
         workspaces.create_human_finding(workspace.id, {"title": "Persisted human finding"})
 
         # Simulate a server restart: every module call below opens a brand
@@ -467,8 +536,8 @@ class PersistenceTests(WorkspaceTestBase):
         self.assertIsNotNone(reloaded_workspace)
         findings = workspaces.list_findings(reloaded_workspace, self.analysis)
         by_id = {f["id"]: f for f in findings}
-        self.assertEqual(by_id["ai-0"]["review_status"], "accepted")
-        self.assertEqual(by_id["ai-0"]["assigned_owner"], "J. Rivera")
+        self.assertEqual(by_id[finding_id]["review_status"], "accepted")
+        self.assertEqual(by_id[finding_id]["assigned_owner"], "J. Rivera")
         self.assertTrue(any(f["origin"] == "human" and f["title"] == "Persisted human finding" for f in findings))
 
 

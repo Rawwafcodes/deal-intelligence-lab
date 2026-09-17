@@ -10,6 +10,10 @@ const folderInputLabelEl = document.getElementById("folder-input-label");
 const documentsTbodyEl = document.getElementById("documents-tbody");
 const documentsEmptyEl = document.getElementById("documents-empty");
 const breadcrumbEl = document.getElementById("app-breadcrumb");
+const versionsDialogEl = document.getElementById("versions-dialog");
+const versionsDialogNameEl = document.getElementById("versions-dialog-name");
+const versionsListEl = document.getElementById("versions-list");
+const closeVersionsButtonEl = document.getElementById("close-versions");
 const inspectDialogEl = document.getElementById("inspect-dialog");
 const inspectFormEl = document.getElementById("inspect-form");
 const inspectDialogTextEl = document.getElementById("inspect-dialog-text");
@@ -58,6 +62,27 @@ const reconcileConfirmListEl = document.getElementById("reconcile-confirm-list")
 const reconcileConfirmErrorEl = document.getElementById("reconcile-confirm-error");
 const backReconcileConfirmButtonEl = document.getElementById("back-reconcile-confirm");
 const sendReconcileConfirmButtonEl = document.getElementById("send-reconcile-confirm");
+
+// Task 11.4: deal brief
+const briefCardEl = document.getElementById("brief-card");
+const briefFormEl = document.getElementById("brief-form");
+const briefVersionLabelEl = document.getElementById("brief-version-label");
+const briefSaveHintEl = document.getElementById("brief-save-hint");
+const briefHistoryButtonEl = document.getElementById("brief-history-button");
+const briefVersionsDialogEl = document.getElementById("brief-versions-dialog");
+const briefVersionsListEl = document.getElementById("brief-versions-list");
+const closeBriefVersionsButtonEl = document.getElementById("close-brief-versions");
+const BRIEF_FIELDS = ["parties", "objective", "perspective", "scope", "periods", "uncertainties"];
+
+// Task 11.4: workstreams
+const workstreamsCardEl = document.getElementById("workstreams-card");
+const workstreamsListEl = document.getElementById("workstreams-list");
+const workstreamsEmptyEl = document.getElementById("workstreams-empty");
+const workstreamFormEl = document.getElementById("workstream-form");
+const workstreamNameInputEl = document.getElementById("workstream-name");
+const workstreamDescriptionInputEl = document.getElementById("workstream-description");
+const workstreamErrorEl = document.getElementById("workstream-error");
+let devIdentities = [];
 
 // Must match pdf_inspection.MAX_PDF_SOURCE_BYTES on the server (the shared
 // combined-PDF-bytes cap used by cross-document analysis, cross-format
@@ -155,6 +180,8 @@ async function loadProject() {
 
   const project = await res.json();
   renderProject(project);
+  briefCardEl.hidden = false;
+  workstreamsCardEl.hidden = false;
   uploadCardEl.hidden = false;
   documentsCardEl.hidden = false;
   renderDocumentsSkeleton();
@@ -178,6 +205,122 @@ function renderDocumentsSkeleton(rows = 3) {
   }
 }
 
+// -- documents filters and sorting (Direction B: same idiom workspace.js's
+// findings table already established - filters object + sortState object,
+// a pure visibleDocuments() computing the filtered/sorted list, wired to
+// re-render on every change) -------------------------------------------
+
+const documentFilters = { search: "", folder: "all", type: "all" };
+const documentSortState = { key: "original_filename", dir: "asc" };
+
+function populateDocumentFilterOptions() {
+  const folderSelect = document.getElementById("doc-filter-folder");
+  const folders = Array.from(new Set(latestDocuments.map((d) => d.relative_path).filter(Boolean))).sort();
+  folderSelect.textContent = "";
+  [["all", "All"], ...folders.map((f) => [f, f])].forEach(([value, label]) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    folderSelect.appendChild(opt);
+  });
+  folderSelect.value = documentFilters.folder;
+
+  const typeSelect = document.getElementById("doc-filter-type");
+  const types = Array.from(new Set(latestDocuments.map((d) => d.extension))).sort();
+  typeSelect.textContent = "";
+  [["all", "All"], ...types.map((t) => [t, t.replace(".", "").toUpperCase()])].forEach(([value, label]) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    typeSelect.appendChild(opt);
+  });
+  typeSelect.value = documentFilters.type;
+
+  document.getElementById("doc-filter-search").value = documentFilters.search;
+}
+
+function visibleDocuments() {
+  const search = documentFilters.search.trim().toLowerCase();
+  let list = latestDocuments.filter((d) => {
+    if (documentFilters.folder !== "all" && d.relative_path !== documentFilters.folder) return false;
+    if (documentFilters.type !== "all" && d.extension !== documentFilters.type) return false;
+    if (search && !d.original_filename.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  const { key, dir } = documentSortState;
+  list = list.slice().sort((a, b) => {
+    let av, bv;
+    if (key === "size_bytes") {
+      av = a.size_bytes;
+      bv = b.size_bytes;
+    } else {
+      av = (a[key] || "").toString().toLowerCase();
+      bv = (b[key] || "").toString().toLowerCase();
+    }
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return list;
+}
+
+function renderVisibleDocuments() {
+  const docs = visibleDocuments();
+  const total = latestDocuments.length;
+  renderDocuments(docs);
+
+  const filtersEl = document.getElementById("document-filters");
+  const hint = document.getElementById("documents-count-hint");
+  filtersEl.hidden = total === 0;
+  hint.hidden = total === 0;
+  hint.textContent =
+    docs.length === total
+      ? `${total} document${total === 1 ? "" : "s"}`
+      : `${docs.length} of ${total} document${total === 1 ? "" : "s"}`;
+
+  // renderDocuments() already toggled #documents-empty for "no rows to show"
+  // - the two truly different reasons that can happen ("nothing uploaded
+  // yet" vs "filters matched nothing") need different copy, or the filtered
+  // case would wrongly tell someone with real documents to go upload some.
+  document.getElementById("documents-empty-text").textContent =
+    total === 0 ? "No documents uploaded yet." : "No documents match the current filters.";
+}
+
+document.querySelectorAll("#documents-table th[data-sort]").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (documentSortState.key === key) {
+      documentSortState.dir = documentSortState.dir === "asc" ? "desc" : "asc";
+    } else {
+      documentSortState.key = key;
+      documentSortState.dir = "asc";
+    }
+    document.querySelectorAll("#documents-table th[data-sort]").forEach((h) => h.classList.remove("sorted", "sort-desc"));
+    th.classList.add("sorted");
+    if (documentSortState.dir === "desc") th.classList.add("sort-desc");
+    renderVisibleDocuments();
+  });
+});
+
+function wireDocumentFilterInput(id, key) {
+  document.getElementById(id).addEventListener(id === "doc-filter-search" ? "input" : "change", (e) => {
+    documentFilters[key] = e.target.value;
+    renderVisibleDocuments();
+  });
+}
+wireDocumentFilterInput("doc-filter-search", "search");
+wireDocumentFilterInput("doc-filter-folder", "folder");
+wireDocumentFilterInput("doc-filter-type", "type");
+
+document.getElementById("doc-reset-filters").addEventListener("click", () => {
+  documentFilters.search = "";
+  documentFilters.folder = "all";
+  documentFilters.type = "all";
+  populateDocumentFilterOptions();
+  renderVisibleDocuments();
+});
+
 function renderDocuments(docs) {
   documentsTbodyEl.textContent = "";
   documentsEmptyEl.hidden = docs.length !== 0;
@@ -188,6 +331,13 @@ function renderDocuments(docs) {
 
     const nameCell = document.createElement("td");
     nameCell.textContent = doc.original_filename;
+    if (doc.version_number > 1) {
+      const versionBadge = document.createElement("span");
+      versionBadge.className = "version-badge";
+      versionBadge.textContent = `v${doc.version_number}`;
+      versionBadge.title = `${doc.version_number} versions - current version shown here`;
+      nameCell.append(versionBadge);
+    }
 
     const folderCell = document.createElement("td");
     folderCell.textContent = doc.relative_path || "—";
@@ -234,6 +384,27 @@ function renderDocuments(docs) {
       actionsCell.append(inspectButton);
     }
 
+    if (doc.version_number > 1) {
+      const versionsButton = document.createElement("button");
+      versionsButton.textContent = "Versions";
+      versionsButton.className = "link-action";
+      versionsButton.addEventListener("click", () => openVersionsDialog(doc));
+      actionsCell.append(versionsButton);
+    }
+
+    const replaceLabel = document.createElement("label");
+    replaceLabel.className = "link-action";
+    replaceLabel.textContent = "Replace…";
+    const replaceInput = document.createElement("input");
+    replaceInput.type = "file";
+    replaceInput.hidden = true;
+    replaceInput.addEventListener("change", () => {
+      if (replaceInput.files[0]) uploadNewVersion(doc, replaceInput.files[0]);
+      replaceInput.value = "";
+    });
+    replaceLabel.append(replaceInput);
+    actionsCell.append(replaceLabel);
+
     const removeButton = document.createElement("button");
     removeButton.textContent = "Remove";
     removeButton.className = "link-action danger";
@@ -253,7 +424,8 @@ async function loadDocuments() {
   if (!res.ok) return;
   const docs = await res.json();
   latestDocuments = docs;
-  renderDocuments(docs);
+  populateDocumentFilterOptions();
+  renderVisibleDocuments();
   updateCrossAnalysisAvailability();
 
   validationLabCardEl.hidden = false;
@@ -289,6 +461,220 @@ async function loadReconciliations() {
   });
 }
 
+// -- Task 11.4: deal brief -------------------------------------------------
+
+function fillBriefForm(version) {
+  for (const field of BRIEF_FIELDS) {
+    document.getElementById(`brief-${field}`).value = version ? version[field] : "";
+  }
+}
+
+async function loadBrief() {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief`);
+  if (!res.ok) return;
+  const current = await res.json();
+  fillBriefForm(current);
+  if (current) {
+    briefVersionLabelEl.textContent = `Version ${current.version_number} · saved ${formatDate(current.created_at)}`;
+    briefHistoryButtonEl.hidden = current.version_number <= 1;
+  } else {
+    briefVersionLabelEl.textContent = "No version saved yet.";
+    briefHistoryButtonEl.hidden = true;
+  }
+}
+
+briefFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const fields = {};
+  for (const field of BRIEF_FIELDS) {
+    fields[field] = document.getElementById(`brief-${field}`).value;
+  }
+  briefSaveHintEl.textContent = "Saving…";
+  briefSaveHintEl.style.color = "";
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    briefSaveHintEl.textContent = body.error || "Could not save the brief.";
+    briefSaveHintEl.style.color = "var(--danger)";
+    return;
+  }
+  briefSaveHintEl.textContent = "Saved as a new version.";
+  briefSaveHintEl.style.color = "var(--success)";
+  await loadBrief();
+});
+
+briefHistoryButtonEl.addEventListener("click", async () => {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief/versions`);
+  const versions = res.ok ? await res.json() : [];
+  briefVersionsListEl.textContent = "";
+  versions
+    .slice()
+    .reverse()
+    .forEach((version) => {
+      const item = document.createElement("li");
+      const meta = document.createElement("span");
+      meta.className = "version-meta";
+      meta.textContent = `Version ${version.version_number} · ${formatDate(version.created_at)}`;
+      const viewButton = document.createElement("button");
+      viewButton.type = "button";
+      viewButton.className = "link-action";
+      viewButton.textContent = "View";
+      viewButton.addEventListener("click", () => {
+        fillBriefForm(version);
+        briefVersionsDialogEl.close();
+        briefSaveHintEl.textContent = `Viewing version ${version.version_number} (not yet saved as current - edit and save to make it current).`;
+        briefSaveHintEl.style.color = "";
+      });
+      item.append(meta, viewButton);
+      briefVersionsListEl.appendChild(item);
+    });
+  briefVersionsDialogEl.showModal();
+});
+
+closeBriefVersionsButtonEl.addEventListener("click", () => briefVersionsDialogEl.close());
+
+// -- Task 11.4: workstreams --------------------------------------------------
+
+async function loadDevIdentities() {
+  const res = await fetch("/api/dev/identities");
+  devIdentities = res.ok ? await res.json() : [];
+}
+
+function renderWorkstream(workstream) {
+  const li = document.createElement("li");
+  li.className = "workstream-item";
+
+  const header = document.createElement("div");
+  header.className = "workstream-header";
+  const nameEl = document.createElement("div");
+  nameEl.className = "name";
+  nameEl.textContent = workstream.name;
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "link-action danger";
+  removeButton.textContent = "Remove";
+  removeButton.addEventListener("click", () => removeWorkstream(workstream));
+  header.append(nameEl, removeButton);
+  li.appendChild(header);
+
+  if (workstream.description) {
+    const descEl = document.createElement("div");
+    descEl.className = "desc";
+    descEl.textContent = workstream.description;
+    li.appendChild(descEl);
+  }
+
+  const rosterEl = document.createElement("ul");
+  rosterEl.className = "workstream-roster";
+  workstream.assignments.forEach((assignment) => {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    const name = assignment.user ? assignment.user.display_name : "Unknown identity";
+    label.textContent = assignment.role_label ? `${name} — ${assignment.role_label}` : name;
+    const revokeButton = document.createElement("button");
+    revokeButton.type = "button";
+    revokeButton.className = "link-action danger";
+    revokeButton.textContent = "Unassign";
+    revokeButton.addEventListener("click", () => revokeAssignment(workstream, assignment));
+    item.append(label, revokeButton);
+    rosterEl.appendChild(item);
+  });
+  li.appendChild(rosterEl);
+
+  const assignForm = document.createElement("form");
+  assignForm.className = "workstream-assign-form";
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", `Assign someone to ${workstream.name}`);
+  devIdentities.forEach((identity) => {
+    const option = document.createElement("option");
+    option.value = identity.user.id;
+    option.textContent = identity.user.display_name;
+    select.appendChild(option);
+  });
+  const roleInput = document.createElement("input");
+  roleInput.type = "text";
+  roleInput.placeholder = "Role label (e.g. Lead)";
+  roleInput.maxLength = 100;
+  const assignButton = document.createElement("button");
+  assignButton.type = "submit";
+  assignButton.textContent = "Assign";
+  assignForm.append(select, roleInput, assignButton);
+  assignForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await assignToWorkstream(workstream, select.value, roleInput.value);
+  });
+  li.appendChild(assignForm);
+
+  return li;
+}
+
+async function loadWorkstreams() {
+  await loadDevIdentities();
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`);
+  if (!res.ok) return;
+  const list = await res.json();
+  workstreamsListEl.textContent = "";
+  workstreamsEmptyEl.hidden = list.length !== 0;
+  list.forEach((workstream) => workstreamsListEl.appendChild(renderWorkstream(workstream)));
+}
+
+async function assignToWorkstream(workstream, userId, roleLabel) {
+  if (!userId) return;
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workstreams/${encodeURIComponent(workstream.id)}/assignments`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, role_label: roleLabel }),
+    }
+  );
+  if (res.ok) await loadWorkstreams();
+}
+
+async function revokeAssignment(workstream, assignment) {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workstreams/${encodeURIComponent(workstream.id)}/assignments/${encodeURIComponent(assignment.user_id)}`,
+    { method: "DELETE" }
+  );
+  if (res.ok) await loadWorkstreams();
+}
+
+async function removeWorkstream(workstream) {
+  const confirmed = window.confirm(`Remove the "${workstream.name}" workstream? This cannot be undone.`);
+  if (!confirmed) return;
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams/${encodeURIComponent(workstream.id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
+  });
+  if (res.ok) await loadWorkstreams();
+}
+
+workstreamFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  workstreamErrorEl.textContent = "";
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: workstreamNameInputEl.value,
+      description: workstreamDescriptionInputEl.value,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    workstreamErrorEl.textContent = body.error || "Could not create the workstream.";
+    return;
+  }
+  workstreamNameInputEl.value = "";
+  workstreamDescriptionInputEl.value = "";
+  await loadWorkstreams();
+});
+
 function updateCrossAnalysisAvailability() {
   const pdfCount = latestDocuments.filter((d) => d.extension === ".pdf").length;
   crossAnalysisCardEl.hidden = false;
@@ -322,6 +708,61 @@ async function removeDocument(doc) {
     window.alert("Could not remove the document.");
   }
 }
+
+async function uploadNewVersion(doc, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions`,
+    { method: "POST", body: formData }
+  );
+
+  if (res.ok) {
+    await loadDocuments();
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409) {
+    window.alert("That file is identical to the current version - nothing to replace.");
+  } else {
+    window.alert(body.error || "Could not upload a new version.");
+  }
+}
+
+async function openVersionsDialog(doc) {
+  versionsDialogNameEl.textContent = doc.original_filename;
+  versionsListEl.textContent = "";
+
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions`
+  );
+  const versions = res.ok ? await res.json() : [];
+
+  versions
+    .slice()
+    .reverse()
+    .forEach((version) => {
+      const item = document.createElement("li");
+
+      const meta = document.createElement("span");
+      meta.className = "version-meta";
+      const current = version.id === doc.current_version_id ? " (current)" : "";
+      meta.textContent = `v${version.version_number}${current} · ${formatSize(version.size_bytes)} · ${formatDate(version.uploaded_at)}`;
+
+      const downloadLink = document.createElement("a");
+      downloadLink.className = "link-action";
+      downloadLink.textContent = "Download";
+      downloadLink.href = `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions/${encodeURIComponent(version.id)}/download`;
+
+      item.append(meta, downloadLink);
+      versionsListEl.append(item);
+    });
+
+  versionsDialogEl.showModal();
+}
+
+closeVersionsButtonEl.addEventListener("click", () => versionsDialogEl.close());
 
 function statusLabel(status) {
   switch (status) {
@@ -797,5 +1238,7 @@ loadProject().then(() => {
   if (projectId) {
     loadDocuments();
     loadReconciliations();
+    loadBrief();
+    loadWorkstreams();
   }
 });

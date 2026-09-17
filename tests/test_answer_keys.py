@@ -3,8 +3,8 @@ immutability of a locked version.
 """
 
 import sys
-import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,9 +19,10 @@ class AnswerKeyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
         validation_cases.init_validation_cases_db()
         answer_keys.init_answer_keys_db()
@@ -29,8 +30,8 @@ class AnswerKeyTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        store.DB_PATH = cls._original_db_path
-        cls._tmpdir.cleanup()
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
 
     def _make_case(self) -> str:
         case = validation_cases.create_validation_case(

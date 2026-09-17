@@ -1,27 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Lato:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap');
 
 :root {
-  color-scheme: light;
-  /* Trust & Authority palette: authority navy + trust gold, for a data-room / deal-management feel. */
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --border: #cbd5e1;
-  --text: #0f172a;
-  --text-muted: #475569;
-  --muted-bg: #e9eef5;
-  --accent: #1e3a8a;
-  --accent-hover: #16295e;
-  --accent-gold: #b45309;
-  --success: #15803d;
-  --danger: #dc2626;
-  --ring: #1e3a8a;
-  --font-heading: "EB Garamond", Georgia, "Times New Roman", serif;
-  --font-body: "Lato", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+  /* Meridian palette: near-black ground, one blue reserved for selection/
+     links, a stark white primary action - deliberately one committed dark
+     identity, not a light/dark toggle. See docs/10-decisions.md D11. */
+  --bg: #0a0a0c;
+  --surface: #131317;
+  --border: #26262c;
+  --text: #f4f4f5;
+  --text-muted: #9a9aa2;
+  --muted-bg: #1b1b20;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-gold: #e8a33d;
+  --success: #34d399;
+  --danger: #f2867a;
+  --ring: #3b82f6;
+  --cta-bg: #ffffff;
+  --cta-fg: #0a0a0c;
+  --font-heading: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 
-  /* Elevation scale: subtle depth for a document-heavy, data-room feel. */
-  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08);
-  --elevation-2: 0 6px 16px rgba(15, 23, 42, 0.10), 0 2px 4px rgba(15, 23, 42, 0.06);
-  --elevation-3: 0 16px 32px rgba(15, 23, 42, 0.16), 0 4px 10px rgba(15, 23, 42, 0.08);
+  /* Elevation scale: black-tinted shadows read as depth on a dark ground;
+     borders still carry most of the separation between surfaces. */
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.24);
+  --elevation-2: 0 6px 16px rgba(0, 0, 0, 0.34), 0 2px 4px rgba(0, 0, 0, 0.24);
+  --elevation-3: 0 16px 32px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.28);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -74,9 +79,8 @@ a {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--surface);
-  border-bottom: 3px solid var(--accent-gold);
-  box-shadow: var(--elevation-1);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header-inner {
@@ -89,17 +93,35 @@ a {
 }
 
 .app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: var(--font-heading);
-  font-weight: 600;
-  font-size: 1.25rem;
+  font-weight: 700;
+  font-size: 1.05rem;
   color: var(--text);
   text-decoration: none;
   white-space: nowrap;
-  transition: color 150ms var(--ease-standard);
+  transition: opacity 150ms var(--ease-standard);
+}
+
+.app-brand::before {
+  content: "D";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .app-brand:hover {
-  color: var(--accent);
+  opacity: 0.85;
 }
 
 .app-breadcrumb {
@@ -189,7 +211,8 @@ label {
 }
 
 input[type="text"],
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -202,10 +225,11 @@ textarea {
 }
 
 input[type="text"]:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: none;
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.18);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
 }
 
 textarea {
@@ -218,31 +242,34 @@ textarea {
 }
 
 button {
-  background: var(--accent);
-  color: #fff;
+  background: var(--cta-bg);
+  color: var(--cta-fg);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 10px 18px;
   font-size: 0.95rem;
   font-family: inherit;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 180ms var(--ease-standard), transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  transition: opacity 150ms var(--ease-standard), transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
 }
 
 button:hover {
-  background: var(--accent-hover);
+  opacity: 0.88;
   transform: translateY(-1px);
   box-shadow: var(--elevation-2);
 }
 
 button:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.97);
   box-shadow: none;
+  opacity: 1;
 }
 
 button:disabled {
-  background: var(--text-muted);
+  background: var(--border);
+  color: var(--text-muted);
+  opacity: 1;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -392,7 +419,7 @@ textarea:focus-visible,
   height: 14px;
   margin-bottom: 10px;
   border-radius: 6px;
-  background: linear-gradient(90deg, var(--muted-bg) 25%, #dbe3ee 37%, var(--muted-bg) 63%);
+  background: linear-gradient(90deg, var(--muted-bg) 25%, #2c2c34 37%, var(--muted-bg) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -459,8 +486,8 @@ textarea:focus-visible,
 }
 
 .dropzone.dragover {
-  border-color: var(--accent-gold);
-  background: rgba(180, 83, 9, 0.06);
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.08);
   transform: scale(1.01);
 }
 
@@ -479,18 +506,18 @@ textarea:focus-visible,
 
 .button-like {
   display: inline-block;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 6px;
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+  border-radius: 8px;
   padding: 10px 18px;
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 180ms var(--ease-standard), transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  transition: opacity 150ms var(--ease-standard), transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
 }
 
 .button-like:hover {
-  background: var(--accent-hover);
+  opacity: 0.88;
   transform: translateY(-1px);
   box-shadow: var(--elevation-2);
 }
@@ -582,6 +609,203 @@ textarea:focus-visible,
   max-width: none;
 }
 
+/* -- filter bar and sortable table headers --------------------------------
+   Originally workspace.html-only (the findings table); generalized here so
+   project.html's documents table (Direction B) can share the exact same
+   look and behavior rather than a second, drifting copy. Any current or
+   future .documents-table gets the sortable-header treatment for free. */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  align-items: end;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+/* Opt-in: only for a filter bar that owns the whole page below it (e.g. the
+   workspace findings table) - not for one card among several on a longer
+   page (e.g. project.html's documents section), where sticking would float
+   oddly over unrelated cards while scrolling. */
+.filter-bar-sticky {
+  position: sticky;
+  top: 66px;
+  z-index: 5;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+.filter-field label {
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+
+.filter-field select,
+.filter-field input[type="text"] {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.filter-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.filter-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+#documents-count-hint {
+  margin: 0 0 10px;
+}
+
+.documents-table th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.documents-table th[data-sort]:hover {
+  color: var(--accent);
+}
+
+.documents-table th.sorted::after {
+  content: " \2193";
+}
+
+.documents-table th.sorted.sort-desc::after {
+  content: " \2191";
+}
+
+@media (max-width: 720px) {
+  .filter-bar-sticky {
+    position: static;
+  }
+  .filter-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.version-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
+.version-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.version-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.version-list .version-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.workstream-item {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.workstream-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workstream-header .name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+
+.workstream-item .desc {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-top: 4px;
+}
+
+.workstream-roster {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workstream-roster li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.workstream-assign-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.workstream-assign-form select,
+.workstream-assign-form input[type="text"] {
+  width: auto;
+}
+
+.workstream-assign-form button {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
 .link-action {
   background: none;
   border: none;
@@ -634,7 +858,7 @@ dialog.modal {
 }
 
 dialog.modal::backdrop {
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(0, 0, 0, 0.6);
   animation: backdropIn 220ms var(--ease-out);
 }
 

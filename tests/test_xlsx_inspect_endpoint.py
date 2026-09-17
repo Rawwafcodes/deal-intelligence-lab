@@ -12,6 +12,7 @@ import types
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -21,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 import documents
+import identity
 import server
 import store
 import xlsx_inspections
@@ -82,11 +84,14 @@ class XlsxInspectEndpointTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
+        identity.init_identity_db()
         documents.init_documents_db()
         xlsx_inspections.init_xlsx_inspections_db()
 
@@ -107,7 +112,8 @@ class XlsxInspectEndpointTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 

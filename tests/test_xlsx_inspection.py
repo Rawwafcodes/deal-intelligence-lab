@@ -2,10 +2,13 @@
 here - these tests never make a network call or consume API credit.
 """
 
+import re
 import sys
 import tempfile
 import types
 import unittest
+import uuid
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +21,25 @@ import openpyxl
 import documents
 import store
 import xlsx_inspection
+
+
+def strip_dimension_declarations(path: Path) -> None:
+    """Rewrites an .xlsx in place with every sheet's <dimension .../>
+    element removed - reproduces a real-world workbook (confirmed live
+    against an actual deal's financial model) saved by a tool that omits
+    or mis-states that declaration, which makes openpyxl's read_only mode
+    report max_row/max_column as None for every sheet instead of computing
+    them."""
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(tmp_path, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("xl/worksheets/sheet"):
+                data = re.sub(rb"<dimension[^/]*/>", b"", data)
+            zout.writestr(item, data)
+    path.write_bytes(tmp_path.read_bytes())
+    tmp_path.unlink()
 
 FAKE_SECRET = "sk-ant-api03-XLSX-INSPECTION-TEST-FAKE-SECRET-DO-NOT-LEAK"
 
@@ -123,17 +145,20 @@ class XlsxInspectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._original_db_path = store.DB_PATH
         cls._original_data_dir = documents.DATA_DIR
-        store.DB_PATH = Path(cls._tmpdir.name) / "test.db"
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
         store.init_db()
         documents.init_documents_db()
         cls.project = store.create_project("Project Falcon", "test project for workbook inspection")
 
     @classmethod
     def tearDownClass(cls):
-        store.DB_PATH = cls._original_db_path
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
         documents.DATA_DIR = cls._original_data_dir
         cls._tmpdir.cleanup()
 
@@ -369,6 +394,33 @@ class XlsxInspectionTests(unittest.TestCase):
         self.assertTrue(outcome.success)
         self.assertTrue(outcome.verification_available)
         citations = [s.citation for s in outcome.segments if s.type == "citation"]
+        self.assertTrue(all(c.exists for c in citations))
+
+    def test_workbook_missing_dimension_declaration_does_not_false_reject_citations(self):
+        # Regression test: confirmed live against a real deal's financial
+        # model. When a workbook lacks a valid <dimension> element,
+        # openpyxl's fast read_only mode can't compute sheet bounds and
+        # returns None for every sheet - naively treating that as "1 row, 1
+        # column" rejected every real citation into the file as out of
+        # range, even though the citations were correct and the sheet
+        # names matched exactly.
+        scratch = Path(self._tmpdir_scratch()) / "no_dimension.xlsx"
+        workbook_bytes = build_sample_workbook(scratch, marker=self.id())
+        strip_dimension_declarations(scratch)
+        workbook_bytes = scratch.read_bytes()
+        result = documents.save_uploaded_file(self.project.id, "no_dimension.xlsx", "", workbook_bytes)
+        assert result.document is not None
+
+        text = "Revenue is 100 ('Revenue Model'!B7 [value]) from a formula ('Revenue Model'!B8 [formula])."
+        response = fake_response([fake_text_block(text)])
+        patcher, _ = self._mock_client(stream_responses=[response])
+        with patcher:
+            outcome = xlsx_inspection.inspect_workbook(result.document)
+
+        self.assertTrue(outcome.success)
+        self.assertTrue(outcome.verification_available)
+        citations = [s.citation for s in outcome.segments if s.type == "citation"]
+        self.assertEqual(len(citations), 2)
         self.assertTrue(all(c.exists for c in citations))
 
     def test_missing_citations_are_empty_not_invented(self):

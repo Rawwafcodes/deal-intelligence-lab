@@ -155,7 +155,7 @@ def create_inspection(
                 id, project_id, document_id, document_filename, status, transmitted,
                 created_at, completed_at, analysis_seconds, model, stop_reason,
                 input_tokens, output_tokens, error_type, error_message, segments_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 inspection.id,
@@ -187,7 +187,7 @@ def get_inspection(project_id: str, inspection_id: str) -> Inspection | None:
     conn = store.get_connection()
     try:
         row = conn.execute(
-            "SELECT * FROM inspections WHERE project_id = ? AND id = ?", (project_id, inspection_id)
+            "SELECT * FROM inspections WHERE project_id = %s AND id = %s", (project_id, inspection_id)
         ).fetchone()
     finally:
         conn.close()
