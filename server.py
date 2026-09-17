@@ -34,8 +34,10 @@ import mandates
 import multipart
 import pdf_inspection
 import store
+import tasks
 import validation_cases
 import validation_runs
+import work_products
 import workspace_exports
 import workspaces
 import workstreams
@@ -128,6 +130,17 @@ _WORKSTREAM_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workstreams/([^/]+)$")
 _WORKSTREAM_ASSIGNMENTS_RE = re.compile(r"^/api/projects/([^/]+)/workstreams/([^/]+)/assignments$")
 _WORKSTREAM_ASSIGNMENT_ITEM_RE = re.compile(
     r"^/api/projects/([^/]+)/workstreams/([^/]+)/assignments/([^/]+)$"
+)
+
+_TASKS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/tasks$")
+_TASK_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)$")
+_TASK_STATUS_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)/status$")
+_TASK_ASSIGN_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)/assign$")
+_TASK_COMMENTS_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)/comments$")
+_TASK_WORK_PRODUCTS_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)/work-products$")
+_WORK_PRODUCT_VERSIONS_RE = re.compile(r"^/api/projects/([^/]+)/work-products/([^/]+)/versions$")
+_WORK_PRODUCT_VERSION_DOWNLOAD_RE = re.compile(
+    r"^/api/projects/([^/]+)/work-products/([^/]+)/versions/([^/]+)/download$"
 )
 
 _MANDATE_TEMPLATES_RE = re.compile(r"^/api/mandate-templates$")
@@ -252,6 +265,43 @@ class Handler(BaseHTTPRequestHandler):
     def _workstream_with_assignments(self, workstream: workstreams.Workstream) -> dict:
         out = workstream.to_dict()
         out["assignments"] = self._assignments_with_users(workstream.id)
+        return out
+
+    # -- tasks and work-product submissions (Task 13.1) --------------------
+
+    def _comments_with_authors(self, task_id: str) -> list[dict]:
+        out = []
+        for comment in tasks.list_comments(task_id):
+            author = identity.get_user(comment.author_id) if comment.author_id else None
+            row = comment.to_dict()
+            row["author"] = author.to_dict() if author is not None else None
+            out.append(row)
+        return out
+
+    def _task_with_details(self, task: tasks.Task) -> dict:
+        """A task's own record plus its comments (each carrying the
+        author's display info inline) and work products (each carrying
+        its own version list) - a plain composition of tasks.py +
+        work_products.py + identity.py at the API boundary, the same
+        "neither module depends on the other" shape _workstream_with_
+        assignments already uses, so the frontend never needs a
+        round trip per row."""
+        out = task.to_dict()
+        out["assigned_user"] = None
+        if task.assigned_to:
+            user = identity.get_user(task.assigned_to)
+            out["assigned_user"] = user.to_dict() if user is not None else None
+        out["workstream"] = None
+        if task.workstream_id:
+            workstream = workstreams.get_workstream(task.project_id, task.workstream_id)
+            out["workstream"] = workstream.to_dict() if workstream is not None else None
+        out["comments"] = self._comments_with_authors(task.id)
+        work_product_list = []
+        for work_product in work_products.list_work_products(task.id):
+            row = work_product.to_dict()
+            row["versions"] = [v.to_dict() for v in work_products.list_versions(work_product.id)]
+            work_product_list.append(row)
+        out["work_products"] = work_product_list
         return out
 
     # -- mandates (Task 12.1) --------------------------------------------
@@ -739,6 +789,56 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, out)
             return
 
+        work_product_version_download_match = _WORK_PRODUCT_VERSION_DOWNLOAD_RE.match(path)
+        if work_product_version_download_match:
+            project_id, work_product_id, version_id = work_product_version_download_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            work_product = work_products.get_work_product(project_id, work_product_id)
+            if work_product is None:
+                self._send_json(404, {"error": "work product not found"})
+                return
+            submission_version = work_products.get_version(work_product_id, version_id)
+            if submission_version is None:
+                self._send_json(404, {"error": "work product version not found"})
+                return
+            version_path = work_products.version_file_path(work_product, submission_version)
+            self._send_stored_file(version_path, work_product.original_filename, work_product.extension)
+            return
+
+        work_product_versions_match = _WORK_PRODUCT_VERSIONS_RE.match(path)
+        if work_product_versions_match:
+            project_id, work_product_id = work_product_versions_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            work_product = work_products.get_work_product(project_id, work_product_id)
+            if work_product is None:
+                self._send_json(404, {"error": "work product not found"})
+                return
+            self._send_json(200, [v.to_dict() for v in work_products.list_versions(work_product_id)])
+            return
+
+        task_item_match = _TASK_ITEM_RE.match(path)
+        if task_item_match:
+            project_id, task_id = task_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            task = tasks.get_task(project_id, task_id)
+            if task is None:
+                self._send_json(404, {"error": "task not found"})
+                return
+            self._send_json(200, self._task_with_details(task))
+            return
+
+        tasks_collection_match = _TASKS_COLLECTION_RE.match(path)
+        if tasks_collection_match:
+            (project_id,) = tasks_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [self._task_with_details(t) for t in tasks.list_tasks(project_id)]
+            self._send_json(200, out)
+            return
+
         if _MANDATE_TEMPLATES_RE.match(path):
             self._send_json(200, [t.to_dict() for t in mandates.list_templates()])
             return
@@ -894,6 +994,42 @@ class Handler(BaseHTTPRequestHandler):
         if workstream_assignments_match:
             project_id, workstream_id = workstream_assignments_match.groups()
             self._handle_create_assignment(project_id, workstream_id)
+            return
+
+        task_work_products_match = _TASK_WORK_PRODUCTS_RE.match(path)
+        if task_work_products_match:
+            project_id, task_id = task_work_products_match.groups()
+            self._handle_create_work_product(project_id, task_id)
+            return
+
+        work_product_versions_match = _WORK_PRODUCT_VERSIONS_RE.match(path)
+        if work_product_versions_match:
+            project_id, work_product_id = work_product_versions_match.groups()
+            self._handle_add_work_product_version(project_id, work_product_id)
+            return
+
+        task_comments_match = _TASK_COMMENTS_RE.match(path)
+        if task_comments_match:
+            project_id, task_id = task_comments_match.groups()
+            self._handle_add_task_comment(project_id, task_id)
+            return
+
+        task_assign_match = _TASK_ASSIGN_RE.match(path)
+        if task_assign_match:
+            project_id, task_id = task_assign_match.groups()
+            self._handle_assign_task(project_id, task_id)
+            return
+
+        task_status_match = _TASK_STATUS_RE.match(path)
+        if task_status_match:
+            project_id, task_id = task_status_match.groups()
+            self._handle_update_task_status(project_id, task_id)
+            return
+
+        tasks_collection_match = _TASKS_COLLECTION_RE.match(path)
+        if tasks_collection_match:
+            (project_id,) = tasks_collection_match.groups()
+            self._handle_create_task(project_id)
             return
 
         mandate_run_cancel_match = _MANDATE_RUN_CANCEL_RE.match(path)
@@ -1269,6 +1405,184 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
             return
         self._send_json(201, self._assignments_with_users(workstream_id))
+
+    # -- tasks and work-product submissions (Task 13.1) --------------------
+
+    def _handle_create_task(self, project_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        workstream_id = data.get("workstream_id")
+        if workstream_id is not None:
+            if not isinstance(workstream_id, str) or workstreams.get_workstream(project_id, workstream_id) is None:
+                self._send_json(400, {"error": "workstream_id must be an existing workstream in this project"})
+                return
+        assigned_to = data.get("assigned_to")
+        if assigned_to is not None:
+            if not isinstance(assigned_to, str) or identity.get_user(assigned_to) is None:
+                self._send_json(400, {"error": "assigned_to must be an existing user id"})
+                return
+        try:
+            task = tasks.create_task(
+                project_id, str(data.get("title", "")), str(data.get("description", "")),
+                workstream_id=workstream_id, assigned_to=assigned_to, created_by=self.current_user_id,
+            )
+        except tasks.TaskValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._task_with_details(task))
+
+    def _handle_update_task_status(self, project_id: str, task_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        status = data.get("status")
+        if not isinstance(status, str):
+            self._send_json(400, {"error": "status is required"})
+            return
+        try:
+            task = tasks.update_status(project_id, task_id, status)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except tasks.TaskValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, self._task_with_details(task))
+
+    def _handle_assign_task(self, project_id: str, task_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        assigned_to = data.get("assigned_to")
+        if assigned_to is not None:
+            if not isinstance(assigned_to, str) or identity.get_user(assigned_to) is None:
+                self._send_json(400, {"error": "assigned_to must be an existing user id, or null to unassign"})
+                return
+        try:
+            task = tasks.assign(project_id, task_id, assigned_to)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        self._send_json(200, self._task_with_details(task))
+
+    def _handle_add_task_comment(self, project_id: str, task_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        if tasks.get_task(project_id, task_id) is None:
+            self._send_json(404, {"error": "task not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            tasks.add_comment(task_id, self.current_user_id, str(data.get("body", "")))
+        except tasks.TaskValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._comments_with_authors(task_id))
+
+    def _handle_create_work_product(self, project_id: str, task_id: str) -> None:
+        """Task 13.1: creates a brand-new WorkProduct and its first
+        SubmissionVersion in one call - the upload-time equivalent of
+        documents.save_uploaded_file, and subject to the identical rule:
+        a second submission against the same task is a second, independent
+        WorkProduct, never inferred as a new version of an existing one
+        (see work_products.create_work_product's own docstring). Marking
+        the task "submitted" is composed here, at the API boundary,
+        exactly like _assignments_with_users composes workstreams.py with
+        identity.py - work_products.py itself never imports tasks.py."""
+        if self._authorized_project(project_id) is None:
+            return
+        task = tasks.get_task(project_id, task_id)
+        if task is None:
+            self._send_json(404, {"error": "task not found"})
+            return
+
+        content_type_header = self.headers.get("Content-Type", "")
+        if not content_type_header.lower().startswith("multipart/form-data"):
+            self._send_json(400, {"error": "expected multipart/form-data"})
+            return
+        try:
+            boundary = multipart.parse_boundary(content_type_header)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        body = self._read_multipart_body()
+        if body is None:
+            return  # 413 already sent
+        try:
+            parts = multipart.parse_multipart(body, boundary)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": f"malformed upload: {exc}"})
+            return
+
+        file_parts = [p for p in parts if p.name == "file" and p.filename]
+        if not file_parts:
+            self._send_json(400, {"error": "no file was included in the upload"})
+            return
+        title_parts = [p.data.decode("utf-8", errors="replace") for p in parts if p.name == "title"]
+        title = title_parts[0] if title_parts else ""
+
+        result = work_products.create_work_product(
+            project_id, task_id, title, file_parts[0].filename or "", file_parts[0].data,
+            created_by=self.current_user_id,
+        )
+        if result.status != "success":
+            status_code = {"unsupported_type": 400, "failed": 500}.get(result.status, 500)
+            self._send_json(status_code, result.to_dict())
+            return
+        tasks.mark_submitted(project_id, task_id)
+        self._send_json(201, result.to_dict())
+
+    def _handle_add_work_product_version(self, project_id: str, work_product_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        work_product = work_products.get_work_product(project_id, work_product_id)
+        if work_product is None:
+            self._send_json(404, {"error": "work product not found"})
+            return
+
+        content_type_header = self.headers.get("Content-Type", "")
+        if not content_type_header.lower().startswith("multipart/form-data"):
+            self._send_json(400, {"error": "expected multipart/form-data"})
+            return
+        try:
+            boundary = multipart.parse_boundary(content_type_header)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        body = self._read_multipart_body()
+        if body is None:
+            return  # 413 already sent
+        try:
+            parts = multipart.parse_multipart(body, boundary)
+        except multipart.MultipartError as exc:
+            self._send_json(400, {"error": f"malformed upload: {exc}"})
+            return
+
+        file_parts = [p for p in parts if p.name == "file" and p.filename]
+        if not file_parts:
+            self._send_json(400, {"error": "no file was included in the upload"})
+            return
+
+        result = work_products.add_version(
+            project_id, work_product_id, file_parts[0].data, uploaded_by=self.current_user_id
+        )
+        status_code = {"new_version": 201, "duplicate": 409, "failed": 500}.get(result.status, 500)
+        if result.status == "new_version":
+            tasks.mark_submitted(project_id, work_product.task_id)
+        self._send_json(status_code, result.to_dict())
 
     # -- mandates (Task 12.1) --------------------------------------------
 
@@ -2310,6 +2624,8 @@ def main() -> None:
     identity.init_identity_db()
     deal_briefs.init_deal_briefs_db()
     workstreams.init_workstreams_db()
+    tasks.init_tasks_db()
+    work_products.init_work_products_db()
     mandates.init_mandates_db()
     # Task 12.2: the durable local worker - a real background thread,
     # independent of any HTTP request, that executes queued/resumed

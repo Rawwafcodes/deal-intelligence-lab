@@ -1,5 +1,5 @@
 # Workspace Shift — portable build specification
-Version 1.0.1 · 15 September 2026 · Product direction baseline
+Version 1.1.0 · 17 September 2026 · Product direction baseline, extended with the Integrity Review integration (docs-only)
 
 ## Start here
 This is a specification and agent-handoff repository, **not the application source**.
@@ -38,6 +38,7 @@ senior decision-makers a live, traceable view of submitted work and conclusions.
 - [Illustrative mandate template](examples/reconciliation-template.json)
 - [Agent continuation state](STATUS.md)
 - [Change history](CHANGELOG.md)
+- [Integrity Review product/roadmap integration (proposed, docs-only, 2026-09-17)](integrations/workspace-integrity-integration-v1.0.0/00-README.md)
 
 ## Use with Claude Code, Codex, or another agent
 1. Extract this package somewhere permanent.

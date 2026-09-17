@@ -41,13 +41,27 @@ is completely unchanged: a model-proposed plan is exactly as "proposed,
 not approved" as a human-proposed one, and only a human calling
 `approve_plan` moves a mandate to `active`.
 
+Task 12.5 (reuse proof) added no new capability and no new executor - the
+roadmap's own instruction is "configure a second flow from existing
+capabilities using the same runtime/UI", not build a second analytical
+capability. `reconciliation-with-review` (below) is a second *template*
+combining two already-registered/already-proven building blocks in a new
+way: the real `reconciliation.cross_format` capability (12.3) and the
+`human_checkpoint` stage kind (12.1, previously only exercised by the
+fixture templates) - a mandate using it is not marked complete until a
+human has reviewed the findings the reconciliation stage just produced.
+Nothing in `_run_stages`, `_default_input_for_stage`, or
+`propose_plan_llm` needed to change for this: a new stage-kind
+*combination* on an existing capability is exactly the "new combinations
+of existing capabilities should normally require configuration only"
+line from AGENTS.md, proven true rather than just claimed.
+
 Explicitly deferred to later, separately-authorized tasks (see
 docs/workspace-shift/docs/08-roadmap.md's M12 breakdown and
 docs/workspace-shift/tasks/12.2-durable-worker.md's own Exclusions):
-- 12.3's real reconciliation adapter and Gate A. The only registered
-  capability is `fixture.echo`; `cross_format_analysis.py` is never
-  invoked from here.
-- 12.5's second capability / reuse proof.
+- A `draft_from_reviewed_findings` capability (examples/reconciliation-
+  template.json's own `draft`/`approve` stages) - still does not exist;
+  `reconciliation-with-review` stops at `review`, on purpose.
 
 Two logical registries live here, both **in-memory, code-level** (like a
 plugin registry, not user data - see docs/04-mandate-engine.md's
@@ -349,6 +363,35 @@ register_template(
                 "id": "reconcile", "kind": "capability", "capability": "reconciliation.cross_format",
                 "depends_on": [], "outputs": ["cross_format_analysis_id", "workspace_id"],
             },
+        ],
+    )
+)
+
+register_template(
+    Template(
+        key="reconciliation-with-review",
+        version=1,
+        name="Cross-format reconciliation with human review",
+        description=(
+            "Task 12.5 (reuse proof): the exact same reconciliation.cross_format "
+            "capability as the plain 'reconciliation' template - no new capability, "
+            "no new executor - followed by a human_checkpoint so the mandate is "
+            "not marked complete until a reviewer has actually looked at the "
+            "findings the run just produced and recorded a decision. This is the "
+            "'reconcile -> review' portion of examples/reconciliation-template.json's "
+            "own illustrative pipeline, made real; 'draft' and 'approve' stay "
+            "aspirational since draft_from_reviewed_findings does not exist as a "
+            "capability yet (a separate, unauthorized future task). Prefer the "
+            "plain 'reconciliation' template when the objective has no explicit "
+            "need for an in-mandate review gate beyond the shared workspace's own "
+            "review tools; prefer this one when it does."
+        ),
+        stages=[
+            {
+                "id": "reconcile", "kind": "capability", "capability": "reconciliation.cross_format",
+                "depends_on": [], "outputs": ["cross_format_analysis_id", "workspace_id"],
+            },
+            {"id": "review", "kind": "human_checkpoint", "depends_on": ["reconcile"], "outputs": ["review_decision"]},
         ],
     )
 )

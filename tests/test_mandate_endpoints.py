@@ -476,6 +476,146 @@ class ReconciliationEndpointTests(unittest.TestCase):
         self.assertEqual(final_mandate["status"], "completed")
 
 
+class ReconciliationWithReviewEndpointTests(unittest.TestCase):
+    """Task 12.5 (reuse proof), over the real HTTP surface: the
+    `reconciliation-with-review` template is a configuration-only
+    combination of the already-tested reconciliation capability (Task
+    12.3) and the already-tested human_checkpoint resume flow (Task
+    12.1/12.2) - this class proves the HTTP contract for that combination
+    specifically (the run genuinely pauses after real output exists, and
+    /resume genuinely completes it), not either building block again."""
+
+    httpd: ThreadingHTTPServer
+    port: int
+    thread: threading.Thread
+    worker: "mandates.Worker"
+
+    @classmethod
+    def setUpClass(cls):
+        cls._schema = f"test_{uuid.uuid4().hex}"
+        cls._original_schema = store.SCHEMA
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        cls._original_data_dir = documents.DATA_DIR
+        documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        store.ensure_schema(cls._schema)
+        store.SCHEMA = cls._schema
+        store.init_db()
+        identity.init_identity_db()
+        documents.init_documents_db()
+        cross_format_analyses.init_cross_format_analyses_db()
+        workspaces.init_workspaces_db()
+        mandates.init_mandates_db()
+
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.worker = mandates.Worker(poll_interval=0.02)
+        cls.worker.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.worker.stop()
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        store.SCHEMA = cls._original_schema
+        store.drop_schema(cls._schema)
+        documents.DATA_DIR = cls._original_data_dir
+        cls._tmpdir.cleanup()
+
+    def setUp(self):
+        self.project = store.create_project("Acme Merger", "")
+        self.pdf_doc = documents.save_uploaded_file(
+            self.project.id, "im.pdf", "", b"%PDF-1.4\n%test bytes\n%%EOF"
+        ).document
+        self.xlsx_doc = documents.save_uploaded_file(
+            self.project.id, "model.xlsx", "", b"PK\x03\x04fake-xlsx-review-endpoint-bytes"
+        ).document
+
+    def _url(self, path: str) -> str:
+        return f"http://127.0.0.1:{self.port}{path}"
+
+    def _get(self, path: str):
+        try:
+            res = urllib.request.urlopen(self._url(path))
+            return res.status, json.loads(res.read() or b"null")
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read() or b"null")
+
+    def _post(self, path: str, payload=None):
+        data = json.dumps(payload).encode("utf-8") if payload is not None else b""
+        req = urllib.request.Request(
+            self._url(path), data=data, headers={"Content-Type": "application/json"}, method="POST"
+        )
+        try:
+            res = urllib.request.urlopen(req)
+            return res.status, json.loads(res.read() or b"null")
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read() or b"null")
+
+    def _mandates_url(self, suffix: str = "") -> str:
+        return f"/api/projects/{self.project.id}/mandates{suffix}"
+
+    def _wait_for_terminal_run(self, mandate_id: str, run_id: str, timeout: float = 2.0) -> dict:
+        deadline = time.monotonic() + timeout
+        status, run = self._get(self._mandates_url(f"/{mandate_id}/runs/{run_id}"))
+        while run.get("status") not in _TERMINAL_RUN_STATUSES and time.monotonic() < deadline:
+            time.sleep(0.02)
+            status, run = self._get(self._mandates_url(f"/{mandate_id}/runs/{run_id}"))
+        self.assertIn(run.get("status"), _TERMINAL_RUN_STATUSES, f"run stuck at {run.get('status')!r}")
+        return run
+
+    def test_list_templates_includes_reconciliation_with_review(self):
+        status, templates = self._get("/api/mandate-templates")
+        keys = {t["key"] for t in templates}
+        self.assertIn("reconciliation-with-review", keys)
+
+    def test_full_lifecycle_pauses_for_review_then_completes(self):
+        _, mandate = self._post(self._mandates_url(), {"objective": "Reconcile Q3 financials, then review"})
+        mandate_id = mandate["id"]
+        _, plan = self._post(
+            self._mandates_url(f"/{mandate_id}/plan"),
+            {
+                "template_key": "reconciliation-with-review",
+                "stage_inputs": {"reconcile": {"document_ids": [self.pdf_doc.id, self.xlsx_doc.id]}},
+            },
+        )
+        self._post(self._mandates_url(f"/{mandate_id}/plan/approve"), {"plan_id": plan["id"]})
+
+        fake_outcome = CrossFormatAnalysisOutcome(
+            success=True, transmitted=True, analysis_seconds=2.4, model="claude-opus-5",
+            stop_reason="end_turn", usage={"input_tokens": 80, "output_tokens": 40}, segments=None,
+        )
+        with patch("mandates.cross_format_analysis.run_cross_format_analysis", return_value=fake_outcome):
+            status, run = self._post(self._mandates_url(f"/{mandate_id}/runs"))
+            self.assertEqual(status, 202)
+            run = self._wait_for_terminal_run(mandate_id, run["id"])
+
+        self.assertEqual(run["status"], "waiting_for_input")
+        reconcile_attempt = next(a for a in run["attempts"] if a["stage_id"] == "reconcile")
+        self.assertEqual(reconcile_attempt["status"], "succeeded")
+        self.assertTrue(reconcile_attempt["output"]["workspace_created"])
+
+        status, mid_mandate = self._get(self._mandates_url(f"/{mandate_id}"))
+        self.assertEqual(mid_mandate["status"], "active")  # not completed - a human still needs to review
+
+        status, resumed = self._post(
+            self._mandates_url(f"/{mandate_id}/runs/{run['id']}/resume"),
+            {"stage_id": "review", "decision": "Findings reviewed - no blocking issues."},
+        )
+        self.assertEqual(status, 200)
+        resumed = self._wait_for_terminal_run(mandate_id, run["id"])
+        self.assertEqual(resumed["status"], "succeeded")
+
+        status, final_mandate = self._get(self._mandates_url(f"/{mandate_id}"))
+        self.assertEqual(final_mandate["status"], "completed")
+        # The real reconciliation output the review stage was gating
+        # remains reachable afterward, unaffected by the checkpoint.
+        self.assertIsNotNone(cross_format_analyses.get_cross_format_analysis(
+            self.project.id, reconcile_attempt["output"]["cross_format_analysis_id"]
+        ))
+
+
 class LlmPlanningEndpointTests(unittest.TestCase):
     """Task 12.4's real capability, over the real HTTP surface. Same
     no-real-network-call convention as tests/test_mandates.py's own

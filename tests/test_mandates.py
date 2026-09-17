@@ -860,6 +860,154 @@ class ReconciliationCapabilityTests(unittest.TestCase):
         self.assertIn("budget exceeded", attempts[0].error)
 
 
+class ReconciliationWithReviewTests(unittest.TestCase):
+    """Task 12.5 (reuse proof): the `reconciliation-with-review` template
+    combines two already-registered/already-proven building blocks - the
+    real `reconciliation.cross_format` capability (12.3) and the
+    `human_checkpoint` stage kind (12.1) - in a new way, with zero new
+    executor code. These tests exist to prove the *combination* works
+    (the checkpoint genuinely pauses after real reconciliation output
+    exists, and resuming genuinely completes the mandate), not to
+    re-prove either building block's own correctness a second time - that
+    coverage already lives in ReconciliationCapabilityTests (the
+    capability) and MandateLifecycleTests/WorkerRecoveryTests (checkpoint
+    pause/resume/recovery, generically). Same no-real-network-call
+    convention: `cross_format_analysis.run_cross_format_analysis` is
+    mocked throughout."""
+
+    def setUp(self):
+        self._schema = f"test_{uuid.uuid4().hex}"
+        self._original_schema = store.SCHEMA
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._original_data_dir = documents.DATA_DIR
+        documents.DATA_DIR = Path(self._tmpdir.name) / "DealLabData"
+        store.ensure_schema(self._schema)
+        store.SCHEMA = self._schema
+        store.init_db()
+        documents.init_documents_db()
+        cross_format_analyses.init_cross_format_analyses_db()
+        workspaces.init_workspaces_db()
+        mandates.init_mandates_db()
+        self.project = store.create_project("Reconciliation With Review Tests", "")
+        self.pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", PDF_BYTES).document
+        self.xlsx_doc = documents.save_uploaded_file(self.project.id, "model.xlsx", "", XLSX_BYTES).document
+        self.worker = mandates.Worker()
+
+    def tearDown(self):
+        store.SCHEMA = self._original_schema
+        store.drop_schema(self._schema)
+        documents.DATA_DIR = self._original_data_dir
+        self._tmpdir.cleanup()
+
+    def _propose_and_approve(self):
+        mandate = mandates.create_mandate(self.project.id, "Reconcile Q3 financials, then review", created_by="u1")
+        plan = mandates.propose_plan(
+            self.project.id, mandate.id, "reconciliation-with-review",
+            stage_inputs={"reconcile": {"document_ids": [self.pdf_doc.id, self.xlsx_doc.id]}},
+        )
+        mandates.approve_plan(self.project.id, mandate.id, plan.id, approved_by="lead")
+        return mandate, plan
+
+    def test_template_and_document_selection_reuse_the_existing_mechanisms(self):
+        template = mandates.get_template("reconciliation-with-review")
+        self.assertIsNotNone(template)
+        self.assertEqual(
+            [s["id"] for s in template.stages], ["reconcile", "review"],
+        )
+        self.assertEqual(template.stages[1]["kind"], "human_checkpoint")
+        self.assertEqual(template.stages[1]["depends_on"], ["reconcile"])
+        # No document_ids -> still rejected exactly like the plain
+        # "reconciliation" template - _default_input_for_stage doesn't
+        # care which template a reconcile stage belongs to.
+        mandate = mandates.create_mandate(self.project.id, "Reconcile something", created_by="u1")
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates.propose_plan(self.project.id, mandate.id, "reconciliation-with-review")
+
+    def test_run_pauses_after_real_reconciliation_output_then_resumes_to_completion(self):
+        mandate, plan = self._propose_and_approve()
+        fake_outcome = _fake_outcome(segments=[
+            AnalysisSegment(
+                parts=[Part(type="text", text=FINDINGS_TEXT)],
+                pdf_citations=[PdfCitation(cited_text="Revenue is $12m", document_id=self.pdf_doc.id,
+                                            document_title="im.pdf", start_page=1, end_page=1)],
+            ),
+            AnalysisSegment(parts=[Part(type="text", text=FINDINGS_TEXT_TAIL)]),
+        ])
+
+        with patch("mandates.cross_format_analysis.run_cross_format_analysis", return_value=fake_outcome):
+            run = mandates.execute_run(self.project.id, mandate.id)
+            self.worker.poll_once()
+
+        # Paused at the checkpoint - not completed - but the real
+        # reconciliation output already exists, exactly as if the plain
+        # "reconciliation" template had been used: the review stage
+        # reviews something real, not a placeholder.
+        run = mandates.get_run(mandate.id, run.id)
+        self.assertEqual(run.status, "waiting_for_input")
+        self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "active")
+
+        attempts = mandates.list_attempts(run.id)
+        reconcile_attempt = next(a for a in attempts if a.stage_id == "reconcile")
+        self.assertEqual(reconcile_attempt.status, "succeeded")
+        self.assertTrue(reconcile_attempt.output["workspace_created"])
+        review_attempt = next(a for a in attempts if a.stage_id == "review")
+        self.assertEqual(review_attempt.status, "awaiting_human")
+
+        workspace = workspaces.get_workspace(self.project.id, reconcile_attempt.output["workspace_id"])
+        self.assertIsNotNone(workspace)
+        record = cross_format_analyses.get_cross_format_analysis(
+            self.project.id, reconcile_attempt.output["cross_format_analysis_id"]
+        )
+        findings = workspaces.list_findings(workspace, record)
+        self.assertEqual(len(findings), 1)  # real findings exist before any human has reviewed them
+
+        mandates.resume_run(self.project.id, mandate.id, run.id, "review", decision="Reviewed - escalate the critical item.")
+        self.worker.poll_once()
+
+        run = mandates.get_run(mandate.id, run.id)
+        self.assertEqual(run.status, "succeeded")
+        self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "completed")
+        review_attempt = next(a for a in mandates.list_attempts(run.id) if a.stage_id == "review")
+        self.assertEqual(review_attempt.output, {"decision": "Reviewed - escalate the critical item."})
+
+    def test_cancelling_while_paused_at_review_does_not_lose_the_real_findings(self):
+        # Task 12.2's own cancel-while-waiting fix (mandates.cancel_run),
+        # exercised here against a real capability's output for the first
+        # time - the findings/workspace already produced by "reconcile"
+        # are not affected by cancelling the mandate at the checkpoint.
+        mandate, plan = self._propose_and_approve()
+        with patch("mandates.cross_format_analysis.run_cross_format_analysis", return_value=_fake_outcome(segments=None)):
+            run = mandates.execute_run(self.project.id, mandate.id)
+            self.worker.poll_once()
+
+        workspace_id = mandates.list_attempts(run.id)[0].output["workspace_id"]
+        mandates.cancel_run(self.project.id, mandate.id, run.id)
+
+        run = mandates.get_run(mandate.id, run.id)
+        self.assertEqual(run.status, "cancelled")
+        self.assertIsNotNone(workspaces.get_workspace(self.project.id, workspace_id))
+
+    def test_llm_planner_can_select_the_review_template(self):
+        # Task 12.4's planner reasons generically over list_templates() -
+        # this is the first test proving that generalization actually
+        # extends to a template registered after 12.4 was built, with no
+        # planner code change.
+        mandate = mandates.create_mandate(self.project.id, "Reconcile the term sheet, with a review step", created_by="u1")
+        outcome = mandate_planning.PlanProposalOutcome(
+            status="proposed", template_key="reconciliation-with-review",
+            document_ids=[self.pdf_doc.id, self.xlsx_doc.id],
+            reasoning="Objective explicitly asks for a review step after reconciling.",
+        )
+        with patch("mandates.mandate_planning.propose_candidate_plan", return_value=outcome) as mock_call:
+            result = mandates.propose_plan_llm(self.project.id, mandate.id)
+
+        self.assertEqual(result.status, "proposed")
+        self.assertEqual(result.plan.template_key, "reconciliation-with-review")
+        self.assertEqual([s["id"] for s in result.plan.stages], ["reconcile", "review"])
+        template_keys_seen = {t.key: t.needs_documents for t in mock_call.call_args.kwargs["templates"]}
+        self.assertTrue(template_keys_seen["reconciliation-with-review"])
+
+
 class LlmPlanningTests(unittest.TestCase):
     """Task 12.4: mandates.propose_plan_llm's own independent
     re-verification of a model's candidate plan - document existence,

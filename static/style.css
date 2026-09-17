@@ -806,6 +806,168 @@ textarea:focus-visible,
   font-size: 0.85rem;
 }
 
+/* Task 13.1: tasks, comments, work-product submissions */
+
+.task-item {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-expand-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-expand-icon {
+  display: inline-block;
+  transition: transform 150ms ease-out;
+  color: var(--text-muted);
+}
+
+.task-expand-toggle[aria-expanded="true"] .task-expand-icon {
+  transform: rotate(90deg);
+}
+
+.task-header .name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+
+.task-status {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  background: var(--muted-bg);
+  color: var(--text-muted);
+}
+
+.task-status-in_progress { background: #0e2636; color: #93c5fd; border-color: #1c3f56; }
+.task-status-submitted { background: #0f2e1f; color: var(--success); border-color: #163c28; }
+.task-status-cancelled { background: #3a1518; color: #fca5a5; border-color: #5a2226; }
+
+.task-meta {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.task-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.task-detail .desc {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 12px;
+}
+
+.task-status-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.task-status-controls select {
+  width: auto;
+}
+
+.task-detail h4 {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  margin: 16px 0 8px;
+}
+
+.task-detail h4:first-of-type {
+  margin-top: 0;
+}
+
+.task-comments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-comments li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.task-comment-form,
+.task-new-work-product-form,
+.task-add-version-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.task-comment-form textarea {
+  flex: 1;
+  min-width: 200px;
+}
+
+.task-comment-form button,
+.task-new-work-product-form button,
+.task-add-version-form button {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
+.task-work-products {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-work-product {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.task-work-product-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+
 .link-action {
   background: none;
   border: none;

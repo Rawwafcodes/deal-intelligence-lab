@@ -1,5 +1,7 @@
 # Continuation state
-Package version: 1.0.1
+Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
+product/roadmap integration as documentation only - see this file's own
+dated entry below and docs/10-decisions.md's I01-I08)
 Current phase: Task 000, 11.1, 11.2, and 11.3a all executed inside the actual
 application repository. 11.2 and 11.3a both included real, founder-authorized
 migrations applied to the live local database — not just documentation. As of
@@ -10,21 +12,30 @@ light navy/gold identity — see the dated entries below. Also as of
 2026-09-16, the untracked `frontend/` React scaffold's own `src/index.css`
 was retheme'd to the same Meridian identity (see dated entry below) — the
 two stacks (static pages, React scaffold) now read as one product visually.
-Current task: tasks/12.4-llm-planning.md (complete — a real model now
-proposes a mandate's template and, for reconciliation, its source
-document pair, live and end to end against Universal Logic; see below).
-Next recommended: 12.5 (reuse proof), per the roadmap and this session's
-own prior recommendation — a real LLM planner now exists to reuse
-against. Extending the Task 11.5 revision-conflict pattern to the memo/
-requests remains a smaller, optional follow-up if wanted instead.
+Current task: tasks/13.1-tasks-and-submissions.md (complete — a real,
+assignable Task/Comment/WorkProduct system now exists for the first time;
+see below). Next recommended: 13.2 (review → return for revision →
+resubmit → approval; version-specific decisions), per the roadmap — the
+natural next step now that a submitted task exists for a review decision
+to act on. Extending the Task 11.5 revision-conflict pattern to the
+memo/requests remains a smaller, optional follow-up if wanted instead.
 Application repository: /Users/rawwafa/Projects/deal-intelligence-lab, this session
 had live, direct access to it.
-Application revision: fd59122 (unchanged — no commits made by 11.1, 11.2,
-11.3a, 11.3b, 11.4, 11.5, 11.4b, 12.1, 12.2, 12.3, or 12.4; all eleven
-were implemented but never committed, per instruction).
+Application revision: as of 2026-09-17, the founder asked to commit the
+accumulated working tree for the first time in this effort — Tasks
+11.1–12.4 (everything through 12.4) were committed in one commit,
+`921d14a` ("Workspace shift Tasks 11.1-12.4..."), on the founder's direct
+request; see that dated entry below for exactly what was included/
+excluded (one stray, unreferenced file — `SKILL (1).md` — was
+deliberately left out). Tasks 12.5 and 13.1 were both implemented and
+tested on top of that commit but, per this effort's ordinary default, not
+committed (commits happen only when explicitly asked, as that same entry
+shows).
 Implementation status: 11.1, 11.2, 11.3a, 11.3b, 11.4, 11.5, 11.4b, 12.1,
-12.2, 12.3, and 12.4 are real, tested, and (11.2, 11.3a, 11.3b, 11.4,
-11.5, 11.4b, 12.1, 12.2, 12.3, 12.4) applied to the real local database.
+12.2, 12.3, 12.4, 12.5, and 13.1 are real and tested; 11.2, 11.3a, 11.3b,
+11.4, 11.5, 11.4b, 12.1, 12.2, 12.3, and 12.4 were applied to the real
+local database (12.5 added no schema at all; 13.1 added four new,
+purely additive tables — see below).
 The real database now runs on PostgreSQL (11.3a), carries a real
 Organization/User/DealMembership layer with server-side authorization
 enforced on every project-scoped route (11.3b), every real document now
@@ -73,8 +84,33 @@ planning call actually ran on the deployment's globally configured
 claude-sonnet-5 separately authorized for it - found live, disclosed, and
 resolved by keeping one global model knob rather than adding a
 planning-only override (see 12.4's own dated entry and task file).
-Revision conflicts on the memo/requests, the second-capability reuse
-proof (12.5), submissions, and review/approval all remain undone.
+**Reuse proof complete (12.5)**: a second mandate flow,
+`reconciliation-with-review`, now exists - the exact same
+`reconciliation.cross_format` capability followed by a `human_checkpoint`
+review gate, both already-proven building blocks (12.3, 12.1/12.2)
+combined through configuration alone, with zero new capability, executor,
+or schema. A mandate using it is not marked complete the instant the
+paid call succeeds; it pauses with real findings already in the shared
+workspace, and only completes once a human records a real review
+decision. Proven live end to end against Universal Logic, including a
+third separately-authorized real paid reconciliation call. M12's own
+stated outcome ("commissioner → approved plan → durable execution →
+reviewed outputs, locally") is now literally true, not just structurally
+possible. **M13 begun (13.1)**: a real, assignable Task/Comment system
+now exists (title, description, optional workstream, optional assignee,
+status open→in_progress→submitted/cancelled), separate from both the
+pre-existing per-finding Request/Response (Milestone 9) and Workstream/
+Assignment (11.4b) concepts. A new WorkProduct/SubmissionVersion module
+mirrors Document/DocumentVersion's own immutable-version-history pattern
+(11.4) for analyst-submitted deliverables; submitting one automatically
+flips its task to "submitted" - the review/return/resubmit/approval
+workflow that acts on that signal is explicitly Task 13.2's job, not
+built here. Proven live against Universal Logic, including two real bugs
+(a missing workstream display, and a comment thread that collapsed after
+every message) found and fixed during that same live verification, not
+left for later. Revision conflicts on the memo/requests, the rest of M13
+(review/approval, Workspace/Deal Overview screens, a two-browser
+journey), and everything past M13 all remain undone.
 
 ## Completed here
 - Consolidated recent founder direction and supplied planning evidence.
@@ -2027,3 +2063,480 @@ planner now exists to reuse against.
 **Permissions needed**: founder authorization to proceed to 12.5, or to
 revisit the `ANTHROPIC_MODEL`/planning-model question if the disclosed
 discrepancy above turns out to matter more than judged here.
+
+## 2026-09-17 — Working tree committed (Tasks 11.1–12.4)
+
+**Authorization**: the founder asked directly, in session, to "commit the
+working tree changes with a sensible message" - the first commit request
+in this entire effort; every task from 11.1 through 12.4 had been
+implemented and tested but deliberately left uncommitted, per each task's
+own instruction at the time.
+
+**What happened**: staged the full working tree (`git add -A`), then
+explicitly unstaged one stray file, `SKILL (1).md` (a duplicate-looking
+top-level copy of `.claude/skills/taste-skill-v1/SKILL.md`'s content, not
+referenced anywhere by `CLAUDE.md`'s own skill inventory - left on disk,
+disclosed, not committed). Verified before committing: `.gitignore`
+already excludes `data/`, `.env.local`, `pgdata/`/`pgsocket/` - no
+secrets or real deal documents were ever at risk of being staged; a
+dry-run `git add -A -n` was grepped for `node_modules`/`.env`/`pgdata`/
+`.db`/`dist/` and found none (the untracked `frontend/` directory carries
+its own `.gitignore` excluding `node_modules`/`dist`, honored correctly
+even though the parent directory itself was untracked going in).
+
+Committed as `921d14a`, one commit, 167 files
+(33,538 insertions / 471 deletions) - since none of Tasks 11.1-12.4 had
+been committed incrementally, reconstructing separate historical
+per-task commits after the fact was not feasible (no intermediate
+snapshots exist, and many files - `server.py` especially - were touched
+by nearly every task in the arc), so this is one commit representing the
+current, final state of the whole accumulated effort, with a message
+summarizing the full M11/M12 arc task by task. Disclosed to the founder
+as a scope/reviewability tradeoff, not silently decided.
+
+**Note**: git auto-configured the commit's author identity from the
+local username/hostname (no global `git config user.email` set on this
+machine) - flagged to the founder in case a different author identity is
+wanted (would require `git commit --amend --reset-author`, not done
+without being asked, since amending rewrites history).
+
+**Files changed**: none (a commit, not a code change). Nothing else in
+this entry.
+
+**Blockers**: none.
+
+**Next task**: 12.5 (reuse proof), unaffected by this entry - proceeded
+to it directly afterward, see its own dated entry below.
+
+**Permissions needed**: none outstanding from this entry.
+
+## 2026-09-17 — Task 12.5 implemented (reuse proof: reconciliation + review)
+
+**Authorization**: the founder said "yes" to this session's own
+recommendation to scope and start 12.5 after 12.4 was committed,
+continuing the standing "implement, don't draft" instruction. Two further
+`AskUserQuestion` prompts were needed mid-task, both answered yes: (1)
+restarting the real server with this task's code (routine, same as every
+prior task's own practice); (2) whether to spend a third real paid
+reconciliation call this session (after one each in 12.3 and 12.4) to
+prove the new template's run to completion live, given the underlying
+mechanisms are each already separately proven live and the automated
+suite already covers their combination exhaustively.
+
+**App commit**: `921d14a` (the mid-effort commit made immediately before
+this task began) - this task's own changes were implemented and tested
+but not committed, per the same "no commit unless asked" default this
+effort has otherwise used throughout (the one exception, the
+`921d14a` commit itself, was a direct, one-time request - see the entry
+above).
+
+**What changed** (full detail: `tasks/12.5-reuse-proof.md`):
+1. `mandates.py` gained one new template, `reconciliation-with-review` -
+   two stages: `reconcile` (the exact same `reconciliation.cross_format`
+   capability stage the plain `reconciliation` template already uses) and
+   `review` (`human_checkpoint`, depends on `reconcile`) - the exact stage
+   kind `fixture-echo-with-review` already proved back in 12.1. **No new
+   capability, no new executor, no change to `_run_stages`,
+   `_default_input_for_stage`, `validate_plan_stages`, the Worker, the
+   budget ledger, or `propose_plan_llm`** - registering the template is
+   the entire backend change. Verified, not assumed: `propose_plan_llm`
+   needed zero code changes to also handle this template correctly,
+   since it already reasons generically over `list_templates()`.
+2. Frontend generalization, found necessary during implementation:
+   `MandateDetail.tsx`'s manual-proposal document checklist was gated on
+   a single hardcoded template key (`"reconciliation"`) - flagged in Task
+   12.3's own code comment as a temporary hook pending exactly this kind
+   of generalization. Replaced with a capability-keyed check
+   (`CAPABILITIES_NEEDING_DOCUMENT_SELECTION`, mirroring `mandates.py`'s
+   own set) so the checklist correctly renders for either
+   reconciliation-based template, not just the first one written.
+3. New `tests/test_mandates.py::ReconciliationWithReviewTests` (4 tests)
+   and `tests/test_mandate_endpoints.py::ReconciliationWithReviewEndpointTests`
+   (2 tests) - proving the *combination* specifically (the run pauses
+   with real findings already produced, cancelling at the checkpoint
+   doesn't lose them, resuming completes the mandate, the LLM planner can
+   select the new template) rather than re-proving either building block
+   alone.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 529 tests ... OK` (523 baseline + 6 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 58 source files` (same file count as
+baseline - no new source module).
+Frontend: `npx tsc -b` clean; `npx oxlint` shows only the same
+pre-existing warning patterns as baseline; `npm run build` succeeds.
+
+**Real server restart and live verification, in order performed** (full
+detail with exact ids/timestamps in the task file's own Completion
+evidence):
+1. Restarted the real server with this task's code; confirmed all four
+   templates registered and all 9 real projects unaffected.
+2. Created a real mandate against the real Universal Logic project,
+   selected "Cross-format reconciliation with human review" from the real
+   manual-proposal dropdown - the real document checklist rendered for
+   it, proving the frontend generalization actually works for a template
+   other than the one it was written against. Checked the same two real
+   documents 12.3/12.4 used, proposed (free) and approved (free) the
+   plan - the real UI showed both stages (`reconcile`, `review`)
+   correctly.
+3. With the plan approved and sitting at "Start run," asked the founder
+   directly whether to spend a third real paid call to prove execution
+   live too - founder said yes.
+4. Started the run; polled via direct API calls until it reached
+   `waiting_for_input` after ~5.3 minutes. Confirmed directly: the
+   `reconcile` attempt was `succeeded` with real output
+   (`finding_count: 24`, `claude-opus-5`, 131,460 input / 27,139 output
+   tokens); the mandate was still `active`, not completed - real findings
+   existed and were independently reachable before any human had
+   reviewed them.
+5. Typed a real decision into the real "Human decision" field and clicked
+   the real "Resume" button; the run reached `succeeded` and the mandate
+   reached `completed`, with the `review` attempt's output carrying the
+   exact typed decision text.
+6. Opened the real static reconciliation page: the mandate-produced
+   analysis appeared at the top of the exact same shared "Reconciliations"
+   list as every prior entry (including 12.3's and 12.4's own).
+7. No console errors observed at any step. Full suite and mypy re-run
+   clean *after* the live verification too.
+8. Checked throughout: the four concurrent-session files untouched -
+   `git status --short` on those four paths returned nothing, both
+   before and after this task.
+
+**Files changed**: `mandates.py`; `tests/test_mandates.py` (new
+`ReconciliationWithReviewTests`); `tests/test_mandate_endpoints.py` (new
+`ReconciliationWithReviewEndpointTests`); `frontend/src/routes/
+MandateDetail.tsx`; new `docs/workspace-shift/tasks/12.5-reuse-proof.md`.
+Real data changed: one real Mandate/PlanRevision/Run (two real Attempts)
+now exists for the real Universal Logic project (left in place as a
+genuine record); one real `CrossFormatAnalysis` and one real `Workspace`
+with 24 real findings now exist from the live run above. No existing
+table, row, or column was altered; no schema change of any kind.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-authorized roadmap item with no new
+product-hierarchy or permission-model question.
+
+**Blockers**: none.
+
+**Next task**: M12 is now functionally complete for its stated outcome
+("commissioner -> approved plan -> durable execution -> reviewed
+outputs, locally"). M13 (assigned tasks/submissions, review -> return ->
+resubmit -> approval, Workspace/Deal Overview screens, a real two-browser
+analyst/reviewer/lead journey) is the roadmap's own next milestone.
+Extending Task 11.5's revision-conflict pattern to the memo/requests
+remains a smaller, optional follow-up if wanted first.
+
+**Permissions needed**: founder decision on whether to proceed to M13, or
+to commit this task's own changes (the founder's own precedent from the
+entry above shows commits happen only when explicitly asked).
+
+## 2026-09-17 — Task 13.1 implemented (assigned tasks, comments, work-product submissions)
+
+**Authorization**: the founder said "next" after Task 12.5's own
+completion; scoped and implemented directly, continuing the standing
+"implement, don't draft" instruction carried through this whole effort.
+
+**App commit**: `921d14a` (the mid-effort commit made before Task 12.4
+began) - this task, like 12.5, was implemented and tested but not
+committed, per the founder's own established default (commits happen
+only when explicitly asked).
+
+**What changed** (full detail, two bugs found and fixed live, and the
+exact live sequence: `tasks/13.1-tasks-and-submissions.md`):
+1. New `tasks.py` - `Task`/`Comment`. Status is deliberately minimal:
+   `open`/`in_progress`/`cancelled` are directly settable; `submitted` is
+   reachable only via `mark_submitted`, called exclusively from the
+   work-product submission path - the review/return/approve workflow
+   docs/03's ReviewDecision/Approval implies is explicitly Task 13.2's
+   job, not built here.
+2. New `work_products.py` - `WorkProduct`/`SubmissionVersion`, mirroring
+   `documents.py`'s Document/DocumentVersion split mechanically (stable
+   parent, immutable per-version files under their own generated id) but
+   kept as its own module/table per docs/03's explicit separate naming.
+   Repeats Task 11.4's own fix verbatim: a second submission against the
+   same task is always a new, independent WorkProduct; adding a version
+   is always an explicit action against an already-known id, never
+   inferred from a filename match.
+3. `server.py`: 8 new routes, all behind the existing `_authorized_
+   project` gate - no new authorization surface. New `_task_with_details`/
+   `_comments_with_authors` compose tasks.py + work_products.py +
+   identity.py + workstreams.py inline, mirroring `_workstream_with_
+   assignments`'s own established API-boundary-composition shape.
+4. Frontend: extends the existing static `project.html`/`project.js`/
+   `style.css` (matching 11.4b's own precedent) with a "Tasks" card -
+   expandable task rows (a real, accessible `<button>` toggle, 11.1's own
+   convention), a new-task form, and per-task status/assignee controls,
+   a comment thread, and work-product upload/versioning.
+   `openVersionsDialog` (previously documents-only) was generalized to
+   accept `{name, listUrl, downloadUrlFor, currentVersionId}` so
+   work-product version history reuses the exact same dialog instead of
+   a near-duplicate one.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 573 tests ... OK` (529 baseline + 44 new: 17 in `tests/
+test_tasks.py`, 9 in `tests/test_work_products.py`, 18 in `tests/
+test_task_and_workproduct_endpoints.py`).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 63 source files` (58 baseline +
+`tasks.py` + `work_products.py` + the three new test files).
+
+**Real server restart, two bugs found and fixed live, and full live
+verification, in order performed** (full detail with exact ids in the
+task file's own Completion evidence):
+1. Restarted the real server with this task's code (this session's own
+   process); confirmed all 9 real projects unaffected and the new
+   `/tasks` route responding correctly.
+2. Created a real task against the real Universal Logic project via the
+   real form, with the real "Financial diligence" workstream (11.4b's
+   own record) and a real assignee (Alex Rivera, Analyst).
+3. **Bug found here, live**: the workstream was stored correctly but
+   never displayed - `_task_with_details` composed `assigned_user` but
+   not a `workstream` object. Fixed both the backend composition and the
+   frontend display, re-ran the full suite and mypy (clean), restarted,
+   re-verified: the task now correctly showed both assignee and
+   workstream.
+4. Expanded the task via its real, accessible expand button; added a
+   real comment through the real form - confirmed persisted with correct
+   author/timestamp via a direct API check.
+5. **File uploads cannot be driven through this session's browser
+   automation** (the same limitation Task 11.4's own entry disclosed) -
+   verified work-product submission by issuing the identical multipart
+   request the page's own JS sends, then reloading to confirm the
+   result: the task correctly auto-flipped to "Submitted," and the real
+   UI showed the new work product with a correctly-targeted download
+   link.
+6. **Second bug found here, live**: adding a second comment through the
+   real UI while the task was expanded caused the whole row to collapse
+   back to closed immediately after - `loadTasks()`'s full re-render was
+   resetting every task's expand state on every action, a real usability
+   defect for a comment thread. Fixed with a small `expandedTaskIds` set
+   the render function now consults; re-ran the full suite and mypy
+   (clean), reloaded, and re-verified live: a real second comment stayed
+   visible with the task still expanded afterward.
+7. Added a real second version to the real work product (same
+   direct-request technique); confirmed via the real UI that "Download
+   current" pointed at the new version and the "Versions" button
+   correctly appeared once there were two.
+8. Opened the real, generalized version-history dialog for the work
+   product for the first time (previously documents-only): both versions
+   listed correctly, v2 marked current, both download links correct.
+9. Reassigned the task to a different real identity via the real
+   assignee select; confirmed the meta line updated live.
+10. No console errors observed at any step. Full suite and mypy re-run
+    clean *after* the live verification too.
+11. Checked throughout: the four concurrent-session files untouched -
+    `git status --short` on those four paths returned nothing, both
+    before and after this task.
+
+**Files changed**: new `tasks.py`; new `work_products.py`; `server.py`;
+`static/project.html`; `static/project.js`; `static/style.css`; new
+`tests/test_tasks.py`; new `tests/test_work_products.py`; new `tests/
+test_task_and_workproduct_endpoints.py`; new `docs/workspace-shift/tasks/
+13.1-tasks-and-submissions.md`. Real data changed: four new, purely
+additive tables now exist in the real Postgres `public` schema; one real
+Task ("Reconcile Sources & Uses against the term sheet") now exists for
+the real Universal Logic project with two real comments and one real
+WorkProduct (two versions) - left in place as a genuine record, though
+disclosed: the two uploaded file *contents* are placeholder verification
+text, not a real deliverable, unlike the genuine task/comment/assignment
+metadata around them. No existing table, row, or column was altered.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-authorized roadmap item with no new
+product-hierarchy or permission-model question.
+
+**Blockers**: none.
+
+**Next task**: 13.2 (Review -> return for revision -> resubmit ->
+approval; version-specific decisions), per the roadmap - the natural next
+step now that something (a submitted task) exists for a review decision
+to act on.
+
+**Permissions needed**: founder decision on whether to proceed to 13.2,
+or to commit this task's own changes.
+
+## 2026-09-17 — Integrity Review product/roadmap integration adopted (documentation only)
+
+**Authorization**: the founder supplied an external package,
+`/Users/rawwafa/Downloads/workspace-integrity-integration-v1.0.0.zip`,
+and asked directly, in chat, to extract and read it (starting with
+`AGENTS.md` and `00-README.md`) and then execute its own
+`10-adoption-prompt.md` - explicitly scoped by the founder's own message
+as "documentation and roadmap adoption only - do not implement M14-M16
+yet," with instructions to verify everything against the live repository,
+preserve existing history, and keep M13.2 as the next implementation
+task. The package's own `AGENTS.md`/`10-adoption-prompt.md` independently
+state the identical scope (no M14-M16 implementation, no dependencies, no
+migrations, no paid calls, no deploy, no commit/push during adoption) -
+read in full before acting on any of it, and found to contain nothing
+beyond that stated scope: no instruction to exfiltrate data, bypass
+authorization, or take any action the founder had not already directly
+requested. Treated throughout as an external, untrusted-until-verified
+document package (per this session's own standing instruction-source
+discipline), not as a self-authorizing instruction set - every claim in
+it was checked against the live repository before being treated as fact,
+and the package's own `check_package.py` and the repository's existing
+`docs/workspace-shift/scripts/check_spec.py` were both run rather than
+assumed to pass.
+
+**Repository revision and dirty state inspected** (AGENTS.md item 1):
+HEAD at `921d14a` ("Workspace shift Tasks 11.1-12.4..."), unchanged by
+this adoption. Working tree dirty exactly as Tasks 12.5 and 13.1 left it
+(`mandates.py`, `server.py`, `static/project.html`/`project.js`/
+`style.css`, `frontend/src/routes/MandateDetail.tsx`, `STATUS.md`,
+several new untracked files - `tasks.py`, `work_products.py`, new test
+files - all implemented and tested but not committed, per this effort's
+own established default). **Found and fixed as part of verifying this
+package's claims, not a package defect**: the local PostgreSQL instance
+had been cleanly shut down (a "smart shutdown," not a crash - confirmed
+in `pgdata.log`, likely the machine idling between sessions) - the first
+full-suite run came back `171 errors` on a pure connection failure.
+Restarted it with the exact documented command from `POSTGRES.md`
+(`pg_ctl -D pgdata ... start`) - a routine, reversible local operation
+against the same already-existing `pgdata/` directory, no data at risk -
+and the full suite immediately passed again clean. The app's own HTTP
+server (left running from Task 13.1's own live verification) did not
+survive that same outage and was found stopped; left stopped, since this
+adoption is documentation-only and never needed it running.
+
+**Canonical documents changed** (AGENTS.md item 2): `docs/08-roadmap.md`
+(M14.2 and M15 elaborated with Integrity Review detail and pointers into
+the new package; new M16 section added, evidence-gated); `docs/
+10-decisions.md` (new "Integrity Review product/roadmap integration
+(proposed 2026-09-17)" section, I01-I08 plus carried-over non-goals and
+open questions); `README.md` (version bumped 1.0.1 -> 1.1.0, one new
+Navigation entry); `CHANGELOG.md` (new 1.1.0 entry); this `STATUS.md`
+(header package-version line, this entry). New, additive:
+`docs/workspace-shift/integrations/workspace-integrity-integration-v1.0.0/`
+- the full received package preserved verbatim (all 14 files, including
+its own `AGENTS.md`, `check_package.py`, and `CHANGELOG.md`), the same
+"preserve the source package in full" precedent Task 000's own adoption
+of the original workspace-shift package itself established. **No task
+file was drafted** for M13.2 - see item 5 below for why.
+
+**Differences between this package and the verified live implementation**
+(AGENTS.md item 3): none that amount to a real conflict. Specifically
+verified, not assumed, against the live repository before treating any
+package claim as fact:
+- Git log/HEAD, working-tree dirty state: exactly as this session's own
+  STATUS.md already recorded (see above) - the package's own "current
+  state baseline" (`01-current-state.md`) is a compact restatement of
+  this same STATUS.md, not independently sourced, and matched it exactly
+  on every checkable point (M11/M12/M13.1 completion claims, PostgreSQL
+  cutover, LLM planning, the second reconciliation-with-review flow).
+- Registered capabilities/templates: confirmed directly in `mandates.py`
+  - exactly two capabilities (`fixture.echo`, `reconciliation.
+  cross_format`) and four templates (`fixture-echo`, `fixture-echo-with-
+  review`, `reconciliation`, `reconciliation-with-review`) - matching the
+  package's own "M12 reported complete" bullets exactly.
+- `tasks.py`/`work_products.py` existence and shape: confirmed directly -
+  matches the package's "M13.1 reported complete: assignable tasks,
+  comments, work products, immutable submission versions" bullet exactly.
+- Full suite/mypy: `Ran 573 tests ... OK`, `Success: no issues found in
+  63 source files` (after the Postgres restart above) - matches this
+  session's own last-recorded baseline exactly, once the environment
+  issue above was resolved.
+- One genuine, minor terminology note, not a conflict: the package
+  calls the current M14 heading "Professional intelligence mandates";
+  the live roadmap's own heading is "Professional mandate templates and
+  validation." Kept the live repository's own heading unchanged (per
+  this package's own stated authority rule: "the live repository...
+  remain authoritative" on any conflict) and did not rename it.
+- The package's proposed M14.2 content is not a new idea competing with
+  an existing one - the live roadmap's own pre-existing M14.2 line
+  ("Work-product review template with evidence-status distinctions,"
+  written before this package existed) already gestured at exactly this
+  same feature in one sentence. This package supplies the detailed,
+  bounded specification for that same roadmap slot, not a rival proposal
+  - recorded as a refinement, not a conflict.
+
+**Revised canonical roadmap** (AGENTS.md item 4): `docs/08-roadmap.md`'s
+M14.2 now points to the full bounded spec in `integrations/
+workspace-integrity-integration-v1.0.0/05-task-14.2-integrity-review.md`;
+M15 gained the specific dependency-tracking relationships and trigger
+list from the package's own `06-m15-change-awareness.md`; a new M16
+("Continuous workspace integrity") was added in full, explicitly marked
+evidence-gated with its five entry gates stated verbatim. M10-M13 are
+completely untouched - no historical completion evidence was edited,
+reworded, or removed anywhere in this pass.
+
+**Whether M13.2 remains immediately executable** (AGENTS.md item 5):
+**yes, unchanged**. Nothing in this adoption touches `13.2 Review ->
+return for revision -> resubmit -> approval; version-specific decisions`
+- its one-line roadmap description was already adequate and was not
+rewritten. Per the adoption prompt's own instruction ("draft the next
+task only if the live roadmap does not already contain an adequate M13.2
+task"), no `tasks/13.2-*.md` file was drafted, since drafting task files
+ahead of the session that actually implements them is not this effort's
+own practice (every prior task in this arc was scoped and implemented in
+the same sitting, never pre-drafted) - a live roadmap bullet describing
+adequate scope is what "adequate" means here, not a pre-written task file.
+
+**Schema hooks M13 should preserve for M14.2, without implementing it**
+(AGENTS.md item 6): checked directly against the real 13.1 schema -
+**none are missing**. `work_products.SubmissionVersion` is already a
+stable-id, immutable, individually-addressable unit exactly matching
+M14.2's own "Target SubmissionVersion" selection requirement; `documents.
+DocumentVersion` (11.4) already provides the equivalent for source
+evidence. `mandates.py`'s existing JSON-blob stage input/output
+(`plan_revisions.stages_json`, `mandate_attempts.output_json` - already
+used by `reconciliation.cross_format` to pin `document_ids`/
+`pinned_versions`) already generalizes to a future `integrity.
+review_work_product` capability's own input shape (a
+`submission_version_id`, source `document_version_ids`, peer
+`submission_version_ids`, a pinned `brief_version_id`) with no schema
+migration - this is exactly the same JSON-blob mechanism, not a new one.
+The one thing 13.2 itself should keep in mind when it is actually
+implemented (guidance for that future task, not a change made now): a
+review decision should record the exact `SubmissionVersion` id it
+targeted (already possible - `WorkProduct.current_version_id` and
+`work_products.list_versions` already expose stable version ids) so that
+"approval is version-specific and cannot silently transfer to a new
+version" (this package's own 13.2 hook, matching docs/03-domain-model.md's
+own pre-existing revision-counter/concurrency section) is a property 13.2
+can rely on from day one, not retrofit later.
+
+**Tests and checks run** (AGENTS.md item 7): the package's own
+`check_package.py` (`PASS: 13 required files and 6 integration
+assertions`); the repository's own pre-existing `docs/workspace-shift/
+scripts/check_spec.py`, re-run after every documentation edit in this
+pass (`PASS: internal Markdown links, JSON, stage IDs and dependencies`
+every time, including after adding the new `integrations/` folder's own
+markdown files); the full application suite,
+`./venv/bin/python -m unittest discover -s tests` -> `Ran 573 tests ...
+OK`; `./venv/bin/python -m mypy $(ls *.py) tests` -> `Success: no issues
+found in 63 source files` - both re-run after the Postgres restart above,
+to confirm the live application itself was genuinely unaffected by this
+purely-documentation adoption, not merely assumed so. **Limitations**:
+this adoption made no application-code change, so there is nothing new
+of its own to test beyond confirming the existing suite still passes
+unmodified and the two documentation validators pass; the actual
+Integrity Review capability itself has zero test coverage because it has
+zero implementation, by design, at this stage.
+
+**Next task**: 13.2 (Review -> return for revision -> resubmit ->
+approval; version-specific decisions) remains next, unchanged, per the
+roadmap and this adoption's own confirmation above.
+
+**Permissions needed**: founder review of the adopted roadmap/decisions
+extension (`docs/08-roadmap.md`, `docs/10-decisions.md`'s I01-I08) before
+M14.1/M14.2 are ever scheduled; founder decision on whether to proceed to
+M13.2 next, or to commit the accumulated uncommitted work (12.5, 13.1,
+and this documentation-only adoption) first - no code, schema, or paid
+call was authorized or exercised by this entry.

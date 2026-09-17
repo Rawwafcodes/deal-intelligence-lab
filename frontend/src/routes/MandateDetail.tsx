@@ -24,15 +24,15 @@ import {
   type ProjectDocument,
 } from "@/lib/api"
 
-// Task 12.3: the only template today whose one capability stage can't
-// derive its own input purely from the mandate's objective (see
-// mandates.py's _default_input_for_stage) - it needs an explicit source
-// selection, which nothing here has a planner to propose yet (12.4 is
-// still LLM planning, out of scope). This is that selection's one hardcoded
-// hook; a real multi-capability composer would generalize it, but with
-// exactly one capability needing explicit input, that generalization has
-// nothing yet to prove itself against.
-const RECONCILIATION_TEMPLATE_KEY = "reconciliation"
+// Mirrors mandates.py's own _CAPABILITIES_NEEDING_DOCUMENT_SELECTION: the
+// set of capabilities whose stage input is a source document selection,
+// not something derivable purely from the mandate's objective (see
+// mandates.py's _default_input_for_stage). Task 12.5 added a second
+// template built on this same capability (`reconciliation-with-review`),
+// which is exactly why this is keyed by capability, not by a single
+// hardcoded template key - a human picking either template from the
+// manual dropdown below needs the same document checklist.
+const CAPABILITIES_NEEDING_DOCUMENT_SELECTION = new Set(["reconciliation.cross_format"])
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -176,7 +176,12 @@ export function MandateDetail() {
   const latestRun = mandate.runs[mandate.runs.length - 1]
   const awaitingHumanAttempt = latestRun?.attempts.find((a) => a.status === "awaiting_human")
 
-  const isReconciliation = selectedTemplate === RECONCILIATION_TEMPLATE_KEY
+  const selectedTemplateObject = templates.find((t) => t.key === selectedTemplate)
+  const isReconciliation = Boolean(
+    selectedTemplateObject?.stages.some(
+      (stage) => stage.capability && CAPABILITIES_NEEDING_DOCUMENT_SELECTION.has(stage.capability)
+    )
+  )
   const pdfDocuments = documents.filter((d) => d.extension === ".pdf")
   const excelDocuments = documents.filter((d) => d.extension === ".xlsx" || d.extension === ".xls")
   const selectedPdfCount = pdfDocuments.filter((d) => selectedDocumentIds.has(d.id)).length

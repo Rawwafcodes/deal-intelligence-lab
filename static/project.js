@@ -84,6 +84,23 @@ const workstreamDescriptionInputEl = document.getElementById("workstream-descrip
 const workstreamErrorEl = document.getElementById("workstream-error");
 let devIdentities = [];
 
+// Task 13.1: tasks, comments, work-product submissions
+const tasksCardEl = document.getElementById("tasks-card");
+const tasksListEl = document.getElementById("tasks-list");
+const tasksEmptyEl = document.getElementById("tasks-empty");
+const taskFormEl = document.getElementById("task-form");
+const taskTitleInputEl = document.getElementById("task-title");
+const taskDescriptionInputEl = document.getElementById("task-description");
+const taskWorkstreamSelectEl = document.getElementById("task-workstream");
+const taskAssigneeSelectEl = document.getElementById("task-assignee");
+const taskErrorEl = document.getElementById("task-error");
+const TASK_STATUS_LABELS = { open: "Open", in_progress: "In progress", submitted: "Submitted", cancelled: "Cancelled" };
+// loadTasks() re-fetches and re-renders the whole list after every action
+// (a comment, a status change, a submission) - tracked here so an
+// in-progress conversation on one task doesn't visually collapse after
+// every single message, the way it would with no memory of what was open.
+const expandedTaskIds = new Set();
+
 // Must match pdf_inspection.MAX_PDF_SOURCE_BYTES on the server (the shared
 // combined-PDF-bytes cap used by cross-document analysis, cross-format
 // reconciliation, and the Validation Lab) - this is only used here to give
@@ -182,6 +199,7 @@ async function loadProject() {
   renderProject(project);
   briefCardEl.hidden = false;
   workstreamsCardEl.hidden = false;
+  tasksCardEl.hidden = false;
   uploadCardEl.hidden = false;
   documentsCardEl.hidden = false;
   renderDocumentsSkeleton();
@@ -388,7 +406,13 @@ function renderDocuments(docs) {
       const versionsButton = document.createElement("button");
       versionsButton.textContent = "Versions";
       versionsButton.className = "link-action";
-      versionsButton.addEventListener("click", () => openVersionsDialog(doc));
+      versionsButton.addEventListener("click", () => openVersionsDialog({
+        name: doc.original_filename,
+        currentVersionId: doc.current_version_id,
+        listUrl: `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions`,
+        downloadUrlFor: (version) =>
+          `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions/${encodeURIComponent(version.id)}/download`,
+      }));
       actionsCell.append(versionsButton);
     }
 
@@ -675,6 +699,365 @@ workstreamFormEl.addEventListener("submit", async (event) => {
   await loadWorkstreams();
 });
 
+// -- Task 13.1: tasks, comments, work-product submissions ------------------
+
+async function populateTaskFormOptions() {
+  await loadDevIdentities();
+  const wsRes = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`);
+  const workstreamsForOptions = wsRes.ok ? await wsRes.json() : [];
+
+  const fillIdentityOptions = (select, placeholderText) => {
+    select.textContent = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = placeholderText;
+    select.appendChild(placeholder);
+    devIdentities.forEach((devIdentity) => {
+      const option = document.createElement("option");
+      option.value = devIdentity.user.id;
+      option.textContent = devIdentity.user.display_name;
+      select.appendChild(option);
+    });
+  };
+  fillIdentityOptions(taskAssigneeSelectEl, "Unassigned");
+
+  taskWorkstreamSelectEl.textContent = "";
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = "None";
+  taskWorkstreamSelectEl.appendChild(noneOption);
+  workstreamsForOptions.forEach((workstream) => {
+    const option = document.createElement("option");
+    option.value = workstream.id;
+    option.textContent = workstream.name;
+    taskWorkstreamSelectEl.appendChild(option);
+  });
+}
+
+function renderWorkProduct(task, workProduct) {
+  const li = document.createElement("li");
+  li.className = "task-work-product";
+
+  const header = document.createElement("div");
+  header.className = "task-work-product-header";
+  const nameEl = document.createElement("span");
+  nameEl.textContent = `${workProduct.title} (v${workProduct.version_number})`;
+  header.appendChild(nameEl);
+
+  const downloadLink = document.createElement("a");
+  downloadLink.className = "link-action";
+  downloadLink.textContent = "Download current";
+  downloadLink.href = `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProduct.id)}/versions/${encodeURIComponent(workProduct.current_version_id)}/download`;
+  header.appendChild(downloadLink);
+
+  if (workProduct.versions.length > 1) {
+    const versionsButton = document.createElement("button");
+    versionsButton.type = "button";
+    versionsButton.className = "link-action";
+    versionsButton.textContent = "Versions";
+    versionsButton.addEventListener("click", () => openVersionsDialog({
+      name: workProduct.title,
+      currentVersionId: workProduct.current_version_id,
+      listUrl: `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProduct.id)}/versions`,
+      downloadUrlFor: (version) =>
+        `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProduct.id)}/versions/${encodeURIComponent(version.id)}/download`,
+    }));
+    header.appendChild(versionsButton);
+  }
+  li.appendChild(header);
+
+  const addVersionForm = document.createElement("form");
+  addVersionForm.className = "task-add-version-form";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.setAttribute("aria-label", `Replace ${workProduct.title} with a new version`);
+  const addVersionButton = document.createElement("button");
+  addVersionButton.type = "submit";
+  addVersionButton.textContent = "Add version";
+  addVersionForm.append(fileInput, addVersionButton);
+  addVersionForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!fileInput.files.length) return;
+    await addWorkProductVersion(task.id, workProduct.id, fileInput.files[0]);
+  });
+  li.appendChild(addVersionForm);
+
+  return li;
+}
+
+function renderTaskDetail(task) {
+  const detail = document.createElement("div");
+  detail.className = "task-detail";
+  detail.hidden = true;
+
+  if (task.description) {
+    const descEl = document.createElement("p");
+    descEl.className = "desc";
+    descEl.textContent = task.description;
+    detail.appendChild(descEl);
+  }
+
+  const controls = document.createElement("div");
+  controls.className = "task-status-controls";
+
+  const statusSelect = document.createElement("select");
+  statusSelect.setAttribute("aria-label", `Status for ${task.title}`);
+  ["open", "in_progress", "cancelled"].forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = TASK_STATUS_LABELS[value];
+    if (value === task.status) option.selected = true;
+    statusSelect.appendChild(option);
+  });
+  if (task.status === "submitted") {
+    const submittedOption = document.createElement("option");
+    submittedOption.value = "submitted";
+    submittedOption.textContent = "Submitted";
+    submittedOption.selected = true;
+    submittedOption.disabled = true;
+    statusSelect.appendChild(submittedOption);
+  }
+  statusSelect.addEventListener("change", () => updateTaskStatus(task.id, statusSelect.value));
+  controls.appendChild(statusSelect);
+
+  const assigneeSelect = document.createElement("select");
+  assigneeSelect.setAttribute("aria-label", `Assignee for ${task.title}`);
+  const unassignedOption = document.createElement("option");
+  unassignedOption.value = "";
+  unassignedOption.textContent = "Unassigned";
+  assigneeSelect.appendChild(unassignedOption);
+  devIdentities.forEach((devIdentity) => {
+    const option = document.createElement("option");
+    option.value = devIdentity.user.id;
+    option.textContent = devIdentity.user.display_name;
+    if (devIdentity.user.id === task.assigned_to) option.selected = true;
+    assigneeSelect.appendChild(option);
+  });
+  assigneeSelect.addEventListener("change", () => reassignTask(task.id, assigneeSelect.value || null));
+  controls.appendChild(assigneeSelect);
+  detail.appendChild(controls);
+
+  const commentsHeading = document.createElement("h4");
+  commentsHeading.textContent = "Comments";
+  detail.appendChild(commentsHeading);
+
+  const commentsListEl = document.createElement("ul");
+  commentsListEl.className = "task-comments";
+  task.comments.forEach((comment) => {
+    const item = document.createElement("li");
+    const author = comment.author ? comment.author.display_name : "Unknown identity";
+    const meta = document.createElement("div");
+    meta.className = "version-meta";
+    meta.textContent = `${author} · ${formatDate(comment.created_at)}`;
+    const body = document.createElement("div");
+    body.textContent = comment.body;
+    item.append(meta, body);
+    commentsListEl.appendChild(item);
+  });
+  detail.appendChild(commentsListEl);
+
+  const commentForm = document.createElement("form");
+  commentForm.className = "task-comment-form";
+  const commentInput = document.createElement("textarea");
+  commentInput.rows = 2;
+  commentInput.maxLength = 4000;
+  commentInput.setAttribute("aria-label", `Add a comment to ${task.title}`);
+  const commentButton = document.createElement("button");
+  commentButton.type = "submit";
+  commentButton.textContent = "Add comment";
+  commentForm.append(commentInput, commentButton);
+  commentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!commentInput.value.trim()) return;
+    await addTaskComment(task.id, commentInput.value);
+  });
+  detail.appendChild(commentForm);
+
+  const workProductsHeading = document.createElement("h4");
+  workProductsHeading.textContent = "Work products";
+  detail.appendChild(workProductsHeading);
+
+  const workProductsListEl = document.createElement("ul");
+  workProductsListEl.className = "task-work-products";
+  task.work_products.forEach((wp) => workProductsListEl.appendChild(renderWorkProduct(task, wp)));
+  detail.appendChild(workProductsListEl);
+
+  const newWorkProductForm = document.createElement("form");
+  newWorkProductForm.className = "task-new-work-product-form";
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.placeholder = "Work product title";
+  titleInput.maxLength = 200;
+  const wpFileInput = document.createElement("input");
+  wpFileInput.type = "file";
+  wpFileInput.setAttribute("aria-label", `Submit a work product for ${task.title}`);
+  const submitButton = document.createElement("button");
+  submitButton.type = "submit";
+  submitButton.textContent = "Submit work product";
+  newWorkProductForm.append(titleInput, wpFileInput, submitButton);
+  newWorkProductForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!wpFileInput.files.length) return;
+    await submitWorkProduct(task.id, titleInput.value, wpFileInput.files[0]);
+  });
+  detail.appendChild(newWorkProductForm);
+
+  return detail;
+}
+
+function renderTask(task) {
+  const li = document.createElement("li");
+  li.className = "task-item";
+  const isExpanded = expandedTaskIds.has(task.id);
+
+  const header = document.createElement("div");
+  header.className = "task-header";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "task-expand-toggle";
+  toggle.setAttribute("aria-expanded", String(isExpanded));
+  toggle.setAttribute("aria-label", `Expand details for ${task.title}`);
+  const icon = document.createElement("span");
+  icon.className = "task-expand-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "▸";
+  const nameEl = document.createElement("span");
+  nameEl.className = "name";
+  nameEl.textContent = task.title;
+  toggle.append(icon, nameEl);
+  header.appendChild(toggle);
+
+  const statusPill = document.createElement("span");
+  statusPill.className = `task-status task-status-${task.status}`;
+  statusPill.textContent = TASK_STATUS_LABELS[task.status] || task.status;
+  header.appendChild(statusPill);
+  li.appendChild(header);
+
+  const meta = document.createElement("div");
+  meta.className = "task-meta";
+  const assigneeSpan = document.createElement("span");
+  assigneeSpan.textContent = `Assignee: ${task.assigned_user ? task.assigned_user.display_name : "Unassigned"}`;
+  meta.appendChild(assigneeSpan);
+  if (task.workstream) {
+    const workstreamSpan = document.createElement("span");
+    workstreamSpan.textContent = ` · Workstream: ${task.workstream.name}`;
+    meta.appendChild(workstreamSpan);
+  }
+  li.appendChild(meta);
+
+  const detail = renderTaskDetail(task);
+  detail.hidden = !isExpanded;
+  li.appendChild(detail);
+
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    detail.hidden = expanded;
+    if (expanded) expandedTaskIds.delete(task.id);
+    else expandedTaskIds.add(task.id);
+  });
+
+  return li;
+}
+
+async function loadTasks() {
+  await populateTaskFormOptions();
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`);
+  if (!res.ok) return;
+  const list = await res.json();
+  tasksListEl.textContent = "";
+  tasksEmptyEl.hidden = list.length !== 0;
+  list.forEach((task) => tasksListEl.appendChild(renderTask(task)));
+}
+
+async function updateTaskStatus(taskId, status) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (res.ok) await loadTasks();
+}
+
+async function reassignTask(taskId, userId) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assigned_to: userId }),
+  });
+  if (res.ok) await loadTasks();
+}
+
+async function addTaskComment(taskId, body) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (res.ok) await loadTasks();
+}
+
+async function submitWorkProduct(taskId, title, file) {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("file", file);
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/work-products`, {
+    method: "POST",
+    body: formData,
+  });
+  if (res.ok) {
+    await loadTasks();
+  } else {
+    const body = await res.json().catch(() => ({}));
+    window.alert(body.error || "Could not submit the work product.");
+  }
+}
+
+async function addWorkProductVersion(taskId, workProductId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProductId)}/versions`, {
+    method: "POST",
+    body: formData,
+  });
+  if (res.ok) {
+    await loadTasks();
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409) {
+    window.alert("That file is identical to the current version - nothing to replace.");
+  } else {
+    window.alert(body.error || "Could not upload a new version.");
+  }
+}
+
+taskFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  taskErrorEl.textContent = "";
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: taskTitleInputEl.value,
+      description: taskDescriptionInputEl.value,
+      workstream_id: taskWorkstreamSelectEl.value || null,
+      assigned_to: taskAssigneeSelectEl.value || null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    taskErrorEl.textContent = body.error || "Could not create the task.";
+    return;
+  }
+  taskTitleInputEl.value = "";
+  taskDescriptionInputEl.value = "";
+  taskWorkstreamSelectEl.value = "";
+  taskAssigneeSelectEl.value = "";
+  await loadTasks();
+});
+
 function updateCrossAnalysisAvailability() {
   const pdfCount = latestDocuments.filter((d) => d.extension === ".pdf").length;
   crossAnalysisCardEl.hidden = false;
@@ -730,13 +1113,15 @@ async function uploadNewVersion(doc, file) {
   }
 }
 
-async function openVersionsDialog(doc) {
-  versionsDialogNameEl.textContent = doc.original_filename;
+// Task 13.1: generalized from a documents-only helper so work-product
+// submission versions (a different table, a different download route -
+// see work_products.py) can reuse the exact same dialog/markup instead of
+// a second, near-identical one.
+async function openVersionsDialog({ name, listUrl, downloadUrlFor, currentVersionId }) {
+  versionsDialogNameEl.textContent = name;
   versionsListEl.textContent = "";
 
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions`
-  );
+  const res = await fetch(listUrl);
   const versions = res.ok ? await res.json() : [];
 
   versions
@@ -747,13 +1132,13 @@ async function openVersionsDialog(doc) {
 
       const meta = document.createElement("span");
       meta.className = "version-meta";
-      const current = version.id === doc.current_version_id ? " (current)" : "";
+      const current = version.id === currentVersionId ? " (current)" : "";
       meta.textContent = `v${version.version_number}${current} · ${formatSize(version.size_bytes)} · ${formatDate(version.uploaded_at)}`;
 
       const downloadLink = document.createElement("a");
       downloadLink.className = "link-action";
       downloadLink.textContent = "Download";
-      downloadLink.href = `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(doc.id)}/versions/${encodeURIComponent(version.id)}/download`;
+      downloadLink.href = downloadUrlFor(version);
 
       item.append(meta, downloadLink);
       versionsListEl.append(item);
@@ -1240,5 +1625,6 @@ loadProject().then(() => {
     loadReconciliations();
     loadBrief();
     loadWorkstreams();
+    loadTasks();
   }
 });

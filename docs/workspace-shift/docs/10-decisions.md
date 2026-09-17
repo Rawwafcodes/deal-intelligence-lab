@@ -76,6 +76,53 @@ frontend regressions, accessibility fix) does not require the frontend decision 
 first, since it adds no new screen. O01 remains a hard prerequisite for 11.3b, which
 does.
 
+## Integrity Review product/roadmap integration (proposed 2026-09-17)
+Adopted into documentation only, from an externally-supplied package
+(`workspace-integrity-integration` v1.0.0, prepared from the current
+workspace-shift status/roadmap plus a third-party contribution titled
+*A Multiplayer Diligence System for Deal Teams*; preserved in full at
+`docs/workspace-shift/integrations/workspace-integrity-integration-v1.0.0/`).
+This is a roadmap/product-hierarchy proposal the founder directed this
+session to adopt as documentation - not an implementation authorization.
+No code was written or changed for any of I01-I08 below; M13.2 remains
+the next implementation task unchanged. Numbered "I" (integration) here
+to match the source package's own numbering, distinct from this file's
+own D/P/O series.
+
+I01 Workspace remains the product centre; Integrity Review is a capability
+family inside Mandates, not a replacement product hierarchy.
+I02 First implementation occurs at M14.2 (Work-product Integrity Review),
+gated on M13 acceptance and M14.1 completion - not before.
+I03 One shared findings workflow: Integrity findings, human findings and
+existing reconciliation findings share one review/resolution system with
+origin labels and lineage - no parallel "integrity" findings silo.
+I04 Review immutable work-product SubmissionVersions (13.1) first; a
+native collaborative editor is deferred until evidence proves it necessary.
+I05 Persist only material assertion snapshots actually used in real
+M14.2 reviews; promote them into a reusable ledger (M16.2) only after
+validation - no universal claim-store schema built ahead of evidence.
+I06 NLI, pgvector, graph storage, commercial parsing and CRDTs remain
+candidates for M16, not predetermined requirements - benchmark before adding.
+I07 Authorized leaders may inspect work, versions, review state and
+decisions; no AI performance scoring or analyst leaderboard, ever.
+I08 Event-triggered Integrity Review (M15.3) stays a normal, visible,
+authorized, budgeted, auditable mandate - never hidden background
+monitoring of every edit.
+
+Non-goals carried over from the source package: rebuilding Milestones
+1-13; building another data room; replacing Slack/Teams/Word/Excel/
+PowerPoint; autonomous delivery approval; a universal ontology; hidden
+surveillance; unbounded continuous inference; premature cloud/production
+deployment. Open questions needing evidence before M16 (not blockers to
+M13.2/M14): which assertions recur enough to justify a persistent ledger;
+what proportion of valuable defects is truly deterministic; whether
+retrieval improves over native long-context reasoning on real deal
+material; whether a specialized NLI model helps after strong-model
+filtering; how bilingual aliases/translations get human-confirmed; at
+what workflow point (submission/review/live drafting) users actually want
+challenges surfaced; which Integrity Review trigger events should require
+approval before execution.
+
 ## Open, not blockers to documenting the direction
 O01 RESOLVED 2026-09-16 — see D13: adopt the React/shadcn scaffold for new screens
 (starting with 11.3b), existing static pages stay as-is. No longer open.

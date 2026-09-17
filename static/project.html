@@ -87,6 +87,38 @@
       </form>
     </div>
 
+    <div class="card" id="tasks-card" hidden>
+      <h2>Tasks</h2>
+      <p class="section-hint">
+        Assigned work items for this deal. Comment on a task and submit a work-product version when
+        it is ready to be looked at - a full review/approval workflow is still to come.
+      </p>
+      <ul class="project-list task-list" id="tasks-list"></ul>
+      <div class="empty-state" id="tasks-empty" hidden>
+        <p>No tasks yet.</p>
+      </div>
+      <form id="task-form">
+        <div class="field">
+          <label for="task-title">New task title</label>
+          <input type="text" id="task-title" maxlength="200" />
+        </div>
+        <div class="field">
+          <label for="task-description">Description</label>
+          <textarea id="task-description" rows="2" maxlength="4000"></textarea>
+        </div>
+        <div class="field">
+          <label for="task-workstream">Workstream (optional)</label>
+          <select id="task-workstream"><option value="">None</option></select>
+        </div>
+        <div class="field">
+          <label for="task-assignee">Assign to (optional)</label>
+          <select id="task-assignee"><option value="">Unassigned</option></select>
+        </div>
+        <button type="submit">Add task</button>
+        <div id="task-error" class="error"></div>
+      </form>
+    </div>
+
     <div class="card" id="upload-card" hidden>
       <h2>Upload documents</h2>
       <p class="section-hint">Original files are saved unchanged. Supported types: PDF, DOCX, XLSX, XLS, PPTX, TXT, and common image formats.</p>
