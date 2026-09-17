@@ -19,17 +19,26 @@ does not require one - `workstreams.py`'s own domain rule ("assignment
 does not silently grant or restrict document access") applies here
 identically: this module never checks or changes anyone's access either.
 
-Status is deliberately minimal for this task: `open -> in_progress ->
-submitted` (once a WorkProduct version exists - see `work_products.py`)
-or `cancelled` from either open state. `"submitted"` is never a directly
-settable value via `update_status` - it is a hallmark of first submission
-recorded by `mark_submitted`, called only from `work_products.py`'s
-creation path (composed at the API boundary in `server.py`, not by one
-module importing the other - the same "neither module depends on the
-other" shape this app already uses for workstreams+identity). The
-review/return/approve state machine docs/03's ReviewDecision/Approval
-records implies is Task 13.2's job, not built here: a "submitted" task
-has nothing yet acting on it beyond existing to be reviewed later.
+Status: `open -> in_progress -> submitted` (once a WorkProduct version
+exists - see `work_products.py`) `-> approved` or `-> returned` (Task
+13.2's own review lifecycle - see `reviews.py`), or `cancelled` from any
+non-terminal state. `"submitted"`, `"returned"`, and `"approved"` are
+never directly settable values via `update_status` - each is the
+hallmark of a specific event recorded elsewhere (a work-product
+submission, a review decision) and reached only through `mark_submitted`/
+`mark_returned`/`mark_approved`, called from the API boundary in
+`server.py` (never by tasks.py importing work_products.py or reviews.py,
+or vice versa - the same "neither module depends on the other" shape
+this app already uses for workstreams+identity). Resubmitting after
+`returned` (a new work-product version, or a new work product) calls
+`mark_submitted` exactly as a first submission does - the task re-enters
+review with no separate "resubmitted" status, matching the roadmap's own
+"resubmission creates a new immutable version," not a new state machine
+branch. `mark_submitted` re-flips even an `approved` task back to
+`submitted` when genuinely new content arrives after approval - the
+literal mechanism behind "approval is version-specific and cannot
+silently transfer to a new version": new unreviewed content means the
+task is, correctly, unreviewed again.
 """
 
 from __future__ import annotations
@@ -44,9 +53,10 @@ MAX_TITLE_LENGTH = 200
 MAX_DESCRIPTION_LENGTH = 4000
 MAX_COMMENT_LENGTH = 4000
 
-# "submitted" is reachable only via mark_submitted (see module docstring) -
-# never accepted directly by update_status.
-TASK_STATUSES = {"open", "in_progress", "submitted", "cancelled"}
+# "submitted"/"returned"/"approved" are reachable only via mark_submitted/
+# mark_returned/mark_approved (see module docstring) - never accepted
+# directly by update_status.
+TASK_STATUSES = {"open", "in_progress", "submitted", "returned", "approved", "cancelled"}
 _MANUALLY_SETTABLE_STATUSES = {"open", "in_progress", "cancelled"}
 
 
@@ -228,7 +238,8 @@ def update_status(project_id: str, task_id: str, status: str) -> Task:
     if status not in _MANUALLY_SETTABLE_STATUSES:
         raise TaskValidationError(
             f"status must be one of {sorted(_MANUALLY_SETTABLE_STATUSES)} "
-            "('submitted' is set automatically by a work-product submission, not directly)"
+            "('submitted'/'returned'/'approved' are set automatically by a work-product "
+            "submission or a review decision, not directly)"
         )
     _set_task(task_id, status=status)
     updated = get_task(project_id, task_id)
@@ -241,11 +252,35 @@ def mark_submitted(project_id: str, task_id: str) -> Task | None:
     API boundary in server.py, not imported by work_products.py - see
     module docstring). A cancelled task staying cancelled despite a late
     submission is deliberate: cancelling a task is a human decision this
-    function does not second-guess."""
+    function does not second-guess. Deliberately *does* override
+    "approved" or "returned" - new content after either means the task is
+    correctly unreviewed again (see module docstring)."""
     task = get_task(project_id, task_id)
     if task is None or task.status == "cancelled":
         return task
     _set_task(task_id, status="submitted")
+    return get_task(project_id, task_id)
+
+
+def mark_returned(project_id: str, task_id: str) -> Task | None:
+    """Called only from the review-decision path (composed at the API
+    boundary in server.py - see reviews.py). Same cancelled-task guard as
+    mark_submitted."""
+    task = get_task(project_id, task_id)
+    if task is None or task.status == "cancelled":
+        return task
+    _set_task(task_id, status="returned")
+    return get_task(project_id, task_id)
+
+
+def mark_approved(project_id: str, task_id: str) -> Task | None:
+    """Called only from the review-decision path (composed at the API
+    boundary in server.py - see reviews.py). Same cancelled-task guard as
+    mark_submitted."""
+    task = get_task(project_id, task_id)
+    if task is None or task.status == "cancelled":
+        return task
+    _set_task(task_id, status="approved")
     return get_task(project_id, task_id)
 
 

@@ -330,3 +330,233 @@ export async function cancelRun(projectId: string, mandateId: string, runId: str
   )
   return jsonOrThrow(res, "Could not cancel the run.")
 }
+
+// Task 14.2: Work-product Integrity Review's own selection data (target/
+// peer submissions and their real, immutable versions; workstreams; the
+// current brief) - the exact "make exact version selection visible"
+// inputs the mandate composer needs for this one capability.
+
+export interface WorkProductVersionSummary {
+  id: string
+  version_number: number
+  uploaded_at: string
+}
+
+export interface WorkProductSummary {
+  id: string
+  task_id: string
+  title: string
+  extension: string
+  version_number: number
+  current_version_id: string | null
+  versions: WorkProductVersionSummary[]
+}
+
+export interface TaskWithWorkProducts {
+  id: string
+  title: string
+  work_products: WorkProductSummary[]
+}
+
+export async function listTasksWithWorkProducts(projectId: string): Promise<TaskWithWorkProducts[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`)
+  return jsonOrThrow(res, "Could not load tasks.")
+}
+
+export interface WorkstreamSummary {
+  id: string
+  name: string
+}
+
+export async function listWorkstreams(projectId: string): Promise<WorkstreamSummary[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`)
+  return jsonOrThrow(res, "Could not load workstreams.")
+}
+
+export interface CurrentBriefVersion {
+  id: string
+  version_number: number
+  objective: string
+}
+
+export async function getCurrentBriefVersion(projectId: string): Promise<CurrentBriefVersion | null> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief`)
+  return jsonOrThrow(res, "Could not load the deal brief.")
+}
+
+// Task 14.2: Integrity Review candidates - never a shared finding until
+// an explicit human decision (see integrity_reviews.py's own module
+// docstring); this is the one and only path that publishes one.
+
+export interface IntegrityCandidate {
+  id: string
+  integrity_review_id: string
+  candidate_index: number
+  title: string
+  classification: string
+  severity: string
+  assertion: string
+  conflicting_or_missing_evidence: string
+  why_it_matters: string
+  uncertainty: string
+  recommended_resolution: string
+  deterministic_or_judgment: string
+  raw_text: string
+  decision: "pending" | "accepted" | "rejected" | "duplicate" | "unresolved"
+  decision_notes: string
+  decided_by: string | null
+  decided_at: string | null
+  duplicate_of_finding_id: string | null
+  published_finding_id: string | null
+  edits: Record<string, string> | null
+}
+
+export interface PublishedIntegrityFinding {
+  id: string
+  origin: string
+  title: string
+  classification: string
+  severity: string | null
+  effective_severity: string | null
+  assertion: string
+  conflicting_or_missing_evidence: string
+  recommended_resolution: string
+  lineage: Record<string, unknown>
+}
+
+export interface IntegrityReview {
+  id: string
+  project_id: string
+  target_work_product_id: string
+  target_version_id: string
+  source_document_ids: string[]
+  peer_work_product_ids: string[]
+  brief_version_id: string | null
+  workstream_id: string | null
+  review_scope: string
+  status: "success" | "error"
+  model: string
+  error_message: string | null
+  materials_reviewed_text: string | null
+  candidates: IntegrityCandidate[]
+  workspace_id: string | null
+  published_findings: PublishedIntegrityFinding[]
+}
+
+export async function getIntegrityReview(projectId: string, reviewId: string): Promise<IntegrityReview> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/integrity-reviews/${encodeURIComponent(reviewId)}`
+  )
+  return jsonOrThrow(res, "Could not load the integrity review.")
+}
+
+export interface IntegrityCandidateDecisionPayload {
+  decision: "accepted" | "rejected" | "duplicate" | "unresolved"
+  decision_notes?: string
+  edits?: Partial<Record<"title" | "classification" | "severity" | "why_it_matters", string>>
+  duplicate_of_finding_id?: string
+}
+
+export async function decideIntegrityCandidate(
+  projectId: string, reviewId: string, candidateId: string, payload: IntegrityCandidateDecisionPayload
+): Promise<IntegrityCandidate> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/integrity-reviews/${encodeURIComponent(reviewId)}` +
+      `/candidates/${encodeURIComponent(candidateId)}/decision`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+  )
+  return jsonOrThrow(res, "Could not record that decision.")
+}
+
+// Task 13.3: Workspace/Deal Overview - every number here is a real count
+// of real records (docs/05-experience.md: "Counts derive from real
+// records with visible filters. No invented percent-health metrics.").
+
+export interface TaskSummary {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  workstream_id: string | null
+  assigned_to: string | null
+  assigned_user: IdentityUser | null
+  workstream: { id: string; name: string } | null
+  created_by: string | null
+  status: string
+  created_at: string
+  updated_at: string
+  comments: unknown[]
+  work_products: unknown[]
+}
+
+export interface ActivityEvent {
+  kind: "comment" | "submission" | "review_decision"
+  at: string
+  task_id: string
+  task_title: string
+  work_product_title?: string
+  version_number?: number
+  decision?: "approved" | "returned"
+  actor: IdentityUser | null
+  summary: string | null
+}
+
+export interface FindingsSummary {
+  total: number
+  by_severity: Record<string, number>
+  open_by_severity: Record<string, number>
+}
+
+export interface DealOverview {
+  project: Project
+  restricted?: false
+  brief: Record<string, unknown> | null
+  workstreams: unknown[]
+  tasks: { counts: Record<string, number>; needs_attention: TaskSummary[] }
+  mandates: { counts: Record<string, number>; recent: Mandate[] }
+  reconciliations: { count: number; findings: FindingsSummary }
+  documents: { count: number }
+  activity: ActivityEvent[]
+}
+
+// Task 13.4 / docs/05-experience.md: "External executive view exposes
+// approved shared materials only by default" - a deliberately much
+// smaller payload for the external_executive deal role, with no tasks,
+// comments, mandates, activity feed, or reconciliation/finding detail.
+export interface ApprovedDeliverable {
+  task_title: string
+  work_product: { id: string; title: string; version_number: number } & Record<string, unknown>
+  approved_at: string | null
+}
+
+export interface RestrictedDealOverview {
+  project: Project
+  restricted: true
+  brief: Record<string, unknown> | null
+  approved_deliverables: ApprovedDeliverable[]
+}
+
+export async function getDealOverview(projectId: string): Promise<DealOverview | RestrictedDealOverview> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/overview`)
+  return jsonOrThrow(res, "Could not load the deal overview.")
+}
+
+export interface WorkspaceOverviewEngagement {
+  project: Project
+  task_counts: Record<string, number>
+  mandate_counts: Record<string, number>
+}
+
+export interface WorkspaceOverviewTask extends TaskSummary {
+  project: Project
+}
+
+export interface WorkspaceOverview {
+  my_attention: WorkspaceOverviewTask[]
+  engagements: WorkspaceOverviewEngagement[]
+}
+
+export async function getWorkspaceOverview(): Promise<WorkspaceOverview> {
+  const res = await fetch("/api/overview")
+  return jsonOrThrow(res, "Could not load the workspace overview.")
+}

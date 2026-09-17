@@ -50,6 +50,23 @@ by retheming the two shared stylesheets (`static/style.css`, `static/workspace.c
 at the token/component level only - no HTML markup, no JS, no per-page styles
 touched, since every one of the app's 9 pages already inherits from those two files
 with no inline styles. Full evidence: `STATUS.md`'s 2026-09-16 entry.
+D14 (added 2026-09-17, Task 14.1) Every registered mandate capability
+declares a real, enforced `input_schema`/`output_schema`/
+`allowed_source_formats` on its own `CapabilityDescriptor` - checked by a
+minimal, hand-rolled schema validator (`mandates._validate_against_schema`;
+object/required/properties/type/items/minItems only, not a general JSON
+Schema engine or an added dependency) at plan-propose time (input) and
+immediately after every execution (output). This replaces the prior
+pattern of ad hoc, capability-name-keyed `if capability == "...":` checks
+scattered across `_default_input_for_stage` and each executor with one
+declared, introspectable contract per capability - the literal
+mechanism docs/04-mandate-engine.md's capability-boundary paragraph
+("Register each capability with: ... input schema; output schema;
+allowed formats...") already called for. Binding on every future
+capability, starting with M14.2's own `integrity.review_work_product`:
+a new capability that does not declare both schemas is incomplete, not
+merely under-documented. Full contract for the one capability this
+formalizes today: `docs/12-reconciliation-capability-contract.md`.
 
 ## Proposed defaults for founder review during adoption
 P01 Reviewer can approve assigned submissions; only deal lead approves final position.

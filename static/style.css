@@ -865,7 +865,9 @@ textarea:focus-visible,
 }
 
 .task-status-in_progress { background: #0e2636; color: #93c5fd; border-color: #1c3f56; }
-.task-status-submitted { background: #0f2e1f; color: var(--success); border-color: #163c28; }
+.task-status-submitted { background: #332c10; color: var(--accent-gold); border-color: #52471c; }
+.task-status-returned { background: #3a2411; color: #fdba74; border-color: #5a3d1c; }
+.task-status-approved { background: #0f2e1f; color: var(--success); border-color: #163c28; }
 .task-status-cancelled { background: #3a1518; color: #fca5a5; border-color: #5a2226; }
 
 .task-meta {
@@ -925,7 +927,8 @@ textarea:focus-visible,
 
 .task-comment-form,
 .task-new-work-product-form,
-.task-add-version-form {
+.task-add-version-form,
+.task-review-form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -933,16 +936,25 @@ textarea:focus-visible,
   margin-top: 10px;
 }
 
-.task-comment-form textarea {
+.task-comment-form textarea,
+.task-review-form textarea {
   flex: 1;
   min-width: 200px;
 }
 
 .task-comment-form button,
 .task-new-work-product-form button,
-.task-add-version-form button {
+.task-add-version-form button,
+.task-review-form button {
   padding: 6px 14px;
   font-size: 0.85rem;
+}
+
+.task-review-history-heading {
+  margin: 10px 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .task-work-products {

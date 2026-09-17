@@ -123,7 +123,11 @@ class IdentityEndpointTests(unittest.TestCase):
         status, body = self._client().get("/api/dev/identities")
         self.assertEqual(status, 200)
         emails = {row["user"]["email"] for row in body}
-        self.assertEqual(emails, {"lead@local.dev", "analyst@local.dev", "reviewer@local.dev"})
+        # Task 13.4 added a 4th seeded identity for the external_executive
+        # deal role, alongside the original analyst/reviewer/deal_lead.
+        self.assertEqual(
+            emails, {"lead@local.dev", "analyst@local.dev", "reviewer@local.dev", "external@local.dev"}
+        )
 
     def test_switching_identity_changes_session(self):
         client = self._client()
@@ -264,6 +268,86 @@ class IdentityEndpointTests(unittest.TestCase):
         client = self._client()
         status, _ = client.post("/api/projects", {"name": "Acme Merger", "description": ""})
         self.assertEqual(status, 201)
+
+    # -- deal membership management (Task 13.4) -----------------------------
+
+    def test_deal_lead_can_grant_and_list_membership(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        status, memberships = owner.post(
+            f"/api/projects/{project['id']}/memberships", {"user_id": reviewer.id, "role": "reviewer"}
+        )
+        self.assertEqual(status, 201)
+        roles = {m["user_id"]: m["role"] for m in memberships}
+        self.assertEqual(roles[reviewer.id], "reviewer")
+
+        status, listed = owner.get(f"/api/projects/{project['id']}/memberships")
+        self.assertEqual(status, 200)
+        self.assertEqual({m["user_id"]: m["role"] for m in listed}, roles)
+
+    def test_non_deal_lead_cannot_grant_membership(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+
+        analyst = next(u for u in identity.list_users() if u.email == "analyst@local.dev")
+        identity.add_deal_membership(project["id"], analyst.id, "analyst")
+        analyst_client = self._client()
+        analyst_client.post("/api/dev/session", {"user_id": analyst.id})
+
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        status, _ = analyst_client.post(
+            f"/api/projects/{project['id']}/memberships", {"user_id": reviewer.id, "role": "reviewer"}
+        )
+        self.assertEqual(status, 403)
+
+    def test_grant_with_invalid_role_is_rejected(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        status, _ = owner.post(
+            f"/api/projects/{project['id']}/memberships", {"user_id": reviewer.id, "role": "not-a-real-role"}
+        )
+        self.assertEqual(status, 400)
+
+    def test_deal_lead_can_revoke_membership(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        owner.post(f"/api/projects/{project['id']}/memberships", {"user_id": reviewer.id, "role": "reviewer"})
+
+        status, _ = owner.delete(f"/api/projects/{project['id']}/memberships/{reviewer.id}")
+        self.assertEqual(status, 200)
+        self.assertFalse(identity.has_deal_access(project["id"], reviewer.id))
+
+    def test_non_deal_lead_cannot_revoke_membership(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        owner.post(f"/api/projects/{project['id']}/memberships", {"user_id": reviewer.id, "role": "reviewer"})
+
+        reviewer_client = self._client()
+        reviewer_client.post("/api/dev/session", {"user_id": reviewer.id})
+        status, _ = reviewer_client.delete(f"/api/projects/{project['id']}/memberships/{reviewer.id}")
+        self.assertEqual(status, 403)
+        self.assertTrue(identity.has_deal_access(project["id"], reviewer.id))
+
+    def test_revoking_nonexistent_membership_via_api_is_not_found(self):
+        owner = self._client()
+        status, project = owner.post("/api/projects", {"name": "Acme Merger", "description": ""})
+        self.assertEqual(status, 201)
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        status, _ = owner.delete(f"/api/projects/{project['id']}/memberships/{reviewer.id}")
+        self.assertEqual(status, 404)
 
 
 if __name__ == "__main__":

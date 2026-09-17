@@ -17,10 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from tests.test_identity_endpoints import _Client
 from tests.test_multipart import build_body
 
 import documents
 import identity
+import reviews
 import server
 import store
 import tasks
@@ -48,6 +50,7 @@ class TaskAndWorkProductEndpointTests(unittest.TestCase):
         workstreams.init_workstreams_db()
         tasks.init_tasks_db()
         work_products.init_work_products_db()
+        reviews.init_reviews_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
@@ -279,6 +282,164 @@ class TaskAndWorkProductEndpointTests(unittest.TestCase):
             f"/api/projects/{self.project.id}/work-products/{wp['id']}/versions/not-a-real-version/download"
         )
         self.assertEqual(status, 404)
+
+    # -- review decisions (Task 13.2) ---------------------------------------
+
+    def _review(self, work_product_id: str, decision: str, rationale: str = "", related_comment_id=None):
+        payload = {"decision": decision, "rationale": rationale}
+        if related_comment_id is not None:
+            payload["related_comment_id"] = related_comment_id
+        return self._post(f"/api/projects/{self.project.id}/work-products/{work_product_id}/review", payload)
+
+    def _submitted_task_and_work_product(self):
+        _, task = self._post(self._tasks_url(), {"title": "Reconcile the two sources"})
+        _, result = self._upload_work_product(task["id"], "Reconciliation memo", "memo.txt", b"v1 content")
+        return task, result["work_product"]
+
+    def test_approve_marks_task_approved_and_targets_current_version(self):
+        task, wp = self._submitted_task_and_work_product()
+        status, updated_task = self._review(wp["id"], "approved", rationale="Looks correct.")
+        self.assertEqual(status, 201)
+        self.assertEqual(updated_task["status"], "approved")
+        reviewed_wp = updated_task["work_products"][0]
+        self.assertEqual(len(reviewed_wp["review_decisions"]), 1)
+        self.assertEqual(reviewed_wp["review_decisions"][0]["decision"], "approved")
+        self.assertEqual(reviewed_wp["review_decisions"][0]["submission_version_id"], wp["current_version_id"])
+        self.assertTrue(reviewed_wp["current_version_approved"])
+
+    def test_return_requires_rationale(self):
+        task, wp = self._submitted_task_and_work_product()
+        status, _ = self._review(wp["id"], "returned", rationale="")
+        self.assertEqual(status, 400)
+
+    def test_return_marks_task_returned(self):
+        task, wp = self._submitted_task_and_work_product()
+        status, updated_task = self._review(wp["id"], "returned", rationale="Numbers don't tie out.")
+        self.assertEqual(status, 201)
+        self.assertEqual(updated_task["status"], "returned")
+        reviewed_wp = updated_task["work_products"][0]
+        self.assertFalse(reviewed_wp["current_version_approved"])
+
+    def test_cannot_review_a_task_that_is_not_submitted(self):
+        _, task = self._post(self._tasks_url(), {"title": "x"})
+        # No work product exists yet, so there is nothing to review -
+        # simulate by creating one, approving it, then trying to review
+        # again while the task sits "approved" (not "submitted").
+        _, result = self._upload_work_product(task["id"], "Model", "model.xlsx", b"v1")
+        wp = result["work_product"]
+        self._review(wp["id"], "approved")
+        status, _ = self._review(wp["id"], "approved")
+        self.assertEqual(status, 400)
+
+    def test_resubmission_after_return_re_enters_review(self):
+        task, wp = self._submitted_task_and_work_product()
+        self._review(wp["id"], "returned", rationale="Please redo the calculation.")
+        status, add_result = self._add_work_product_version(wp["id"], "memo.txt", b"v2 content")
+        self.assertEqual(status, 201)
+        status, fetched = self._get(self._tasks_url(f"/{task['id']}"))
+        self.assertEqual(fetched["status"], "submitted")
+        # The old return decision is still there - append-only history.
+        self.assertEqual(len(fetched["work_products"][0]["review_decisions"]), 1)
+
+    def test_approval_does_not_transfer_to_a_new_version(self):
+        task, wp = self._submitted_task_and_work_product()
+        self._review(wp["id"], "approved")
+        self._add_work_product_version(wp["id"], "memo.txt", b"v2 content")
+        status, fetched = self._get(self._tasks_url(f"/{task['id']}"))
+        # New content means the task is unreviewed again, and the old
+        # approval no longer applies to the new current version.
+        self.assertEqual(fetched["status"], "submitted")
+        self.assertFalse(fetched["work_products"][0]["current_version_approved"])
+        self.assertEqual(len(fetched["work_products"][0]["review_decisions"]), 1)
+
+    def test_related_comment_id_must_belong_to_the_same_task(self):
+        task, wp = self._submitted_task_and_work_product()
+        _, comments = self._post(self._tasks_url(f"/{task['id']}/comments"), {"body": "Heads up."})
+        comment_id = comments[0]["id"]
+        status, updated_task = self._review(
+            wp["id"], "returned", rationale="See comment.", related_comment_id=comment_id
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(
+            updated_task["work_products"][0]["review_decisions"][0]["related_comment_id"], comment_id
+        )
+
+    def test_unknown_related_comment_id_is_rejected(self):
+        task, wp = self._submitted_task_and_work_product()
+        status, _ = self._review(wp["id"], "returned", rationale="x", related_comment_id="not-a-real-comment")
+        self.assertEqual(status, 400)
+
+    def test_review_unknown_work_product_is_not_found(self):
+        status, _ = self._review("not-a-real-work-product", "approved")
+        self.assertEqual(status, 404)
+
+    def test_invalid_decision_value_is_rejected(self):
+        task, wp = self._submitted_task_and_work_product()
+        status, _ = self._review(wp["id"], "maybe")
+        self.assertEqual(status, 400)
+
+    def test_list_review_decisions_for_a_work_product(self):
+        task, wp = self._submitted_task_and_work_product()
+        self._review(wp["id"], "returned", rationale="Redo it.")
+        status, decisions = self._get(f"/api/projects/{self.project.id}/work-products/{wp['id']}/review")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0]["decision"], "returned")
+
+    # -- review role enforcement (Task 13.4 / docs/09-acceptance.md T04) ---
+
+    def test_analyst_cannot_record_a_review_decision(self):
+        task, wp = self._submitted_task_and_work_product()
+        analyst = next(u for u in identity.list_users() if u.email == "analyst@local.dev")
+        identity.add_deal_membership(self.project.id, analyst.id, "analyst")
+        client = _Client(self.port)
+        client.post("/api/dev/session", {"user_id": analyst.id})
+        status, _ = client.post(
+            f"/api/projects/{self.project.id}/work-products/{wp['id']}/review",
+            {"decision": "approved", "rationale": "Looks fine."},
+        )
+        self.assertEqual(status, 403)
+
+    def test_reviewer_can_record_a_review_decision(self):
+        task, wp = self._submitted_task_and_work_product()
+        reviewer = next(u for u in identity.list_users() if u.email == "reviewer@local.dev")
+        identity.add_deal_membership(self.project.id, reviewer.id, "reviewer")
+        client = _Client(self.port)
+        client.post("/api/dev/session", {"user_id": reviewer.id})
+        status, updated_task = client.post(
+            f"/api/projects/{self.project.id}/work-products/{wp['id']}/review",
+            {"decision": "approved", "rationale": "Looks fine."},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(updated_task["status"], "approved")
+
+    def test_deal_lead_can_record_a_review_decision(self):
+        task, wp = self._submitted_task_and_work_product()
+        lead = next(u for u in identity.list_users() if u.email == "lead@local.dev")
+        identity.add_deal_membership(self.project.id, lead.id, "deal_lead")
+        client = _Client(self.port)
+        client.post("/api/dev/session", {"user_id": lead.id})
+        status, _ = client.post(
+            f"/api/projects/{self.project.id}/work-products/{wp['id']}/review",
+            {"decision": "approved", "rationale": "Looks fine."},
+        )
+        self.assertEqual(status, 201)
+
+    def test_caller_with_no_deal_membership_cannot_record_a_review_decision(self):
+        task, wp = self._submitted_task_and_work_product()
+        outsider = identity.create_user("outsider@example.com", "Outsider")
+        identity.add_deal_membership(self.project.id, outsider.id, "analyst")
+        # Even though this grants access to the project at all (analyst),
+        # a caller with no reviewer/deal_lead role is still denied - this
+        # assertion mirrors test_analyst_cannot_record_a_review_decision
+        # but via a freshly created user rather than a seeded dev identity.
+        client = _Client(self.port)
+        client.post("/api/dev/session", {"user_id": outsider.id})
+        status, _ = client.post(
+            f"/api/projects/{self.project.id}/work-products/{wp['id']}/review",
+            {"decision": "approved", "rationale": "Looks fine."},
+        )
+        self.assertEqual(status, 403)
 
 
 if __name__ == "__main__":

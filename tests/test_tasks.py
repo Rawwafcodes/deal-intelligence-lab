@@ -75,6 +75,13 @@ class TaskTests(unittest.TestCase):
         with self.assertRaises(tasks.TaskValidationError):
             tasks.update_status(self.project.id, task.id, "submitted")
 
+    def test_returned_and_approved_are_not_directly_settable(self):
+        task = tasks.create_task(self.project.id, "Draft the memo")
+        with self.assertRaises(tasks.TaskValidationError):
+            tasks.update_status(self.project.id, task.id, "returned")
+        with self.assertRaises(tasks.TaskValidationError):
+            tasks.update_status(self.project.id, task.id, "approved")
+
     def test_invalid_status_is_rejected(self):
         task = tasks.create_task(self.project.id, "Draft the memo")
         with self.assertRaises(tasks.TaskValidationError):
@@ -96,6 +103,33 @@ class TaskTests(unittest.TestCase):
         result = tasks.mark_submitted(self.project.id, task.id)
         assert result is not None
         self.assertEqual(result.status, "cancelled")
+
+    def test_mark_returned_and_mark_approved_flip_status(self):
+        task = tasks.create_task(self.project.id, "Draft the memo")
+        tasks.mark_submitted(self.project.id, task.id)
+        returned = tasks.mark_returned(self.project.id, task.id)
+        assert returned is not None
+        self.assertEqual(returned.status, "returned")
+        approved = tasks.mark_approved(self.project.id, task.id)
+        assert approved is not None
+        self.assertEqual(approved.status, "approved")
+
+    def test_mark_returned_and_mark_approved_do_not_revive_a_cancelled_task(self):
+        task = tasks.create_task(self.project.id, "Draft the memo")
+        tasks.update_status(self.project.id, task.id, "cancelled")
+        self.assertEqual(tasks.mark_returned(self.project.id, task.id).status, "cancelled")
+        self.assertEqual(tasks.mark_approved(self.project.id, task.id).status, "cancelled")
+
+    def test_mark_submitted_overrides_approved_and_returned(self):
+        # New content after either means the task is correctly unreviewed
+        # again - this is the literal mechanism behind "approval is
+        # version-specific and cannot silently transfer to a new version."
+        task = tasks.create_task(self.project.id, "Draft the memo")
+        tasks.mark_submitted(self.project.id, task.id)
+        tasks.mark_approved(self.project.id, task.id)
+        resubmitted = tasks.mark_submitted(self.project.id, task.id)
+        assert resubmitted is not None
+        self.assertEqual(resubmitted.status, "submitted")
 
     def test_mark_submitted_unknown_task_returns_none(self):
         self.assertIsNone(tasks.mark_submitted(self.project.id, "not-a-real-task"))

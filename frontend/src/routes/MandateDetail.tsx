@@ -9,19 +9,29 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   approvePlan,
   cancelRun,
+  decideIntegrityCandidate,
+  getCurrentBriefVersion,
+  getIntegrityReview,
   getMandate,
   listDocuments,
   listMandateTemplates,
+  listTasksWithWorkProducts,
+  listWorkstreams,
   NON_TERMINAL_RUN_STATUSES,
   proposePlan,
   proposePlanWithAi,
   rejectPlan,
   resumeRun,
   startRun,
+  type CurrentBriefVersion,
+  type IntegrityCandidateDecisionPayload,
+  type IntegrityReview,
   type Mandate,
   type MandateTemplate,
   type PlanProposalOutcome,
   type ProjectDocument,
+  type TaskWithWorkProducts,
+  type WorkstreamSummary,
 } from "@/lib/api"
 
 // Mirrors mandates.py's own _CAPABILITIES_NEEDING_DOCUMENT_SELECTION: the
@@ -33,6 +43,13 @@ import {
 // hardcoded template key - a human picking either template from the
 // manual dropdown below needs the same document checklist.
 const CAPABILITIES_NEEDING_DOCUMENT_SELECTION = new Set(["reconciliation.cross_format"])
+
+// Task 14.2: integrity.review_work_product needs a genuinely different
+// selection UI (target/peer submission + version, not a flat document
+// checklist) - kept as its own set/branch rather than folded into the
+// one above, since its stage input shape is not "a list of document ids"
+// at all.
+const INTEGRITY_REVIEW_CAPABILITY = "integrity.review_work_product"
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -74,6 +91,155 @@ function StageRow({ stage }: { stage: Mandate["plans"][number]["stages"][number]
   )
 }
 
+const CANDIDATE_DECISION_LABELS: Record<string, string> = {
+  pending: "Pending review",
+  accepted: "Accepted — published",
+  rejected: "Rejected",
+  duplicate: "Marked as duplicate",
+  unresolved: "Left unresolved",
+}
+
+// Task 14.2: the human checkpoint made real - a candidate only ever
+// becomes a shared finding through the explicit "Accept" action below
+// (server.py's own candidate-decision route), never automatically when
+// the capability stage above finishes.
+function IntegrityReviewPanel({ projectId, reviewId }: { projectId: string; reviewId: string }) {
+  const [review, setReview] = useState<IntegrityReview | null>(null)
+  const [busyCandidateId, setBusyCandidateId] = useState<string | null>(null)
+  const [notesByCandidate, setNotesByCandidate] = useState<Record<string, string>>({})
+  const [duplicateTargetByCandidate, setDuplicateTargetByCandidate] = useState<Record<string, string>>({})
+
+  async function load() {
+    try {
+      setReview(await getIntegrityReview(projectId, reviewId))
+    } catch {
+      toast.error("Could not load the integrity review.")
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewId])
+
+  async function decide(candidateId: string, decision: IntegrityCandidateDecisionPayload["decision"]) {
+    const payload: IntegrityCandidateDecisionPayload = {
+      decision,
+      decision_notes: notesByCandidate[candidateId]?.trim() || undefined,
+    }
+    if (decision === "duplicate") {
+      const duplicateOf = duplicateTargetByCandidate[candidateId]?.trim()
+      if (!duplicateOf) {
+        toast.error("Enter the id of the existing finding this candidate duplicates.")
+        return
+      }
+      payload.duplicate_of_finding_id = duplicateOf
+    }
+    setBusyCandidateId(candidateId)
+    try {
+      await decideIntegrityCandidate(projectId, reviewId, candidateId, payload)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not record that decision.")
+    } finally {
+      setBusyCandidateId(null)
+    }
+  }
+
+  if (!review) {
+    return <p className="mt-1 text-xs text-muted-foreground">Loading integrity review candidates…</p>
+  }
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-border pt-3">
+      <p className="text-xs text-muted-foreground">
+        {review.candidates.length} candidate{review.candidates.length === 1 ? "" : "s"} from real model {review.model}
+        {review.published_findings.length > 0 &&
+          ` · ${review.published_findings.length} published to the shared findings register`}
+      </p>
+      {review.candidates.length === 0 && (
+        <p className="text-xs text-muted-foreground">No candidates were proposed.</p>
+      )}
+      {review.candidates.map((candidate) => (
+        <div key={candidate.id} className="rounded-md border border-border p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-foreground">{candidate.title || "(untitled candidate)"}</span>
+            <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+              {CANDIDATE_DECISION_LABELS[candidate.decision] ?? candidate.decision}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {candidate.classification || "unclassified"} · {candidate.severity || "no severity"} ·{" "}
+            {candidate.deterministic_or_judgment || "unspecified"}
+          </p>
+          <div className="mt-2 space-y-1 text-xs text-foreground">
+            <p><span className="font-medium">Assertion:</span> {candidate.assertion}</p>
+            <p><span className="font-medium">Conflicting/missing evidence:</span> {candidate.conflicting_or_missing_evidence}</p>
+            <p className="text-muted-foreground"><span className="font-medium">Why it matters:</span> {candidate.why_it_matters}</p>
+            <p className="text-muted-foreground"><span className="font-medium">Uncertainty:</span> {candidate.uncertainty}</p>
+            <p className="text-muted-foreground"><span className="font-medium">Recommended resolution:</span> {candidate.recommended_resolution}</p>
+          </div>
+
+          {candidate.decision === "pending" ? (
+            <div className="mt-3 space-y-2">
+              <Textarea
+                placeholder="Decision notes (optional)"
+                rows={1}
+                value={notesByCandidate[candidate.id] ?? ""}
+                onChange={(event) =>
+                  setNotesByCandidate((prev) => ({ ...prev, [candidate.id]: event.target.value }))
+                }
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" disabled={busyCandidateId === candidate.id} onClick={() => decide(candidate.id, "accepted")}>
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busyCandidateId === candidate.id}
+                  onClick={() => decide(candidate.id, "rejected")}
+                >
+                  Reject
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busyCandidateId === candidate.id}
+                  onClick={() => decide(candidate.id, "unresolved")}
+                >
+                  Leave unresolved
+                </Button>
+                <Input
+                  placeholder="Existing finding id"
+                  className="h-7 w-36 text-xs"
+                  value={duplicateTargetByCandidate[candidate.id] ?? ""}
+                  onChange={(event) =>
+                    setDuplicateTargetByCandidate((prev) => ({ ...prev, [candidate.id]: event.target.value }))
+                  }
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busyCandidateId === candidate.id}
+                  onClick={() => decide(candidate.id, "duplicate")}
+                >
+                  Mark duplicate
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {CANDIDATE_DECISION_LABELS[candidate.decision] ?? candidate.decision}
+              {candidate.decision_notes && ` — ${candidate.decision_notes}`}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function MandateDetail() {
   const { projectId, mandateId } = useParams<{ projectId: string; mandateId: string }>()
   const [mandate, setMandate] = useState<Mandate | null>(null)
@@ -86,20 +252,34 @@ export function MandateDetail() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set())
   const [aiOutcome, setAiOutcome] = useState<PlanProposalOutcome | null>(null)
   const [aiFeedback, setAiFeedback] = useState("")
+  const [tasksWithWorkProducts, setTasksWithWorkProducts] = useState<TaskWithWorkProducts[]>([])
+  const [workstreams, setWorkstreams] = useState<WorkstreamSummary[]>([])
+  const [currentBrief, setCurrentBrief] = useState<CurrentBriefVersion | null>(null)
+  const [targetWorkProductId, setTargetWorkProductId] = useState("")
+  const [selectedPeerIds, setSelectedPeerIds] = useState<Set<string>>(new Set())
+  const [includeBrief, setIncludeBrief] = useState(false)
+  const [selectedWorkstreamId, setSelectedWorkstreamId] = useState("")
+  const [reviewScope, setReviewScope] = useState("")
   const reloadingRef = useRef(false)
 
   async function reload() {
     if (!projectId || !mandateId || reloadingRef.current) return
     reloadingRef.current = true
     try {
-      const [loaded, templateList, documentList] = await Promise.all([
+      const [loaded, templateList, documentList, taskList, workstreamList, brief] = await Promise.all([
         getMandate(projectId, mandateId),
         listMandateTemplates(),
         listDocuments(projectId),
+        listTasksWithWorkProducts(projectId),
+        listWorkstreams(projectId),
+        getCurrentBriefVersion(projectId),
       ])
       setMandate(loaded)
       setTemplates(templateList)
       setDocuments(documentList)
+      setTasksWithWorkProducts(taskList)
+      setWorkstreams(workstreamList)
+      setCurrentBrief(brief)
       if (!selectedTemplate && templateList.length > 0) setSelectedTemplate(templateList[0].key)
     } catch {
       toast.error("Could not load this mandate.")
@@ -113,6 +293,15 @@ export function MandateDetail() {
       const next = new Set(prev)
       if (next.has(documentId)) next.delete(documentId)
       else next.add(documentId)
+      return next
+    })
+  }
+
+  function togglePeer(workProductId: string) {
+    setSelectedPeerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(workProductId)) next.delete(workProductId)
+      else next.add(workProductId)
       return next
     })
   }
@@ -187,7 +376,57 @@ export function MandateDetail() {
   const selectedPdfCount = pdfDocuments.filter((d) => selectedDocumentIds.has(d.id)).length
   const selectedExcelCount = excelDocuments.filter((d) => selectedDocumentIds.has(d.id)).length
   const reconciliationSelectionValid = selectedPdfCount >= 1 && selectedExcelCount >= 1
-  const canProposePlan = isReconciliation ? reconciliationSelectionValid : Boolean(selectedTemplate)
+
+  const isIntegrityReview = Boolean(
+    selectedTemplateObject?.stages.some((stage) => stage.capability === INTEGRITY_REVIEW_CAPABILITY)
+  )
+  // v1 scope boundary (integrity_review.py's own docstring): the target
+  // submission and any peer submissions must be PDF; source documents
+  // may be PDF or Excel, exactly like reconciliation's own picker above.
+  const allWorkProducts = tasksWithWorkProducts.flatMap((t) =>
+    t.work_products.map((wp) => ({ ...wp, taskTitle: t.title }))
+  )
+  const pdfWorkProducts = allWorkProducts.filter((wp) => wp.extension === ".pdf")
+  const peerCandidates = pdfWorkProducts.filter((wp) => wp.id !== targetWorkProductId)
+  const integrityReviewSelectionValid = Boolean(targetWorkProductId) && selectedDocumentIds.size >= 1
+
+  const canProposePlan = isReconciliation
+    ? reconciliationSelectionValid
+    : isIntegrityReview
+      ? integrityReviewSelectionValid
+      : Boolean(selectedTemplate)
+
+  function buildIntegrityReviewStageInput() {
+    const targetWorkProduct = allWorkProducts.find((wp) => wp.id === targetWorkProductId)
+    if (!targetWorkProduct?.current_version_id) return null
+    const documentRefs = Array.from(selectedDocumentIds).flatMap((documentId) => {
+      const doc = documents.find((d) => d.id === documentId)
+      return doc?.current_version_id ? [{ document_id: documentId, version_id: doc.current_version_id }] : []
+    })
+    const peerRefs = Array.from(selectedPeerIds).flatMap((workProductId) => {
+      const peer = allWorkProducts.find((wp) => wp.id === workProductId)
+      return peer?.current_version_id
+        ? [{ work_product_id: workProductId, version_id: peer.current_version_id }]
+        : []
+    })
+    return {
+      target: { work_product_id: targetWorkProduct.id, version_id: targetWorkProduct.current_version_id },
+      documents: documentRefs,
+      ...(peerRefs.length > 0 ? { peers: peerRefs } : {}),
+      ...(includeBrief && currentBrief ? { brief_version_id: currentBrief.id } : {}),
+      ...(selectedWorkstreamId ? { workstream_id: selectedWorkstreamId } : {}),
+      ...(reviewScope.trim() ? { review_scope: reviewScope.trim() } : {}),
+    }
+  }
+
+  function resetIntegrityReviewSelection() {
+    setSelectedDocumentIds(new Set())
+    setTargetWorkProductId("")
+    setSelectedPeerIds(new Set())
+    setIncludeBrief(false)
+    setSelectedWorkstreamId("")
+    setReviewScope("")
+  }
 
   return (
     <>
@@ -247,7 +486,9 @@ export function MandateDetail() {
             <p className="mt-1 text-sm text-muted-foreground">
               {isReconciliation
                 ? "A real, paid Claude call reconciling the documents you select below against each other - not a fixture."
-                : "A deterministic fixture planner only, for now - no AI call. Pick a template."}
+                : isIntegrityReview
+                  ? "A real, paid Claude call reviewing the submission you select below against the evidence and any peer submissions you also select - exact versions, never “whatever is current.”"
+                  : "A deterministic fixture planner only, for now - no AI call. Pick a template."}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <select
@@ -262,7 +503,7 @@ export function MandateDetail() {
                   </option>
                 ))}
               </select>
-              {!isReconciliation && (
+              {!isReconciliation && !isIntegrityReview && (
                 <Button
                   disabled={busy || !canProposePlan}
                   onClick={() => withBusy(() => proposePlan(projectId, mandateId, selectedTemplate).then(() => {}))}
@@ -271,6 +512,128 @@ export function MandateDetail() {
                 </Button>
               )}
             </div>
+
+            {isIntegrityReview && (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <p className="mb-2 text-sm font-medium text-foreground">
+                    Submission under review (must be a PDF)
+                  </p>
+                  <select
+                    aria-label="Submission under review"
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                    value={targetWorkProductId}
+                    onChange={(event) => setTargetWorkProductId(event.target.value)}
+                  >
+                    <option value="">Select a submission…</option>
+                    {pdfWorkProducts.map((wp) => (
+                      <option key={wp.id} value={wp.id}>
+                        {wp.taskTitle} — {wp.title} (v{wp.version_number})
+                      </option>
+                    ))}
+                  </select>
+                  {pdfWorkProducts.length === 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No PDF work-product submissions exist yet in this project.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium text-foreground">Source evidence (select at least one)</p>
+                  {documents.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">This project has no documents yet.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {[...pdfDocuments, ...excelDocuments].map((doc) => (
+                        <li key={doc.id}>
+                          <label className="flex items-center gap-2 text-sm text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={selectedDocumentIds.has(doc.id)}
+                              onChange={() => toggleDocument(doc.id)}
+                            />
+                            {doc.original_filename} (v{doc.version_number})
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium text-foreground">Peer submissions (optional, PDF only)</p>
+                  {peerCandidates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No other PDF submissions to compare against.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {peerCandidates.map((wp) => (
+                        <li key={wp.id}>
+                          <label className="flex items-center gap-2 text-sm text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={selectedPeerIds.has(wp.id)}
+                              onChange={() => togglePeer(wp.id)}
+                            />
+                            {wp.taskTitle} — {wp.title} (v{wp.version_number})
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={includeBrief}
+                      disabled={!currentBrief}
+                      onChange={(event) => setIncludeBrief(event.target.checked)}
+                    />
+                    Pin the current deal brief{currentBrief ? ` (v${currentBrief.version_number})` : " (none saved)"}
+                  </label>
+                  <select
+                    aria-label="Workstream"
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                    value={selectedWorkstreamId}
+                    onChange={(event) => setSelectedWorkstreamId(event.target.value)}
+                  >
+                    <option value="">No workstream</option>
+                    {workstreams.map((ws) => (
+                      <option key={ws.id} value={ws.id}>
+                        {ws.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <Textarea
+                  placeholder="Review scope or objective for the reviewer to give the model (optional)"
+                  value={reviewScope}
+                  onChange={(event) => setReviewScope(event.target.value)}
+                  rows={2}
+                />
+
+                <Button
+                  disabled={busy || !canProposePlan}
+                  onClick={() => {
+                    const stageInput = buildIntegrityReviewStageInput()
+                    if (!stageInput) {
+                      toast.error("Select a valid submission under review.")
+                      return
+                    }
+                    withBusy(() =>
+                      proposePlan(projectId, mandateId, selectedTemplate, { review: stageInput }).then(() =>
+                        resetIntegrityReviewSelection()
+                      )
+                    )
+                  }}
+                >
+                  Propose plan
+                </Button>
+              </div>
+            )}
 
             {isReconciliation && (
               <div className="mt-4 space-y-4">
@@ -477,10 +840,14 @@ export function MandateDetail() {
                             <span className="font-medium text-foreground">{attempt.stage_id}</span>
                             <span className="text-muted-foreground">{attempt.status}</span>
                           </div>
-                          {attempt.output && (
-                            <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs text-muted-foreground">
-                              {JSON.stringify(attempt.output, null, 2)}
-                            </pre>
+                          {attempt.output && typeof attempt.output.integrity_review_id === "string" ? (
+                            <IntegrityReviewPanel projectId={projectId} reviewId={attempt.output.integrity_review_id} />
+                          ) : (
+                            attempt.output && (
+                              <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs text-muted-foreground">
+                                {JSON.stringify(attempt.output, null, 2)}
+                              </pre>
+                            )
                           )}
                           {attempt.error && <p className="mt-1 text-xs text-destructive">{attempt.error}</p>}
                         </li>

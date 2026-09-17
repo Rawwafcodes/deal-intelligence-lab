@@ -30,9 +30,13 @@ import documents
 import evaluations
 import identity
 import inspections
+import integrity_review
+import integrity_reviews
 import mandates
 import multipart
+import overview
 import pdf_inspection
+import reviews
 import store
 import tasks
 import validation_cases
@@ -132,6 +136,12 @@ _WORKSTREAM_ASSIGNMENT_ITEM_RE = re.compile(
     r"^/api/projects/([^/]+)/workstreams/([^/]+)/assignments/([^/]+)$"
 )
 
+_MEMBERSHIPS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/memberships$")
+_MEMBERSHIP_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/memberships/([^/]+)$")
+
+_WORKSPACE_OVERVIEW_RE = re.compile(r"^/api/overview$")
+_DEAL_OVERVIEW_RE = re.compile(r"^/api/projects/([^/]+)/overview$")
+
 _TASKS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/tasks$")
 _TASK_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)$")
 _TASK_STATUS_RE = re.compile(r"^/api/projects/([^/]+)/tasks/([^/]+)/status$")
@@ -142,6 +152,7 @@ _WORK_PRODUCT_VERSIONS_RE = re.compile(r"^/api/projects/([^/]+)/work-products/([
 _WORK_PRODUCT_VERSION_DOWNLOAD_RE = re.compile(
     r"^/api/projects/([^/]+)/work-products/([^/]+)/versions/([^/]+)/download$"
 )
+_WORK_PRODUCT_REVIEW_RE = re.compile(r"^/api/projects/([^/]+)/work-products/([^/]+)/review$")
 
 _MANDATE_TEMPLATES_RE = re.compile(r"^/api/mandate-templates$")
 _MANDATES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/mandates$")
@@ -154,6 +165,12 @@ _MANDATE_RUNS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]
 _MANDATE_RUN_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)$")
 _MANDATE_RUN_RESUME_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)/resume$")
 _MANDATE_RUN_CANCEL_RE = re.compile(r"^/api/projects/([^/]+)/mandates/([^/]+)/runs/([^/]+)/cancel$")
+
+_INTEGRITY_REVIEWS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/integrity-reviews$")
+_INTEGRITY_REVIEW_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/integrity-reviews/([^/]+)$")
+_INTEGRITY_REVIEW_CANDIDATE_DECISION_RE = re.compile(
+    r"^/api/projects/([^/]+)/integrity-reviews/([^/]+)/candidates/([^/]+)/decision$"
+)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -267,6 +284,20 @@ class Handler(BaseHTTPRequestHandler):
         out["assignments"] = self._assignments_with_users(workstream.id)
         return out
 
+    # -- deal memberships (Task 13.4) ------------------------------------
+
+    def _memberships_with_users(self, project_id: str) -> list[dict]:
+        """Every deal membership (active and revoked, per identity.py's
+        own history-preserving contract) with the member's own display
+        info inline - same composition shape as _assignments_with_users."""
+        out = []
+        for membership in identity.list_deal_memberships_for_project(project_id):
+            user = identity.get_user(membership.user_id)
+            row = membership.to_dict()
+            row["user"] = user.to_dict() if user is not None else None
+            out.append(row)
+        return out
+
     # -- tasks and work-product submissions (Task 13.1) --------------------
 
     def _comments_with_authors(self, task_id: str) -> list[dict]:
@@ -278,14 +309,24 @@ class Handler(BaseHTTPRequestHandler):
             out.append(row)
         return out
 
+    def _review_decisions_with_reviewers(self, work_product_id: str) -> list[dict]:
+        out = []
+        for decision in reviews.list_decisions_for_work_product(work_product_id):
+            reviewer = identity.get_user(decision.reviewer_id) if decision.reviewer_id else None
+            row = decision.to_dict()
+            row["reviewer"] = reviewer.to_dict() if reviewer is not None else None
+            out.append(row)
+        return out
+
     def _task_with_details(self, task: tasks.Task) -> dict:
         """A task's own record plus its comments (each carrying the
         author's display info inline) and work products (each carrying
-        its own version list) - a plain composition of tasks.py +
-        work_products.py + identity.py at the API boundary, the same
-        "neither module depends on the other" shape _workstream_with_
-        assignments already uses, so the frontend never needs a
-        round trip per row."""
+        its own version list, review-decision history with reviewer
+        display info, and whether its *current* version is approved) - a
+        plain composition of tasks.py + work_products.py + reviews.py +
+        identity.py at the API boundary, the same "neither module depends
+        on the other" shape _workstream_with_assignments already uses, so
+        the frontend never needs a round trip per row."""
         out = task.to_dict()
         out["assigned_user"] = None
         if task.assigned_to:
@@ -300,9 +341,163 @@ class Handler(BaseHTTPRequestHandler):
         for work_product in work_products.list_work_products(task.id):
             row = work_product.to_dict()
             row["versions"] = [v.to_dict() for v in work_products.list_versions(work_product.id)]
+            row["review_decisions"] = self._review_decisions_with_reviewers(work_product.id)
+            row["current_version_approved"] = reviews.is_current_version_approved(
+                work_product.id, work_product.current_version_id
+            )
             work_product_list.append(row)
         out["work_products"] = work_product_list
         return out
+
+    # -- overview (Task 13.3) ------------------------------------------
+
+    def _project_activity_feed(self, project_id: str, task_list: list["tasks.Task"], limit: int = 20) -> list[dict]:
+        """Merges real, already-timestamped events from three sources -
+        task comments, work-product submissions, and review decisions -
+        into one feed via overview.build_activity_feed. Composed here
+        (tasks.py + work_products.py + reviews.py + identity.py), not in
+        overview.py itself, which stays a pure function of whatever list
+        it's handed - see that module's own docstring."""
+        events: list[dict] = []
+        for task in task_list:
+            for comment in tasks.list_comments(task.id):
+                author = identity.get_user(comment.author_id) if comment.author_id else None
+                events.append({
+                    "kind": "comment", "at": comment.created_at, "task_id": task.id, "task_title": task.title,
+                    "actor": author.to_dict() if author is not None else None, "summary": comment.body,
+                })
+            for work_product in work_products.list_work_products(task.id):
+                for version in work_products.list_versions(work_product.id):
+                    uploader = identity.get_user(version.uploaded_by) if version.uploaded_by else None
+                    events.append({
+                        "kind": "submission", "at": version.uploaded_at, "task_id": task.id,
+                        "task_title": task.title, "work_product_title": work_product.title,
+                        "version_number": version.version_number,
+                        "actor": uploader.to_dict() if uploader is not None else None, "summary": None,
+                    })
+                for decision in reviews.list_decisions_for_work_product(work_product.id):
+                    reviewer = identity.get_user(decision.reviewer_id) if decision.reviewer_id else None
+                    events.append({
+                        "kind": "review_decision", "at": decision.created_at, "task_id": task.id,
+                        "task_title": task.title, "work_product_title": work_product.title,
+                        "decision": decision.decision,
+                        "actor": reviewer.to_dict() if reviewer is not None else None,
+                        "summary": decision.rationale or None,
+                    })
+        return overview.build_activity_feed(events, limit=limit)
+
+    def _deal_overview(self, project: store.Project) -> dict:
+        """Task 13.3: docs/05-experience.md's Deal Overview, built
+        entirely from real, already-persisted state across every module
+        this app already has - no new domain data, only a read-side
+        composition (the same "compose at the API boundary" shape
+        _task_with_details/_workstream_with_assignments already use)."""
+        project_id = project.id
+        brief = deal_briefs.get_current_version(project_id)
+
+        if identity.get_deal_role(project_id, self.current_user_id) == "external_executive":
+            return self._deal_overview_restricted(project, brief)
+
+        workstream_list = [self._workstream_with_assignments(w) for w in workstreams.list_workstreams(project_id)]
+
+        task_list = tasks.list_tasks(project_id)
+        tasks_out = {
+            "counts": overview.count_by_status(task_list),
+            "needs_attention": [self._task_with_details(t) for t in overview.tasks_needing_attention(task_list)],
+        }
+
+        mandate_list = mandates.list_mandates(project_id)
+        recent_mandates = sorted(mandate_list, key=lambda m: m.updated_at, reverse=True)[:5]
+        mandates_out = {
+            "counts": overview.count_by_status(mandate_list),
+            "recent": [m.to_dict() for m in recent_mandates],
+        }
+
+        reconciliation_list = cross_format_analyses.list_cross_format_analyses(project_id)
+        all_findings: list[dict] = []
+        for analysis in reconciliation_list:
+            workspace = workspaces.get_workspace_for_analysis(project_id, analysis.id)
+            if workspace is not None:
+                all_findings.extend(workspaces.list_findings(workspace, analysis))
+        reconciliations_out = {
+            "count": len(reconciliation_list),
+            "findings": overview.findings_summary(all_findings),
+        }
+
+        return {
+            "project": project.to_dict(),
+            "brief": brief.to_dict() if brief is not None else None,
+            "workstreams": workstream_list,
+            "tasks": tasks_out,
+            "mandates": mandates_out,
+            "reconciliations": reconciliations_out,
+            "documents": {"count": len(documents.list_documents(project_id))},
+            "activity": self._project_activity_feed(project_id, task_list),
+        }
+
+    def _deal_overview_restricted(self, project: "store.Project", brief: "deal_briefs.BriefVersion | None") -> dict:
+        """Task 13.4 / docs/05-experience.md: 'External executive view
+        exposes approved shared materials only by default' and T05.
+        Deliberately a much smaller payload than the full Deal Overview -
+        no tasks, comments, mandates, activity feed, or reconciliation/
+        finding detail, only the brief and each work product whose
+        *current* version is currently approved. Scoped to this one
+        surface only (see this task's own task file for the disclosed
+        limitation that other routes - documents, task detail, mandate
+        detail - are not separately retrofitted with role-based
+        restriction in this task)."""
+        project_id = project.id
+        approved_deliverables = []
+        for task in tasks.list_tasks(project_id):
+            for work_product in work_products.list_work_products(task.id):
+                if not reviews.is_current_version_approved(work_product.id, work_product.current_version_id):
+                    continue
+                decision = reviews.latest_decision_for_work_product(work_product.id)
+                approved_deliverables.append({
+                    "task_title": task.title,
+                    "work_product": work_product.to_dict(),
+                    "approved_at": decision.created_at if decision is not None else None,
+                })
+        return {
+            "project": project.to_dict(),
+            "restricted": True,
+            "brief": brief.to_dict() if brief is not None else None,
+            "approved_deliverables": approved_deliverables,
+        }
+
+    def _workspace_overview(self) -> dict:
+        """Task 13.3: docs/05-experience.md's Workspace Overview - "My
+        attention" (tasks assigned to the caller, across every project
+        they can actually see, whose status means a specific action is
+        expected next) plus one real row per accessible engagement with
+        its own real task/mandate counts. Deliberately a "simple overview
+        shell" (docs/08-roadmap.md's own explicit allowance) rather than
+        the fuller Workspace Overview docs/05 eventually describes
+        (quick actions, a merged cross-deal activity feed) - every number
+        shown is real and derived the identical way the Deal Overview's
+        own numbers are, just scoped to "my attention" instead of one
+        deal."""
+        accessible_ids = identity.list_accessible_project_ids(self.current_user_id)
+        projects = [p for p in store.list_projects() if p.id in accessible_ids]
+
+        my_attention: list[dict] = []
+        engagements: list[dict] = []
+        for project in projects:
+            task_list = tasks.list_tasks(project.id)
+            mandate_list = mandates.list_mandates(project.id)
+            engagements.append({
+                "project": project.to_dict(),
+                "task_counts": overview.count_by_status(task_list),
+                "mandate_counts": overview.count_by_status(mandate_list),
+            })
+            for task in overview.tasks_needing_attention(task_list, limit=len(task_list)):
+                if task.assigned_to == self.current_user_id:
+                    row = task.to_dict()
+                    row["project"] = project.to_dict()
+                    my_attention.append(row)
+
+        my_attention.sort(key=lambda t: t["updated_at"], reverse=True)
+        return {"my_attention": my_attention, "engagements": engagements}
 
     # -- mandates (Task 12.1) --------------------------------------------
 
@@ -315,6 +510,27 @@ class Handler(BaseHTTPRequestHandler):
     def _run_with_attempts(self, run: mandates.Run) -> dict:
         out = run.to_dict()
         out["attempts"] = [a.to_dict() for a in mandates.list_attempts(run.id)]
+        return out
+
+    # -- integrity review (Task 14.2) -------------------------------------
+
+    def _integrity_review_with_candidates(self, review: integrity_reviews.IntegrityReview) -> dict:
+        """A review's own audit record plus every candidate it produced
+        (pending, accepted, rejected, duplicate, or unresolved - see
+        integrity_reviews.py's own module docstring for why a candidate
+        is never itself a shared finding) and, if a workspace already
+        exists for it, that workspace's id and every finding actually
+        published from one of this review's own candidates so far -
+        composed here at the API boundary, the same shape every other
+        cross-module read in this app already uses."""
+        out = review.to_dict()
+        out["candidates"] = [c.to_dict() for c in integrity_reviews.list_candidates(review.id)]
+        workspace = workspaces.get_workspace_for_integrity_review(review.project_id, review.id)
+        out["workspace_id"] = workspace.id if workspace is not None else None
+        out["published_findings"] = (
+            [f for f in workspaces.list_findings(workspace) if f["origin"] == "integrity"]
+            if workspace is not None else []
+        )
         return out
 
     def _handle_list_dev_identities(self) -> None:
@@ -522,6 +738,19 @@ class Handler(BaseHTTPRequestHandler):
             accessible = identity.list_accessible_project_ids(self.current_user_id)
             projects = [p.to_dict() for p in store.list_projects() if p.id in accessible]
             self._send_json(200, projects)
+            return
+
+        if _WORKSPACE_OVERVIEW_RE.match(path):
+            self._send_json(200, self._workspace_overview())
+            return
+
+        deal_overview_match = _DEAL_OVERVIEW_RE.match(path)
+        if deal_overview_match:
+            (project_id,) = deal_overview_match.groups()
+            project = self._authorized_project(project_id)
+            if project is None:
+                return
+            self._send_json(200, self._deal_overview(project))
             return
 
         download_match = _DOCUMENT_DOWNLOAD_RE.match(path)
@@ -768,6 +997,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, self._assignments_with_users(workstream_id))
             return
 
+        memberships_collection_match = _MEMBERSHIPS_COLLECTION_RE.match(path)
+        if memberships_collection_match:
+            (project_id,) = memberships_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            self._send_json(200, self._memberships_with_users(project_id))
+            return
+
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
@@ -816,6 +1053,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "work product not found"})
                 return
             self._send_json(200, [v.to_dict() for v in work_products.list_versions(work_product_id)])
+            return
+
+        work_product_review_list_match = _WORK_PRODUCT_REVIEW_RE.match(path)
+        if work_product_review_list_match:
+            project_id, work_product_id = work_product_review_list_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            work_product = work_products.get_work_product(project_id, work_product_id)
+            if work_product is None:
+                self._send_json(404, {"error": "work product not found"})
+                return
+            self._send_json(200, self._review_decisions_with_reviewers(work_product_id))
             return
 
         task_item_match = _TASK_ITEM_RE.match(path)
@@ -885,6 +1134,27 @@ class Handler(BaseHTTPRequestHandler):
             if self._authorized_project(project_id) is None:
                 return
             out = [m.to_dict() for m in mandates.list_mandates(project_id)]
+            self._send_json(200, out)
+            return
+
+        integrity_review_item_match = _INTEGRITY_REVIEW_ITEM_RE.match(path)
+        if integrity_review_item_match:
+            project_id, review_id = integrity_review_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            review = integrity_reviews.get_integrity_review(project_id, review_id)
+            if review is None:
+                self._send_json(404, {"error": "integrity review not found"})
+                return
+            self._send_json(200, self._integrity_review_with_candidates(review))
+            return
+
+        integrity_reviews_collection_match = _INTEGRITY_REVIEWS_COLLECTION_RE.match(path)
+        if integrity_reviews_collection_match:
+            (project_id,) = integrity_reviews_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [r.to_dict() for r in integrity_reviews.list_integrity_reviews(project_id)]
             self._send_json(200, out)
             return
 
@@ -996,6 +1266,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_create_assignment(project_id, workstream_id)
             return
 
+        memberships_collection_match = _MEMBERSHIPS_COLLECTION_RE.match(path)
+        if memberships_collection_match:
+            (project_id,) = memberships_collection_match.groups()
+            self._handle_grant_membership(project_id)
+            return
+
         task_work_products_match = _TASK_WORK_PRODUCTS_RE.match(path)
         if task_work_products_match:
             project_id, task_id = task_work_products_match.groups()
@@ -1006,6 +1282,12 @@ class Handler(BaseHTTPRequestHandler):
         if work_product_versions_match:
             project_id, work_product_id = work_product_versions_match.groups()
             self._handle_add_work_product_version(project_id, work_product_id)
+            return
+
+        work_product_review_match = _WORK_PRODUCT_REVIEW_RE.match(path)
+        if work_product_review_match:
+            project_id, work_product_id = work_product_review_match.groups()
+            self._handle_review_work_product(project_id, work_product_id)
             return
 
         task_comments_match = _TASK_COMMENTS_RE.match(path)
@@ -1036,6 +1318,12 @@ class Handler(BaseHTTPRequestHandler):
         if mandate_run_cancel_match:
             project_id, mandate_id, run_id = mandate_run_cancel_match.groups()
             self._handle_cancel_run(project_id, mandate_id, run_id)
+            return
+
+        integrity_candidate_decision_match = _INTEGRITY_REVIEW_CANDIDATE_DECISION_RE.match(path)
+        if integrity_candidate_decision_match:
+            project_id, review_id, candidate_id = integrity_candidate_decision_match.groups()
+            self._handle_integrity_candidate_decision(project_id, review_id, candidate_id)
             return
 
         mandate_run_resume_match = _MANDATE_RUN_RESUME_RE.match(path)
@@ -1243,6 +1531,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"revoked": True})
             return
 
+        membership_item_match = _MEMBERSHIP_ITEM_RE.match(path)
+        if membership_item_match:
+            project_id, user_id = membership_item_match.groups()
+            self._handle_revoke_membership(project_id, user_id)
+            return
+
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
@@ -1405,6 +1699,45 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
             return
         self._send_json(201, self._assignments_with_users(workstream_id))
+
+    # -- deal memberships (Task 13.4) ------------------------------------
+
+    def _handle_grant_membership(self, project_id: str) -> None:
+        """Grants (or changes the role of) a deal membership. Mutation is
+        restricted to an existing deal_lead, not merely any authorized
+        member - the same "check the caller's own real role, never a
+        client-supplied one" pattern as the review-decision role check."""
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may grant deal membership"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        user_id = data.get("user_id")
+        if not isinstance(user_id, str) or identity.get_user(user_id) is None:
+            self._send_json(400, {"error": "user_id must be an existing user id"})
+            return
+        role = data.get("role")
+        if not isinstance(role, str) or role not in identity.DEAL_ROLES:
+            self._send_json(400, {"error": f"role must be one of {list(identity.DEAL_ROLES)}"})
+            return
+        identity.add_deal_membership(project_id, user_id, role)
+        self._send_json(201, self._memberships_with_users(project_id))
+
+    def _handle_revoke_membership(self, project_id: str, user_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may revoke deal membership"})
+            return
+        revoked = identity.revoke_deal_membership(project_id, user_id)
+        if not revoked:
+            self._send_json(404, {"error": "active membership not found"})
+            return
+        self._send_json(200, {"revoked": True})
 
     # -- tasks and work-product submissions (Task 13.1) --------------------
 
@@ -1583,6 +1916,164 @@ class Handler(BaseHTTPRequestHandler):
         if result.status == "new_version":
             tasks.mark_submitted(project_id, work_product.task_id)
         self._send_json(status_code, result.to_dict())
+
+    def _handle_review_work_product(self, project_id: str, work_product_id: str) -> None:
+        """Task 13.2: records a review decision against the work
+        product's *current* version at the moment of decision (docs/
+        08-roadmap.md: "every review decision identifies the exact
+        SubmissionVersion") and updates the owning task's status to
+        match - composed here, at the API boundary, exactly like
+        _handle_create_work_product composes work_products.py with
+        tasks.py (reviews.py imports neither)."""
+        if self._authorized_project(project_id) is None:
+            return
+        # Task 13.4 / docs/09-acceptance.md T04: "analyst cannot approve
+        # final package" - checked against the caller's own real deal
+        # role (identity.get_deal_role), never a client-supplied value.
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only a reviewer or deal lead may record a review decision"})
+            return
+        work_product = work_products.get_work_product(project_id, work_product_id)
+        if work_product is None:
+            self._send_json(404, {"error": "work product not found"})
+            return
+        task = tasks.get_task(project_id, work_product.task_id)
+        if task is None:
+            self._send_json(404, {"error": "task not found"})
+            return
+        if task.status != "submitted":
+            self._send_json(
+                400, {"error": f"cannot review a task with status {task.status!r} - it is not currently submitted"}
+            )
+            return
+
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        decision = data.get("decision")
+        if not isinstance(decision, str):
+            self._send_json(400, {"error": "decision is required"})
+            return
+        related_comment_id = data.get("related_comment_id")
+        if related_comment_id is not None:
+            if not isinstance(related_comment_id, str) or not any(
+                c.id == related_comment_id for c in tasks.list_comments(task.id)
+            ):
+                self._send_json(400, {"error": "related_comment_id must be an existing comment on this task"})
+                return
+
+        assert work_product.current_version_id is not None  # a real WorkProduct always has one (see its own module docstring)
+        try:
+            record = reviews.record_decision(
+                task.id, work_product.id, work_product.current_version_id, self.current_user_id,
+                decision, rationale=str(data.get("rationale", "")), related_comment_id=related_comment_id,
+            )
+        except reviews.ReviewValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        if record.decision == "approved":
+            tasks.mark_approved(project_id, task.id)
+        else:
+            tasks.mark_returned(project_id, task.id)
+
+        updated_task = tasks.get_task(project_id, task.id)
+        assert updated_task is not None
+        self._send_json(201, self._task_with_details(updated_task))
+
+    # -- integrity review candidate decisions (Task 14.2) ------------------
+
+    def _handle_integrity_candidate_decision(self, project_id: str, review_id: str, candidate_id: str) -> None:
+        """The one and only path an Integrity Review candidate can ever
+        become a real, shared finding - the M14.2 spec's own "Human
+        checkpoint" requirement, enforced structurally (see integrity_
+        reviews.py's own module docstring): nothing publishes a candidate
+        automatically when a review's capability stage finishes.
+        docs/06-security-and-collaboration.md's own permission table:
+        "Recommend finding disposition: Yes/Yes/Yes/No" (analyst/
+        reviewer/deal_lead/external_executive) - accepting, rejecting,
+        editing, or linking a candidate as a duplicate is that action's
+        direct analogue, so it is gated the same way, not as strictly as
+        the review-decision endpoint's reviewer/deal_lead-only gate
+        (which is closer to "Approve decision package")."""
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
+            self._send_json(
+                403, {"error": "only an analyst, reviewer, or deal lead may decide an integrity candidate"}
+            )
+            return
+        review = integrity_reviews.get_integrity_review(project_id, review_id)
+        if review is None:
+            self._send_json(404, {"error": "integrity review not found"})
+            return
+        candidate = integrity_reviews.get_candidate(review_id, candidate_id)
+        if candidate is None:
+            self._send_json(404, {"error": "candidate not found"})
+            return
+
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        decision = data.get("decision")
+        if not isinstance(decision, str):
+            self._send_json(400, {"error": "decision is required"})
+            return
+        edits = data.get("edits")
+        if edits is not None and not isinstance(edits, dict):
+            self._send_json(400, {"error": "edits must be an object"})
+            return
+        duplicate_of_finding_id = data.get("duplicate_of_finding_id")
+        if duplicate_of_finding_id is not None and not isinstance(duplicate_of_finding_id, str):
+            self._send_json(400, {"error": "duplicate_of_finding_id must be a string"})
+            return
+        decision_notes = str(data.get("decision_notes", "") or "")
+
+        published_finding_id = None
+        if decision == "accepted":
+            content = candidate.effective_content()
+            if edits:
+                content.update(
+                    {k: v for k, v in edits.items() if k in integrity_reviews.IntegrityReviewCandidate.EDITABLE_FIELDS}
+                )
+            workspace, _ = workspaces.get_or_create_workspace_for_integrity_review(project_id, review_id)
+            lineage = {
+                "integrity_review_id": review.id,
+                "mandate_id": review.mandate_id,
+                "run_id": review.run_id,
+                "attempt_id": review.attempt_id,
+                "target": {"work_product_id": review.target_work_product_id, "version_id": review.target_version_id},
+                "sources": [
+                    {"document_id": d, "version_id": v}
+                    for d, v in zip(review.source_document_ids, review.source_version_ids)
+                ],
+                "peers": [
+                    {"work_product_id": w, "version_id": v}
+                    for w, v in zip(review.peer_work_product_ids, review.peer_version_ids)
+                ],
+                "review_template_version": review.review_template_version,
+                "publication_decision": {
+                    "decided_by": self.current_user_id, "edited": bool(edits), "decision_notes": decision_notes,
+                },
+            }
+            finding = workspaces.publish_integrity_candidate_as_finding(
+                workspace.id, candidate.candidate_index, content, review.review_template_version, lineage,
+            )
+            published_finding_id = finding["id"]
+
+        try:
+            updated = integrity_reviews.record_candidate_decision(
+                review_id, candidate_id, decision, decided_by=self.current_user_id,
+                decision_notes=decision_notes, edits=edits, duplicate_of_finding_id=duplicate_of_finding_id,
+                published_finding_id=published_finding_id,
+            )
+        except integrity_reviews.CandidateDecisionError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        self._send_json(200, updated.to_dict())
 
     # -- mandates (Task 12.1) --------------------------------------------
 
@@ -2327,6 +2818,18 @@ class Handler(BaseHTTPRequestHandler):
     def _get_workspace_analysis(
         self, workspace: workspaces.Workspace
     ) -> cross_format_analyses.CrossFormatAnalysis | None:
+        """Task 14.2: a Workspace can now be backed by either a
+        CrossFormatAnalysis or an IntegrityReview (workspaces.py's own
+        nullable `cross_format_analysis_id`/`integrity_review_id`
+        columns) - every route that calls this one is reconciliation-
+        specific (memo, export, the full get-workspace summary) and was
+        never extended to integrity-review-backed workspaces in this
+        task (see this task's own disclosed scope boundary), so an
+        integrity-review workspace reaching here is a real, if unusual,
+        caller error, not a crash."""
+        if workspace.cross_format_analysis_id is None:
+            self._send_json(400, {"error": "this workspace has no cross-format analysis (it is an integrity review workspace)"})
+            return None
         analysis = cross_format_analyses.get_cross_format_analysis(
             workspace.project_id, workspace.cross_format_analysis_id
         )
@@ -2626,6 +3129,8 @@ def main() -> None:
     workstreams.init_workstreams_db()
     tasks.init_tasks_db()
     work_products.init_work_products_db()
+    reviews.init_reviews_db()
+    integrity_reviews.init_integrity_reviews_db()
     mandates.init_mandates_db()
     # Task 12.2: the durable local worker - a real background thread,
     # independent of any HTTP request, that executes queued/resumed

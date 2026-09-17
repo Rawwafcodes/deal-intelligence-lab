@@ -20,7 +20,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { createProject, listProjects, type Project } from "@/lib/api"
+import { createProject, getWorkspaceOverview, listProjects, type Project, type WorkspaceOverviewTask } from "@/lib/api"
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  submitted: "Submitted", returned: "Returned for revision",
+}
 
 function formatDate(isoString: string) {
   return new Date(isoString).toLocaleDateString(undefined, {
@@ -32,6 +36,7 @@ function formatDate(isoString: string) {
 
 export function Home() {
   const [projects, setProjects] = useState<Project[] | null>(null)
+  const [myAttention, setMyAttention] = useState<WorkspaceOverviewTask[] | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -45,6 +50,16 @@ export function Home() {
     } catch {
       toast.error("Could not load projects.")
       setProjects([])
+    }
+    // Task 13.3: a "simple overview shell" (docs/08-roadmap.md's own
+    // allowance) - failing quietly here just means the attention section
+    // stays hidden, since the project list above is the page's own
+    // primary content and shouldn't be blocked by this.
+    try {
+      const overview = await getWorkspaceOverview()
+      setMyAttention(overview.my_attention)
+    } catch {
+      setMyAttention([])
     }
   }
 
@@ -107,6 +122,32 @@ export function Home() {
           </div>
           <Button onClick={openDialog}>+ New project</Button>
         </div>
+
+        {myAttention && myAttention.length > 0 && (
+          <Card className="mb-6 p-6">
+            <h2 className="font-heading text-lg font-semibold text-foreground">My attention</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tasks assigned to you that need a review or a revision, across every deal.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {myAttention.map((task) => (
+                <li key={task.id}>
+                  <Link
+                    to={`/projects/${task.project.id}`}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm hover:border-primary"
+                  >
+                    <span className="text-foreground">
+                      {task.title} <span className="text-muted-foreground">· {task.project.name}</span>
+                    </span>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                      {TASK_STATUS_LABELS[task.status] ?? task.status}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         <Card className="p-6" ref={listRef}>
           {projects === null ? (

@@ -104,11 +104,25 @@ def init_workspaces_db() -> None:
             CREATE TABLE IF NOT EXISTS workspaces (
                 id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
-                cross_format_analysis_id TEXT NOT NULL UNIQUE,
+                cross_format_analysis_id TEXT UNIQUE,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
+        )
+        # Task 14.2: a Workspace is now created for either a
+        # CrossFormatAnalysis or an IntegrityReview - exactly one of the
+        # two id columns is ever set per row. DROP NOT NULL is a
+        # metadata-only, non-rewriting operation on an existing table
+        # (safe on the real, populated `public` schema); every existing
+        # row keeps its real cross_format_analysis_id unchanged, and a
+        # nullable UNIQUE column still enforces uniqueness across every
+        # non-NULL value (Postgres treats multiple NULLs as distinct).
+        conn.execute("ALTER TABLE workspaces ALTER COLUMN cross_format_analysis_id DROP NOT NULL")
+        conn.execute("ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS integrity_review_id TEXT")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_integrity_review "
+            "ON workspaces(integrity_review_id) WHERE integrity_review_id IS NOT NULL"
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_project ON workspaces(project_id)")
 
@@ -227,17 +241,26 @@ def init_workspaces_db() -> None:
 
 @dataclass
 class Workspace:
+    """Task 14.2: `cross_format_analysis_id` and `integrity_review_id`
+    are now both nullable, exactly one set per row - a Workspace is
+    always created for exactly one analysis-producing record, whichever
+    kind it is. Every pre-14.2 workspace (real Universal Logic data
+    included) keeps `cross_format_analysis_id` set and
+    `integrity_review_id` NULL, unchanged."""
+
     id: str
     project_id: str
-    cross_format_analysis_id: str
+    cross_format_analysis_id: str | None
     created_at: str
     updated_at: str
+    integrity_review_id: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "project_id": self.project_id,
             "cross_format_analysis_id": self.cross_format_analysis_id,
+            "integrity_review_id": self.integrity_review_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -403,6 +426,7 @@ def _row_to_workspace(row) -> Workspace:
         cross_format_analysis_id=row["cross_format_analysis_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        integrity_review_id=row["integrity_review_id"],
     )
 
 
@@ -486,6 +510,62 @@ def get_or_create_workspace(
     return workspace, True
 
 
+def get_workspace_for_integrity_review(project_id: str, integrity_review_id: str) -> Workspace | None:
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM workspaces WHERE project_id = %s AND integrity_review_id = %s",
+            (project_id, integrity_review_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return _row_to_workspace(row) if row else None
+
+
+def get_or_create_workspace_for_integrity_review(project_id: str, integrity_review_id: str) -> tuple[Workspace, bool]:
+    """Task 14.2's analogue of get_or_create_workspace - idempotent,
+    returns (workspace, created). Deliberately materializes *no* findings
+    at creation time (unlike the reconciliation path): an Integrity
+    Review's candidates are not findings until a human explicitly accepts
+    one (see integrity_reviews.py's own module docstring and
+    publish_integrity_candidate_as_finding below) - an empty workspace,
+    ready to receive published findings, is the entire job of this
+    function."""
+    existing = get_workspace_for_integrity_review(project_id, integrity_review_id)
+    if existing is not None:
+        return existing, False
+
+    now = datetime.now(timezone.utc).isoformat()
+    workspace = Workspace(
+        id=uuid.uuid4().hex, project_id=project_id, cross_format_analysis_id=None,
+        created_at=now, updated_at=now, integrity_review_id=integrity_review_id,
+    )
+    conn = store.get_connection()
+    try:
+        try:
+            conn.execute(
+                "INSERT INTO workspaces (id, project_id, integrity_review_id, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (workspace.id, workspace.project_id, workspace.integrity_review_id, workspace.created_at, workspace.updated_at),
+            )
+        except Exception:
+            # Lost a create race against another request for the same
+            # review (the partial UNIQUE index) - fall through to re-read.
+            conn.rollback()
+            existing = get_workspace_for_integrity_review(project_id, integrity_review_id)
+            if existing is not None:
+                return existing, False
+            raise
+        _log_event(
+            conn, workspace.id, "workspace_created", entity_type="workspace", entity_id=workspace.id,
+            detail={"integrity_review_id": integrity_review_id},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return workspace, True
+
+
 # The snapshot persisted for every AI-origin finding - the same 12 keys
 # _merged_finding has always assembled as "content" for display, now
 # captured once at materialization time instead of recomputed on every read.
@@ -546,6 +626,53 @@ def _insert_ai_finding_row(conn, workspace_id: str, finding: dict[str, Any], now
         ),
     )
     return finding_id
+
+
+def publish_integrity_candidate_as_finding(
+    workspace_id: str, candidate_index: int, content: dict[str, Any],
+    review_template_version: str, lineage: dict[str, Any],
+) -> dict[str, Any]:
+    """Task 14.2: the *only* way an Integrity Review candidate ever
+    becomes a real, shared finding - called exclusively from an explicit
+    human accept decision (server.py's candidate-decision handler), never
+    automatically when a review's capability stage finishes. `content`
+    already reflects any human edit (see integrity_reviews.
+    IntegrityReviewCandidate.effective_content); the snapshot persisted
+    here is then immutable in the same way an "ai" origin finding's own
+    snapshot is - a later change to the *candidate* row (impossible,
+    since candidates are never edited after a decision) or to the source
+    IntegrityReview record cannot retroactively alter a published
+    finding. `lineage` carries the M14.2 spec's own required fields:
+    originating mandate/run/attempt, target/source/peer versions used,
+    review template version, and the human publication decision."""
+    now = datetime.now(timezone.utc).isoformat()
+    finding_id = f"integrity-{uuid.uuid4().hex}"
+    snapshot = {**content, "lineage": lineage}
+    conn = store.get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO workspace_findings (
+                id, workspace_id, origin, ai_finding_index, ai_extraction_version,
+                ai_snapshot_json, ai_content_hash,
+                human_evidence_document_ids_json, created_at, updated_at
+            ) VALUES (%s, %s, 'integrity', %s, %s, %s, %s, '[]', %s, %s)
+            """,
+            (
+                finding_id, workspace_id, candidate_index, review_template_version,
+                json.dumps(snapshot), _snapshot_hash(snapshot), now, now,
+            ),
+        )
+        _log_event(
+            conn, workspace_id, "integrity_finding_published", entity_type="finding", entity_id=finding_id,
+            detail={"candidate_index": candidate_index},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    created = _get_finding_state_row(workspace_id, finding_id)
+    assert created is not None
+    return _merged_finding(created)
 
 
 # -- findings -------------------------------------------------------------
@@ -609,30 +736,52 @@ def _get_finding_state_row(workspace_id: str, finding_id: str) -> dict[str, Any]
     return _row_to_finding_state(row) if row else None
 
 
+_INTEGRITY_EXTRA_KEYS = (
+    "assertion", "conflicting_or_missing_evidence", "deterministic_or_judgment", "recommended_resolution", "lineage",
+)
+
+
 def _merged_finding(state: dict[str, Any]) -> dict[str, Any]:
-    if state["origin"] == "ai":
+    integrity_extras = {
+        "assertion": "", "conflicting_or_missing_evidence": "", "deterministic_or_judgment": "",
+        "recommended_resolution": "", "lineage": {},
+    }
+    if state["origin"] in ("ai", "integrity"):
         # Content comes straight from the immutable snapshot persisted at
         # materialization time (Task 11.2) - never re-parsed from the
         # analysis record on a read. `ai` is {} only for a not-yet-migrated
         # legacy row (see migrate_finding_ids.py), same as a missing key
-        # used to fall back to "" before.
+        # used to fall back to "" before. Task 14.2's "integrity" origin
+        # shares this exact branch - it is the same "immutable model-
+        # authored snapshot, human overlay for workflow state" shape,
+        # just sourced from an IntegrityReview instead of a
+        # CrossFormatAnalysis, with its own extra fields (see
+        # _INTEGRITY_EXTRA_KEYS) layered on top.
         ai = state["ai_snapshot"] or {}
         content = {
             "title": ai.get("title", ""),
             "classification": ai.get("classification", ""),
             "severity": ai.get("severity", ""),
-            "explanation": ai.get("explanation", ""),
+            "explanation": ai.get("explanation") or ai.get("why_it_matters", ""),
             "pdf_evidence": ai.get("pdf_evidence", ""),
             "workbook_evidence": ai.get("workbook_evidence", ""),
-            "commercial_relevance": ai.get("commercial_relevance", ""),
+            "commercial_relevance": ai.get("commercial_relevance") or ai.get("why_it_matters", ""),
             "uncertainty": ai.get("uncertainty", ""),
-            "recommended_action": ai.get("recommended_action", ""),
+            "recommended_action": ai.get("recommended_action") or ai.get("recommended_resolution", ""),
             "raw_text": ai.get("raw_text", ""),
             "pdf_citations": ai.get("pdf_citations", []),
             "excel_citations": ai.get("excel_citations", []),
             "evidence_notes": "",
             "evidence_document_ids": [],
         }
+        if state["origin"] == "integrity":
+            integrity_extras = {
+                "assertion": ai.get("assertion", ""),
+                "conflicting_or_missing_evidence": ai.get("conflicting_or_missing_evidence", ""),
+                "deterministic_or_judgment": ai.get("deterministic_or_judgment", ""),
+                "recommended_resolution": ai.get("recommended_resolution", ""),
+                "lineage": ai.get("lineage", {}),
+            }
     else:
         human = state["human_content"]
         content = {
@@ -660,6 +809,7 @@ def _merged_finding(state: dict[str, Any]) -> dict[str, Any]:
         "origin": state["origin"],
         "ai_finding_index": state["ai_finding_index"],
         **content,
+        **integrity_extras,
         "effective_severity": effective_severity,
         "review_status": state["review_status"],
         "adjusted_severity": state["adjusted_severity"],
@@ -678,14 +828,18 @@ def _merged_finding(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_findings(workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis) -> list[dict[str, Any]]:
-    """Every finding, AI and human. AI content comes from each row's
-    immutable snapshot (Task 11.2) - never re-parsed from the analysis
-    record on a read, never stale, never editable. `analysis` is accepted
-    for call-site symmetry (every caller already has it loaded for other
-    purposes) but is no longer read for finding content. Duplicate finding
-    ids (for lineage) are resolved into each canonical finding's
-    `duplicate_finding_ids` here."""
+def list_findings(
+    workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis | None = None
+) -> list[dict[str, Any]]:
+    """Every finding - ai, human, and (Task 14.2) integrity origin. AI/
+    integrity content comes from each row's immutable snapshot (Task
+    11.2) - never re-parsed from the analysis record on a read, never
+    stale, never editable. `analysis` is accepted for call-site symmetry
+    (a reconciliation-backed workspace's caller already has it loaded for
+    other purposes) but is no longer read for finding content, and is
+    genuinely optional - an integrity-review-backed workspace has no
+    CrossFormatAnalysis at all. Duplicate finding ids (for lineage) are
+    resolved into each canonical finding's `duplicate_finding_ids` here."""
     states = _list_finding_state_rows(workspace.id)
     merged = [_merged_finding(s) for s in states]
 
@@ -706,7 +860,7 @@ def list_findings(workspace: Workspace, analysis: cross_format_analyses.CrossFor
 
 
 def get_finding(
-    workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis, finding_id: str
+    workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis | None, finding_id: str
 ) -> dict[str, Any] | None:
     for finding in list_findings(workspace, analysis):
         if finding["id"] == finding_id:

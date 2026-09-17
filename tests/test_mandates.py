@@ -408,6 +408,42 @@ class MandateLifecycleTests(unittest.TestCase):
         self.assertEqual(attempts[0].status, "failed")
         self.assertIn("simulated capability failure", attempts[0].error)
 
+    def test_output_that_violates_its_own_declared_schema_fails_the_run(self):
+        """Task 14.1: a capability's real return value is checked against
+        its own declared output_schema - a capability whose output drifts
+        from its own contract fails loudly (like any other executor
+        exception), rather than silently persisting a malformed Attempt."""
+        def under_promises(project_id, stage_input):
+            return {"wrong_field": "not what the schema requires"}
+
+        mandates.register_capability(
+            mandates.CapabilityDescriptor(
+                name="fixture.under_promises", version="1", side_effect_class="read_only",
+                permission_check=lambda project_id: True, executor=under_promises,
+                output_schema={"type": "object", "required": ["echoed"], "properties": {"echoed": {"type": "string"}}},
+            )
+        )
+        mandates.register_template(
+            mandates.Template(
+                key="fixture-under-promises", version=1, name="Under-promises", description="test-only",
+                stages=[{"id": "s1", "kind": "capability", "capability": "fixture.under_promises", "depends_on": []}],
+            )
+        )
+        self.addCleanup(mandates._CAPABILITIES.pop, "fixture.under_promises", None)
+        self.addCleanup(mandates._TEMPLATES.pop, "fixture-under-promises", None)
+
+        mandate = mandates.create_mandate(self.project.id, "Assess the deal", created_by="u1")
+        plan = mandates.propose_plan(self.project.id, mandate.id, "fixture-under-promises")
+        mandates.approve_plan(self.project.id, mandate.id, plan.id, approved_by="lead")
+
+        run = mandates.execute_run(self.project.id, mandate.id)
+        self.worker.poll_once()
+        run = mandates.get_run(mandate.id, run.id)
+        self.assertEqual(run.status, "failed")
+        attempts = mandates.list_attempts(run.id)
+        self.assertEqual(attempts[0].status, "failed")
+        self.assertIn("missing required field", attempts[0].error)
+
     # -- budget ledger (Task 12.2) ----------------------------------------
 
     def test_budget_exceeded_blocks_the_call_before_it_happens(self):
@@ -715,6 +751,23 @@ class ReconciliationCapabilityTests(unittest.TestCase):
         with self.assertRaises(mandates.PlanValidationError):
             mandates.propose_plan(self.project.id, mandate.id, "reconciliation")
 
+    def test_propose_plan_rejects_an_empty_document_ids_list(self):
+        """Task 14.1: enforced by the capability's own declared
+        input_schema (minItems: 1) now, not a hand-written truthiness
+        check specific to this one capability."""
+        mandate = mandates.create_mandate(self.project.id, "Reconcile Q3 financials", created_by="u1")
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates.propose_plan(
+                self.project.id, mandate.id, "reconciliation", stage_inputs={"reconcile": {"document_ids": []}},
+            )
+
+    def test_propose_plan_rejects_a_non_string_document_id(self):
+        mandate = mandates.create_mandate(self.project.id, "Reconcile Q3 financials", created_by="u1")
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates.propose_plan(
+                self.project.id, mandate.id, "reconciliation", stage_inputs={"reconcile": {"document_ids": [123]}},
+            )
+
     def test_propose_plan_rejects_a_deleted_or_unknown_document(self):
         mandate = mandates.create_mandate(self.project.id, "Reconcile Q3 financials", created_by="u1")
         with self.assertRaises(mandates.PlanValidationError):
@@ -858,6 +911,83 @@ class ReconciliationCapabilityTests(unittest.TestCase):
         self.assertEqual(run.status, "failed")
         attempts = mandates.list_attempts(run.id)
         self.assertIn("budget exceeded", attempts[0].error)
+
+
+class CapabilityContractTests(unittest.TestCase):
+    """Task 14.1: formalizes docs/04-mandate-engine.md's capability-
+    boundary contract - 'Register each capability with: name/version;
+    input schema; output schema; allowed formats...' - as real, checked
+    fields on CapabilityDescriptor rather than prose alone. No database
+    needed: every assertion here is against the module-level capability
+    registry and the pure _validate_against_schema helper."""
+
+    def test_every_registered_capability_declares_input_and_output_schemas(self):
+        for name in ("fixture.echo", "reconciliation.cross_format"):
+            descriptor = mandates.get_capability(name)
+            self.assertIsNotNone(descriptor)
+            assert descriptor is not None
+            self.assertEqual(descriptor.input_schema.get("type"), "object")
+            self.assertEqual(descriptor.output_schema.get("type"), "object")
+
+    def test_reconciliation_declares_its_allowed_source_formats(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        self.assertEqual(descriptor.allowed_source_formats, (".pdf", ".xlsx", ".xls"))
+
+    def test_fixture_echo_has_no_source_formats(self):
+        descriptor = mandates.get_capability("fixture.echo")
+        assert descriptor is not None
+        self.assertIsNone(descriptor.allowed_source_formats)
+
+    def test_schema_validator_accepts_a_conforming_reconciliation_input(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        mandates._validate_against_schema(
+            {"document_ids": ["doc-1"], "pinned_versions": {"doc-1": "v1"}}, descriptor.input_schema, "test",
+        )  # must not raise
+
+    def test_schema_validator_rejects_missing_required_field(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates._validate_against_schema({}, descriptor.input_schema, "test")
+
+    def test_schema_validator_rejects_empty_document_ids_list(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates._validate_against_schema({"document_ids": []}, descriptor.input_schema, "test")
+
+    def test_schema_validator_rejects_a_non_string_document_id(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates._validate_against_schema({"document_ids": [123]}, descriptor.input_schema, "test")
+
+    def test_schema_validator_accepts_a_conforming_reconciliation_output(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        mandates._validate_against_schema(
+            {
+                "cross_format_analysis_id": "a1", "workspace_id": "w1", "workspace_created": True,
+                "finding_count": 3, "model": "claude-opus-5",
+            },
+            descriptor.output_schema, "test",
+        )  # must not raise
+
+    def test_schema_validator_rejects_output_missing_a_required_field(self):
+        descriptor = mandates.get_capability("reconciliation.cross_format")
+        assert descriptor is not None
+        with self.assertRaises(mandates.PlanValidationError):
+            mandates._validate_against_schema({"cross_format_analysis_id": "a1"}, descriptor.output_schema, "test")
+
+    def test_fixture_echo_executor_output_matches_its_own_declared_schema(self):
+        """A self-consistency check that the pattern also holds for the
+        one other registered capability, not only reconciliation."""
+        descriptor = mandates.get_capability("fixture.echo")
+        assert descriptor is not None
+        output = descriptor.executor("proj-1", {"message": "hi"})
+        mandates._validate_against_schema(output, descriptor.output_schema, "test")  # must not raise
 
 
 class ReconciliationWithReviewTests(unittest.TestCase):

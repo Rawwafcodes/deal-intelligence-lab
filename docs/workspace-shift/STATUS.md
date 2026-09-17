@@ -12,13 +12,21 @@ light navy/gold identity — see the dated entries below. Also as of
 2026-09-16, the untracked `frontend/` React scaffold's own `src/index.css`
 was retheme'd to the same Meridian identity (see dated entry below) — the
 two stacks (static pages, React scaffold) now read as one product visually.
-Current task: tasks/13.1-tasks-and-submissions.md (complete — a real,
-assignable Task/Comment/WorkProduct system now exists for the first time;
-see below). Next recommended: 13.2 (review → return for revision →
-resubmit → approval; version-specific decisions), per the roadmap — the
-natural next step now that a submitted task exists for a review decision
-to act on. Extending the Task 11.5 revision-conflict pattern to the
-memo/requests remains a smaller, optional follow-up if wanted instead.
+Current task: tasks/14.2-integrity-review.md (complete, with two
+disclosed scope boundaries — the `integrity.review_work_product`
+capability's full backend and frontend exist, are tested, and have now
+been proven with a real, paid live run: a real known-answer test case
+scored 2/2 recall on its pre-registered issues with zero false
+positives, a real human review exercised all four candidate decisions
+(accept/reject/duplicate/unresolved), and 3 real findings were published
+to the shared register with complete lineage. A real gap (incomplete
+mandate/run/attempt lineage) was found live and fixed on the spot,
+locked in by new tests. Disclosed boundaries: scoring was manual against
+docs/08's own metrics, not through the dedicated Validation Lab UI/
+schema (a separate, unauthorized future task); the persistence proof
+covers full-restart durability, not a genuine mid-run interruption
+(to avoid a second paid call). See below). Next recommended: none yet
+explicitly authorized.
 Application repository: /Users/rawwafa/Projects/deal-intelligence-lab, this session
 had live, direct access to it.
 Application revision: as of 2026-09-17, the founder asked to commit the
@@ -27,15 +35,28 @@ accumulated working tree for the first time in this effort — Tasks
 `921d14a` ("Workspace shift Tasks 11.1-12.4..."), on the founder's direct
 request; see that dated entry below for exactly what was included/
 excluded (one stray, unreferenced file — `SKILL (1).md` — was
-deliberately left out). Tasks 12.5 and 13.1 were both implemented and
-tested on top of that commit but, per this effort's ordinary default, not
-committed (commits happen only when explicitly asked, as that same entry
-shows).
+deliberately left out). Tasks 12.5, 13.1, the Integrity Review
+documentation-only adoption, 13.2, 13.3, 13.4, 14.1, and 14.2 (backend
+only, in progress) were all implemented (or, for the adoption,
+documented) on top of that commit but, per this effort's ordinary
+default, not committed (commits happen only when explicitly asked, as
+that same entry shows).
 Implementation status: 11.1, 11.2, 11.3a, 11.3b, 11.4, 11.5, 11.4b, 12.1,
-12.2, 12.3, 12.4, 12.5, and 13.1 are real and tested; 11.2, 11.3a, 11.3b,
-11.4, 11.5, 11.4b, 12.1, 12.2, 12.3, and 12.4 were applied to the real
-local database (12.5 added no schema at all; 13.1 added four new,
-purely additive tables — see below).
+12.2, 12.3, 12.4, 12.5, 13.1, 13.2, 13.3, 13.4, and 14.1 are real,
+tested, and complete; 14.2's backend (capability, persistence, publish
+path, role enforcement) is real and tested but the task itself is not
+yet complete (no frontend, no real paid call - see below). 11.2, 11.3a,
+11.3b, 11.4, 11.5, 11.4b, 12.1, 12.2, 12.3, and 12.4 were applied to the
+real local database (12.5 added no schema at all; 13.1 added four new,
+purely additive tables; 13.2 added one more; 13.3
+added none at all, being a pure read-side composition; 13.4 added no
+schema either, only one additive seeded identity row and ordinary
+`deal_memberships` rows via the pre-existing table; 14.1 added no schema
+either, being a formalization of an in-memory capability registry's own
+contract; 14.2 made one metadata-only change to the real `workspaces`
+table (dropped a NOT NULL constraint, added one nullable column and its
+index - no row rewritten, no existing data touched) plus two new,
+independent tables — see below).
 The real database now runs on PostgreSQL (11.3a), carries a real
 Organization/User/DealMembership layer with server-side authorization
 enforced on every project-scoped route (11.3b), every real document now
@@ -108,9 +129,36 @@ workflow that acts on that signal is explicitly Task 13.2's job, not
 built here. Proven live against Universal Logic, including two real bugs
 (a missing workstream display, and a comment thread that collapsed after
 every message) found and fixed during that same live verification, not
-left for later. Revision conflicts on the memo/requests, the rest of M13
-(review/approval, Workspace/Deal Overview screens, a two-browser
-journey), and everything past M13 all remain undone.
+left for later. Between 13.1 and 13.2, an externally-supplied
+"workspace-integrity-integration" package was adopted as documentation/
+roadmap only (no code) - see docs/10-decisions.md's I01-I08; M13.2
+remained the next implementation task throughout, unchanged.
+**13.2 complete**: a real, version-specific review lifecycle now exists -
+a new `reviews.py` `ReviewDecision` always targets one exact, immutable
+SubmissionVersion; a return requires a real rationale; approval is
+version-specific by construction (`is_current_version_approved` compares
+only the *latest* decision's version id against the *current* one, so a
+new, unreviewed version correctly reports unapproved even though an
+earlier version was genuinely approved - proven live, not only asserted).
+Resubmission after a return automatically re-enters review with zero new
+status-machine branches, reusing 13.1's own `mark_submitted` unmodified.
+Every decision is permanent (append-only) and visible with reviewer,
+exact version, timestamp and rationale.
+**13.3 complete**: a real Workspace Overview (`GET /api/overview`) and
+Deal Overview (`GET /api/projects/<id>/overview`) now exist, both pure
+read-side compositions of already-persisted state - no new table, no new
+domain data. The Deal Overview finally gives `Home.tsx`'s own pre-
+existing, previously-broken `/projects/:id` link somewhere real to go
+(new `DealOverview.tsx`), summarizing brief/tasks/mandates/reconciliation
+findings/workstreams/documents plus a real chronological activity feed,
+with links out to the existing static page and Mandates routes for
+detail. The Workspace Overview's "my attention" is scoped by the same
+`identity.list_accessible_project_ids` boundary every other cross-project
+read uses - verified live to correctly show nothing for a real identity
+(Jordan Lee) that has real tasks assigned but no real deal membership, a
+genuine pre-existing gap from 11.3b's own backfill, disclosed rather than
+silently worked around. Revision conflicts on the memo/requests, 13.4 (a
+two-browser journey), and everything past M13 all remain undone.
 
 ## Completed here
 - Consolidated recent founder direction and supplied planning evidence.
@@ -2540,3 +2588,785 @@ M14.1/M14.2 are ever scheduled; founder decision on whether to proceed to
 M13.2 next, or to commit the accumulated uncommitted work (12.5, 13.1,
 and this documentation-only adoption) first - no code, schema, or paid
 call was authorized or exercised by this entry.
+
+## 2026-09-17 — Task 13.2 implemented (version-specific review lifecycle)
+
+**Authorization**: the founder said "start m13.2" directly after the
+Integrity Review documentation adoption; scoped and implemented directly,
+continuing the standing "implement, don't draft" instruction carried
+through this whole effort.
+
+**App commit**: `6c93acc` ("Task 12.5..., 13.1..., and Integrity Review
+roadmap adoption") - this task, like every prior uncommitted one, was
+implemented and tested but not committed, per this effort's own
+established default (commits happen only when explicitly asked).
+
+**Environment issue found and fixed first, not caused by this task**: the
+local PostgreSQL instance had been cleanly shut down since the prior
+session (confirmed in `pgdata.log` - a "smart shutdown," not a crash),
+and the app's own HTTP server had not survived that same gap. Restarted
+both - Postgres with the documented `pg_ctl` command against the
+already-existing `pgdata/` (no data at risk), then the app server -
+confirmed the full suite passed clean again before writing any of this
+task's own code.
+
+**What changed** (full detail, two real lifecycle bugs proven fixed via
+live verification, not just unit tests: `tasks/13.2-review-lifecycle.md`):
+1. New `reviews.py` - `ReviewDecision` (task_id, work_product_id, the
+   *exact* `submission_version_id` reviewed, reviewer_id, decision
+   [approved/returned], rationale, optional `related_comment_id`,
+   timestamp). Append-only - no update or delete exists for this table.
+   A return requires a real rationale; an approval doesn't. **`is_
+   current_version_approved`** is the literal mechanism behind "approval
+   is version-specific and cannot silently transfer to a new version"
+   (docs/08-roadmap.md's own M13.2 line): it compares only the *latest*
+   decision's version id against the work product's *current* one - an
+   older, superseded approval simply stops matching, with zero special
+   casing. Deliberately imports neither `tasks.py` nor `work_products.py`
+   (same "neither module depends on the other" shape 13.1 already used).
+2. `tasks.py` gained two statuses, `"returned"`/`"approved"`, each
+   reachable only via new `mark_returned`/`mark_approved` functions
+   (mirroring `mark_submitted`'s own shape) - never directly settable.
+   `mark_submitted` itself needed zero code change to also become the
+   "un-approve on new content" mechanism: its existing behavior already
+   overrides any non-cancelled status, so an `"approved"` task correctly
+   flips back to `"submitted"` the moment genuinely new content arrives.
+3. `server.py`: two new routes (`POST`/`GET .../work-products/<id>/
+   review`), behind the existing `_authorized_project` gate - no new
+   authorization surface. `_task_with_details` extended to include each
+   work product's full review history (with reviewer display info) and a
+   `current_version_approved` flag.
+4. Frontend: the existing Tasks card gained a review-history display per
+   work product and, only while a task is `"submitted"`, Approve/Return-
+   for-revision controls with a shared rationale field (the Return button
+   is disabled client-side when the field is empty, not only server-
+   side). New status colors for "Returned for revision"/"Approved."
+   Fixed one piece of stale copy left over from 13.1 ("a full review/
+   approval workflow is still to come") to describe what now exists.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 600 tests ... OK` (573 baseline + 27 new: 12 in new `tests/
+test_reviews.py`, 4 in `tests/test_tasks.py`, 11 in `tests/
+test_task_and_workproduct_endpoints.py`).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 65 source files` (63 baseline +
+`reviews.py` + `tests/test_reviews.py`).
+
+**Real server restart and full live verification, in order performed**
+(full detail with exact sequence in the task file's own Completion
+evidence):
+1. Restarted the real server with this task's code; confirmed all real
+   projects and the real task/work-product state from 13.1's own
+   verification were completely intact.
+2. On the real task from 13.1's own live verification (still
+   `"submitted"`, its work product at v2), clicked "Return for revision"
+   with an empty rationale first - confirmed via the network log that
+   **no request was sent at all**, the client-side guard working before
+   ever reaching the server.
+3. Typed a real rationale and returned it for real: the task flipped to
+   "Returned for revision," the review controls disappeared (nothing
+   left to review), and the real review history rendered the decision
+   with the correct reviewer, the correct version number, and the full
+   rationale text.
+4. Resubmitted a real corrected version (v3) via the same direct-
+   multipart-request technique Tasks 11.4/13.1 already disclosed (file
+   uploads cannot be driven through this session's browser automation);
+   confirmed the task flipped back to `"submitted"` on its own.
+5. Approved it for real through the real UI: the task flipped to
+   "Approved," the work product showed a real "Current version approved"
+   badge, and the review history correctly showed **both** decisions in
+   order (the earlier return, the new approval) - append-only history
+   proven live, not only by unit test.
+6. Added a real fourth version (v4) with no UI action re-approving
+   anything: the task correctly flipped back to `"submitted"`,
+   `current_version_approved` correctly reported `false` even though an
+   earlier version had genuinely been approved, and the decision count
+   stayed at exactly 2 - the old approval was neither deleted nor
+   silently extended to the new content. This is the roadmap's own
+   version-specific-approval requirement proven against real data, live.
+7. No console errors observed at any step. Full suite and mypy re-run
+   clean *after* the live verification too.
+8. Checked throughout: the four concurrent-session files untouched -
+   `git status --short` on those four paths returned nothing, both
+   before and after this task.
+
+**Files changed**: new `reviews.py`; `tasks.py`; `server.py`; `static/
+project.html`; `static/project.js`; `static/style.css`; new `tests/
+test_reviews.py`; `tests/test_tasks.py`; `tests/
+test_task_and_workproduct_endpoints.py`; new `docs/workspace-shift/tasks/
+13.2-review-lifecycle.md`. Real data changed: one new, purely additive
+table (`review_decisions`) now exists in the real Postgres `public`
+schema; the real task from 13.1's own verification now carries two real
+review decisions and four real work-product versions (left in place as a
+genuine record). No existing table, row, or column was altered.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-authorized roadmap item with no new
+product-hierarchy or permission-model question. This task's own
+implementation independently confirms the prior adoption entry's "schema
+hooks" prediction was correct: `SubmissionVersion` ids needed no schema
+change to serve as the exact review target.
+
+**Blockers**: none.
+
+**Next task**: 13.3 (Workspace Overview and Deal Overview built from
+real available state - submitted/returned/approved work, open material
+findings, requests, blockers and recent changes; no fake metrics), per
+the roadmap - real, varied task states now exist to actually summarize.
+13.4 (two-browser end-to-end journey) remains after that.
+
+**Permissions needed**: founder decision on whether to proceed to 13.3,
+or to commit this task's own changes.
+
+## 2026-09-17 — Task 13.3 implemented (Workspace Overview and Deal Overview)
+
+**Authorization**: the founder said "13.3" directly after Task 13.2's own
+completion; scoped and implemented directly, continuing the standing
+"implement, don't draft" instruction carried through this whole effort.
+
+**App commit**: `6c93acc` - this task, like every prior uncommitted one,
+was implemented and tested but not committed, per this effort's own
+established default.
+
+**What changed** (full detail, including a real access-control condition
+found and independently verified live: `tasks/13.3-overview-screens.md`):
+1. New `overview.py` - pure functions only (no database, no other
+   domain-module import): `count_by_status`, `tasks_needing_attention`,
+   `findings_summary` (real severity counts plus a real "open" count per
+   severity - never a collapsed health score, enforced by a dedicated
+   test asserting no "health"/"score"/"percent"/"rating" key ever
+   appears), and `build_activity_feed`.
+2. `server.py`: two new routes composed the same way `_task_with_
+   details` already composes other modules - `GET /api/projects/<id>/
+   overview` (brief, workstreams, task/mandate counts and highlights,
+   aggregated reconciliation/finding severities across every one of the
+   project's real workspaces, document count, a merged real activity
+   feed from comments/submissions/review decisions) and
+   `GET /api/overview` (a "my attention" list scoped to the caller via
+   the exact same `identity.list_accessible_project_ids` boundary every
+   other cross-project read already uses, plus a per-engagement count
+   list).
+3. Frontend: new `DealOverview.tsx` at `/projects/:projectId` - finally
+   giving `Home.tsx`'s own pre-existing, previously-broken project-card
+   link (disclosed as broken back in Task 12.1's own entry) somewhere
+   real to go. `Home.tsx` gained a "My attention" card above the project
+   list.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 624 tests ... OK` (600 baseline + 24 new: 14 in new `tests/
+test_overview.py`, 10 in new `tests/test_overview_endpoints.py`). One
+transient flake (`test_cancel_run_while_queued_is_accepted_and_resolves_
+cleanly`, a 12.2-era mandate-worker timing test this task never touched)
+failed once under full-suite load, then passed cleanly three times in
+isolation and on an immediate full-suite re-run - disclosed, not a
+regression.
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 68 source files` (65 baseline +
+`overview.py` + 2 new test files).
+
+**Real server restart and full live verification, including a genuine
+access-control finding, in order performed** (full detail in the task
+file's own Completion evidence):
+1. Restarted the real server; confirmed all real projects unaffected.
+2. Fetched the real Deal Overview for Universal Logic: correct real
+   brief, workstream, task/mandate counts (mandate counts spanning every
+   real mandate this whole effort has produced to date - 9 completed, 1
+   draft, 3 cancelled, 1 under review), 7 real reconciliations with 105
+   real findings broken down by severity, 63 real documents, and a real
+   8-event activity feed built from Tasks 13.1/13.2's own genuine history.
+3. **Found and independently verified, not caused by this task**:
+   switched to "Jordan Lee (Reviewer)" - the identity the real task is
+   actually assigned to - and found the Workspace Overview correctly
+   showed zero accessible projects and zero "my attention" rows for that
+   identity. Investigated: confirmed via a direct API check that Jordan
+   Lee has zero real deal memberships anywhere - a pre-existing condition
+   from Task 11.3b's own backfill (only the default identity was ever
+   granted membership on pre-existing projects), not something this task
+   introduced or is in scope to fix. This is the feature behaving
+   correctly: a task assigned to someone without real project access
+   correctly shows nothing for them.
+4. Reassigned the real task to "Sam Okafor (Deal Lead)" (a real member)
+   to demonstrate the feature end to end, then opened the real React
+   Home page: the "My attention" card rendered the real task correctly;
+   clicked through to the real Deal Overview and confirmed every section
+   rendered correctly against real data, including the full real
+   chronological activity feed.
+5. No console errors observed. Reassigned the real task back to "Jordan
+   Lee (Reviewer)" afterward, restoring its genuine assignment.
+6. Full suite and mypy re-run clean *after* the live verification too.
+7. Checked throughout: the four concurrent-session files untouched -
+   `git status --short` on those four paths returned nothing, both
+   before and after this task.
+
+**Files changed**: new `overview.py`; `server.py`; new `frontend/src/
+routes/DealOverview.tsx`; `frontend/src/App.tsx`; `frontend/src/routes/
+Home.tsx`; `frontend/src/lib/api.ts`; new `tests/test_overview.py`; new
+`tests/test_overview_endpoints.py`; new `docs/workspace-shift/tasks/
+13.3-overview-screens.md`. Real data changed: none beyond a disclosed,
+reversed task reassignment during live verification (the real task ends
+this task assigned exactly as it was before). No table, row, or column
+was created, altered, or removed.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-authorized roadmap item with no new
+product-hierarchy or permission-model question. The disclosed missing
+deal memberships for two seeded dev identities is recorded here as an
+observed condition, not a new decision.
+
+**Blockers**: none for this task. 13.4's own multi-identity journey will
+need real deal membership granted to the Analyst/Reviewer dev identities
+first (a separate, explicitly authorized action) to exercise real access
+differences on Universal Logic specifically.
+
+**Next task**: 13.4 (two-browser end-to-end journey with analyst,
+reviewer, lead, and a restricted executive view), per the roadmap - real
+overview surfaces and a real review lifecycle both now exist to actually
+walk through.
+
+**Permissions needed**: founder decision on whether to proceed to 13.4
+(and, if so, whether to grant the Analyst/Reviewer dev identities real
+deal membership on Universal Logic first), or to commit this task's own
+changes.
+
+## 2026-09-17 — Task 13.4 implemented (deal-membership management, review
+role enforcement, restricted external-executive Deal Overview)
+
+**Authorization**: the founder said "next" directly after Task 13.3's
+own completion; scoped and implemented directly, continuing the
+standing "implement, don't draft" instruction carried through this
+whole effort.
+
+**App commit**: `6c93acc` - this task, like every prior uncommitted one,
+was implemented and tested but not committed, per this effort's own
+established default.
+
+**What changed** (full detail: `tasks/13.4-multi-identity-journey-and-
+restricted-view.md`):
+1. `identity.py`: `DEAL_ROLES` gained a fourth role,
+   `"external_executive"`; `_seed_defaults()` now also idempotently
+   seeds a fourth dev identity (`external@local.dev` / "Morgan Reyes
+   (External Executive)") with organization membership but no deal role
+   anywhere by default; new `get_deal_role(project_id, user_id)` - the
+   caller's own real, currently-active deal role, always resolved
+   server-side from the session, never from client input.
+2. `server.py`: new deal-membership management routes (`GET/POST
+   /api/projects/<id>/memberships`, `DELETE .../memberships/<user_id>`
+   - grant/revoke restricted to deal_lead only, matching docs/06's own
+   permission table exactly); a role check inside
+   `_handle_review_work_product` refusing anyone who isn't reviewer or
+   deal_lead with 403 (T04, literally); a new
+   `_deal_overview_restricted()` branch inside `_deal_overview`,
+   returning only `{project, restricted: true, brief,
+   approved_deliverables}` for callers whose real role is
+   `external_executive` - no tasks, comments, mandates, or activity feed.
+3. Frontend: a new "Deal access" card on the static project page
+   (roster, grant form, revoke button - reusing the existing Workstreams
+   card's own CSS), and a `RestrictedDealOverviewView` branch in the
+   React `DealOverview.tsx` for the `restricted: true` payload shape.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 638 tests ... OK` (624 baseline + 14 new: 4 in
+`tests/test_identity.py`, 6 in `tests/test_identity_endpoints.py`, 4 in
+`tests/test_task_and_workproduct_endpoints.py`, 1 in
+`tests/test_overview_endpoints.py`; 1 pre-existing test's exact
+assertions updated for the new 4th seeded identity in each of the first
+two files).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 68 source files` (unchanged file count -
+no new modules this task, only edits to existing ones plus test files).
+Frontend: `npx tsc -b` clean, `npx oxlint` shows only pre-existing
+warning patterns, `npm run build` succeeds.
+
+**Real server restart and full live, multi-identity verification, in
+order performed** (full detail in the task file's own Completion
+evidence):
+1. Restarted the real server; confirmed the fourth identity seeded
+   correctly and idempotently into the real database.
+2. **Closed the real gap Task 13.3 disclosed**: granted real `analyst`
+   membership to Alex Rivera and real `reviewer` membership to Jordan
+   Lee on the real Universal Logic project via the new membership API -
+   both previously had zero real access to it anywhere.
+3. On the existing "Browser Verification" scratch project, ran the
+   actual two-browser journey with three genuinely distinct cookie-jar
+   sessions: analyst created a real task and submitted a real work
+   product; analyst's own attempt to approve it was refused live with a
+   real `403`; the reviewer's own session then approved it successfully
+   (`201`, task now really `"approved"`).
+4. Granted Morgan Reyes (external executive) real membership on that
+   project; fetched the Deal Overview under that identity's own session
+   and confirmed live it returned `restricted: true`, the real brief,
+   exactly the one real approved deliverable from step 3, and none of
+   `tasks`/`mandates`/`activity`.
+5. Confirmed the external executive's own session is refused (403) when
+   attempting to grant membership to someone else.
+6. Revoked the analyst's membership from the lead's session; confirmed
+   from the analyst's own still-open session that their very next
+   request 404s - revocation took effect immediately.
+7. Opened the real static project page as the deal lead: the new "Deal
+   access" card showed the real roster correctly (revoked analyst
+   correctly absent); used the real grant form in the browser itself to
+   re-grant the analyst access, and it appeared immediately.
+8. Opened the real React Deal Overview at `localhost:5173` under the
+   external executive's own session: the restricted view rendered
+   correctly - brief and the one approved deliverable only.
+9. No console errors observed at any step.
+10. Full suite and mypy re-run clean after the live verification too.
+11. Checked throughout: the four concurrent-session files untouched -
+    `git status --short` on those four paths returned nothing, both
+    before and after this task.
+
+**Files changed**: `identity.py`; `server.py`; `static/project.html`/
+`project.js`; `frontend/src/routes/DealOverview.tsx`; `frontend/src/lib/
+api.ts`; `tests/test_identity.py`; `tests/test_identity_endpoints.py`;
+`tests/test_task_and_workproduct_endpoints.py`;
+`tests/test_overview_endpoints.py`; new `docs/workspace-shift/tasks/
+13.4-multi-identity-journey-and-restricted-view.md`. Real data changed
+and left in place, intentionally (this task's own stated purpose): Alex
+Rivera and Jordan Lee now hold real deal membership on the real
+Universal Logic project; the "Browser Verification" scratch project
+gained one real task, one real approved work product, and real
+analyst/reviewer/external-executive memberships as live-verification
+evidence. No table, column, or unrelated row was created, altered, or
+removed.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-authorized roadmap item using an already-decided
+permission model (docs/06's own table), with no new product-hierarchy
+or permission-model question raised.
+
+**Blockers**: none for this task.
+
+**Next task**: none yet explicitly authorized - M14 ("Professional
+mandate templates and validation") remains out of scope per the
+founder's own earlier instruction ("do not implement M14-M16 yet")
+until asked. The disclosed T05 gap (only the Deal Overview is actually
+restricted for `external_executive`; search/export/citation/task-and-
+mandate-detail remain fully visible to any deal member regardless of
+role) is the most direct follow-on if a future task extends this one's
+role-based access boundary further.
+
+**Permissions needed**: founder decision on what to work on next (M14
+remains explicitly out of scope until asked), or whether to commit the
+accumulated Tasks 12.5–13.4 changes.
+
+## 2026-09-17 — Task 14.1 implemented (formalized the reconciliation
+capability's contract)
+
+**Authorization**: the founder asked whether I was aware of the
+previously-adopted Integrity Review integration package, I confirmed and
+summarized exactly what was adopted (documentation only), and the
+founder then said "ok now do m14.1" - scoped and implemented directly,
+continuing the standing "implement, don't draft" instruction. M13 was
+already fully complete (13.1-13.4), satisfying M14.2's first stated
+gate; this task satisfies its second ("M14.1 is done"). M14.2 itself
+remains unauthorized and unimplemented.
+
+**App commit**: `6c93acc` - this task, like every prior uncommitted one,
+was implemented and tested but not committed, per this effort's own
+established default.
+
+**What changed** (full detail: `tasks/14.1-formalize-reconciliation-
+contract.md`):
+1. `mandates.py`: `CapabilityDescriptor` gained real, enforced
+   `input_schema`/`output_schema`/`allowed_source_formats` fields -
+   docs/04-mandate-engine.md's own "Register each capability with: ...
+   input schema; output schema; allowed formats..." made real rather
+   than aspirational. A new minimal schema validator
+   (`_validate_against_schema`/`_validate_field` - no new dependency,
+   not a general JSON Schema engine) enforces `input_schema` at propose
+   time (replacing the old capability-name-keyed `if` check) and
+   `output_schema` immediately after every capability execution - an
+   executor whose real output drifts from its own declared contract now
+   fails the attempt/run loudly instead of propagating a malformed
+   shape.
+2. New `docs/12-reconciliation-capability-contract.md` - the actual
+   formal spec the roadmap calls for: capability identity, the exact
+   input/output schema, evidence semantics (native PDF citations, the
+   Excel citation convention, multi-workbook label resolution), supported
+   formats (PDF/XLSX/XLS only), outputs (the CrossFormatAnalysis record,
+   findings taxonomy), error/retry behavior, source handling, usage
+   accounting, and a dedicated Limitations section.
+3. `docs/10-decisions.md`: new D14 - the schema-on-descriptor pattern is
+   now binding on every future capability, explicitly naming M14.2's own
+   future `integrity.review_work_product` capability.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 651 tests ... OK` (638 baseline + 13 new: 10 in a new
+`CapabilityContractTests` class, 2 in `ReconciliationCapabilityTests`, 1
+in `MandateLifecycleTests`).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 68 source files` (unchanged file count -
+no new modules, only edits to `mandates.py` and its test file).
+
+**Real server restart and live verification, in order performed** (full
+detail in the task file's own Completion evidence):
+1. Restarted the real server; confirmed the mandate template list
+   unaffected.
+2. Created a real mandate on the real Universal Logic project and
+   proposed a real `reconciliation` plan against two of its real
+   documents (one PDF, one Excel workbook) - `201`, with real, correctly
+   pinned `document_ids`/`pinned_versions`, proving the newly
+   schema-enforced propose path produces identical output to the
+   pre-this-task behavior for a valid input. Never approved or run - no
+   paid call occurred.
+3. Proposed a second real plan with an empty `document_ids` list: live
+   `400` with the new schema-driven error message
+   ("expected at least 1 item(s)").
+4. Proposed a third real plan with a non-string document id (`[123]`):
+   live `400` ("expected a string").
+5. Full suite and mypy re-run clean after the live verification too.
+6. Checked throughout: the four concurrent-session files untouched -
+   `git status --short` on those four paths returned nothing, both
+   before and after this task.
+
+**Files changed**: `mandates.py`; `tests/test_mandates.py`; new
+`docs/workspace-shift/docs/12-reconciliation-capability-contract.md`;
+`docs/10-decisions.md` (new D14); new `docs/workspace-shift/tasks/
+14.1-formalize-reconciliation-contract.md`. Real data changed: two real,
+harmless `draft`-status Mandates (each with one `proposed`, never-
+approved, never-run PlanRevision) now exist on the real Universal Logic
+project as live-verification evidence, both objectives explicitly
+labeled as Task 14.1 live verification. Mandates are append-only by
+domain design and this app has no mandate-deletion route - consistent
+with how every prior task's own live-verification records were left in
+place. No table, column, or row was altered or removed.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: D14 added to `docs/10-decisions.md` (see above) - a real
+architectural decision, since it binds every future capability, not just
+this one.
+
+**Blockers**: none for this task.
+
+**Next task**: M14.2 (Work-product Integrity Review) is now ungated -
+both of its stated prerequisites (M13 acceptance, M14.1 completion) are
+satisfied - but it is a materially larger new-capability task with its
+own full bounded spec already preserved at
+`docs/workspace-shift/integrations/workspace-integrity-integration-v1.0.0/
+05-task-14.2-integrity-review.md` and should not be started without the
+founder's own explicit go-ahead, consistent with this task's own
+Completion evidence disclosure.
+
+**Permissions needed**: founder decision on whether to proceed to M14.2,
+work on something else, or commit the accumulated Tasks 12.5-14.1
+changes.
+
+## 2026-09-17 — Task 14.2 backend implemented (Work-product Integrity
+Review) - IN PROGRESS, not complete by its own spec
+
+**Authorization**: the founder said "m14.2 go ahead" after confirming
+awareness of the previously-adopted Integrity Review integration
+package. Both of the roadmap's own stated gates (M13 acceptance, M14.1
+completion) were already satisfied. This entry is deliberately not
+titled "implemented" the way every prior task's own entry has been -
+the task's own spec explicitly says "Do not call Task 14.2 complete
+merely because an API response rendered," and that gate is not yet met
+(see below and the task file's own Completion evidence).
+
+**App commit**: `6c93acc` - this task, like every prior uncommitted one,
+was implemented and tested but not committed.
+
+**What changed** (full detail: `tasks/14.2-integrity-review.md`):
+1. New `integrity_review.py` - a pure adapter directly reusing
+   `cross_format_analysis.py`'s own proven PDF+Excel transport, citation
+   parsing/verification, and Files API upload/cleanup functions (not
+   reimplemented). Target and peer submissions must be PDF (v1's own
+   disclosed scope boundary); source documents may be PDF or Excel, like
+   reconciliation.
+2. New `integrity_reviews.py` - persists the audit record and every
+   parsed candidate. A candidate is never inserted into the shared
+   findings register automatically - `decision` starts `"pending"` and
+   changes only via an explicit human decision.
+3. `workspaces.py` generalized (not replaced): `cross_format_analysis_id`
+   is now nullable, a new nullable `integrity_review_id` column lets a
+   Workspace be created for either an analysis or a review; a new
+   `"integrity"` finding origin shares the exact "immutable model
+   snapshot, human overlay" shape `"ai"` origin already has; a new
+   `publish_integrity_candidate_as_finding` is the *only* path a
+   candidate can ever become a real, shared finding.
+4. `mandates.py`: new `integrity.review_work_product` capability
+   (schema-driven per Task 14.1's own now-binding pattern) and
+   `integrity-review` template (capability stage then human_checkpoint -
+   the same shape 12.5's reconciliation-with-review already proved).
+   Every identifier is independently re-verified at both propose and
+   execution time. This template is deliberately never offered to, or
+   accepted from, the LLM planner (12.4) - exact version selection is a
+   human-UI job.
+5. `server.py`: new `GET .../integrity-reviews[/<id>]` read routes and
+   `POST .../integrity-reviews/<id>/candidates/<id>/decision` (accept/
+   reject/duplicate/unresolved, gated to analyst/reviewer/deal_lead per
+   docs/06's own permission table - not the stricter reviewer/deal_lead-
+   only gate the review-decision endpoint uses).
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 691 tests ... OK` (651 baseline + 40 new: 30 in new
+`tests/test_integrity_review.py`, 10 in new
+`tests/test_integrity_review_endpoints.py`).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 72 source files` (68 baseline +
+`integrity_review.py` + `integrity_reviews.py` + 2 new test files).
+
+**Real server restart and non-paid live check, in order performed**:
+1. Restarted the real server with this task's code; confirmed via
+   `GET /api/mandate-templates` that `integrity-review` is now listed.
+2. Full suite and mypy re-run clean after the restart.
+3. Checked throughout: the four concurrent-session files untouched -
+   `git status --short` on those four paths returned nothing.
+4. **No real paid call was made** - every test mocks the provider call;
+   this task's own required "Live proof" (a real run against authorized
+   material, a real human decision, an independently scored Validation
+   Lab case) was deliberately not attempted without further explicit
+   authorization, per this effort's standing rule.
+
+**Files changed**: new `integrity_review.py`; new `integrity_reviews.py`;
+`workspaces.py`; `mandates.py`; `server.py`; new
+`tests/test_integrity_review.py` (30 tests); new
+`tests/test_integrity_review_endpoints.py` (10 tests); new
+`docs/workspace-shift/tasks/14.2-integrity-review.md`. Real data
+changed: none - every test runs against an isolated schema, and the one
+live check performed no mutation.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` for this entry -
+the architectural choices made (nullable workspace columns, candidate-
+before-finding staging, PDF-only target/peer in v1) are documented in
+the task file's own Scope/Exclusions rather than as standing decisions,
+since they are specific to this one capability's v1 boundary, not a
+pattern binding on future work the way Task 14.1's D14 was.
+
+**Blockers**: this task cannot be called complete without (a) a
+frontend selection/candidate-review UI, and (b) explicit authorization
+for a real, paid live-proof call plus a Validation-Lab-scored case -
+both outstanding.
+
+**Next task**: build the frontend UI, then request explicit
+authorization for the real paid live proof. No other roadmap item makes
+sense to start ahead of finishing this one, per M14's own "one template
+at a time" discipline.
+
+**Permissions needed**: founder decision on whether to (a) build the
+frontend UI for this capability next, (b) authorize the real paid live-
+proof call now (backend-only, via direct API calls, without a UI), (c)
+work on something else, or (d) commit the accumulated Tasks 12.5-14.2
+changes.
+
+## 2026-09-17 — Task 14.2 frontend UI implemented (Work-product
+Integrity Review is now genuinely usable, not just an API)
+
+**Authorization**: asked directly ("Task 14.2's backend is built... how
+do you want to proceed?"); the founder chose "Build the frontend UI
+next" over authorizing the real paid call immediately or stopping.
+
+**App commit**: `6c93acc` - implemented and tested but not committed.
+
+**What changed** (full detail: `tasks/14.2-integrity-review.md`):
+1. `frontend/src/lib/api.ts`: new selection-data types/functions
+   (`listTasksWithWorkProducts`, `listWorkstreams`,
+   `getCurrentBriefVersion`) and Integrity Review types/functions
+   (`IntegrityReview`, `IntegrityCandidate`, `getIntegrityReview`,
+   `decideIntegrityCandidate`).
+2. `frontend/src/routes/MandateDetail.tsx`: a genuinely different
+   "Propose manually" branch for the `integrity-review` template - a
+   target-submission dropdown (PDF work products only, each showing its
+   real version number), a source-evidence checklist (reusing the exact
+   PDF/Excel checkboxes reconciliation already has), a peer-submission
+   checklist (PDF work products, excluding the current target), a "pin
+   the current brief" checkbox, a workstream dropdown, and a review-
+   scope textarea. A new `IntegrityReviewPanel` component replaces the
+   raw JSON attempt-output dump for this one capability, listing every
+   candidate's full parsed content with real Accept/Reject/Leave
+   unresolved/Mark duplicate actions - the human checkpoint made
+   operable, not merely modeled server-side.
+
+**Test/type evidence**: `npx tsc -b` clean; `npx oxlint` shows only the
+same pre-existing warning patterns as baseline; `npm run build`
+succeeds. Backend full suite and mypy re-run clean and unaffected (691
+tests, 72 source files - this was a frontend-only change).
+
+**Real, live browser verification, in order performed**:
+1. Created one real task, one real PDF work-product submission
+   ("Valuation memo"), and one real PDF source document
+   ("term-sheet.pdf") on the "Browser Verification" scratch project, so
+   the new UI would have real records to render.
+2. Opened the real React app, switched to "Sam Okafor (Deal Lead)",
+   created a real mandate, selected "Work-product Integrity Review" -
+   the new selection UI rendered every real record correctly (target
+   dropdown, source checklist, peer checklist correctly excluding the
+   selected target, brief checkbox correctly disabled with "none
+   saved," workstream dropdown correctly empty).
+3. Selected the real target and source, entered real review-scope text,
+   proposed a real plan (correct two stages: `review` capability then
+   `checkpoint` human_checkpoint), and approved it - the mandate moved
+   to "Active" with a real "Start run" control and budget-limit
+   selector.
+4. Deliberately stopped there - starting the run would make a real,
+   paid Anthropic call, not yet authorized. No console errors at any
+   step.
+
+**Files changed**: `frontend/src/lib/api.ts`;
+`frontend/src/routes/MandateDetail.tsx`; `docs/workspace-shift/tasks/
+14.2-integrity-review.md` (updated, not new). Real data changed: one
+real task, one real PDF work product, one real PDF document, and one
+real mandate with one approved (never run) plan now exist on the
+"Browser Verification" scratch project as live-verification evidence -
+consistent with how every prior task left its own verification records
+in place. No real Universal Logic data touched.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - a UI extension of
+an already-decided capability, not a new architectural choice.
+
+**Blockers**: this task still cannot be called complete without (a) a
+real, paid live-proof call, and (b) a Validation-Lab-scored case - both
+outstanding and requiring explicit authorization before any paid call.
+
+**Next task**: request explicit authorization for the real paid live
+proof - a real run against authorized material with independently known
+issues, a real human decision through the UI just built, and at least
+one Validation-Lab-scored case.
+
+**Permissions needed**: founder decision on whether to authorize the
+real paid live-proof call now, work on something else, or commit the
+accumulated Tasks 12.5-14.2 changes.
+
+## 2026-09-17 — Task 14.2 real paid live proof performed; task complete
+with two disclosed scope boundaries
+
+**Authorization**: the founder replied "do it" directly in response to
+this session's own offer to run the real paid live-proof call.
+
+**App commit**: `6c93acc` - implemented and tested but not committed.
+
+**What was done** (full detail: `tasks/14.2-integrity-review.md`'s own
+Completion evidence):
+1. Prepared authorized synthetic test material with a pre-registered
+   known-answer key, written down *before* the model saw any of it: a
+   term sheet (source) with a correct Enterprise-Value/Net-Debt/Working-
+   Capital-Adjustment bridge, and a one-page valuation memo (the
+   submission under review) with two deliberately injected errors - a
+   USD 500,000 Net Debt discrepancy and a Total Consideration
+   calculation that entirely omits the required Working Capital
+   Adjustment (understating the true figure by over a million dollars
+   either way it's computed) - plus one deliberate non-issue (a closing-
+   timing statement that is actually consistent with the term sheet,
+   testing whether the model would produce a false positive on it). Both
+   were generated as real PDFs (via `cupsfilter`) and uploaded as real
+   records on the "Browser Verification" scratch project.
+2. Created a real mandate, proposed and approved a real
+   `integrity-review` plan, and started the run - a real, paid Anthropic
+   call (model `claude-opus-5`, 20,687 input / 5,836 output tokens,
+   ~71 seconds). The run produced 7 real candidates and paused at its
+   human checkpoint.
+3. Scored the real result against the pre-registered answer key: **2/2
+   recall** on both deliberately injected issues (both correctly
+   classified, both correctly labeled critical, both citations verified
+   exact against the real source files, both required recalculations
+   independently reproduced correctly by the model), and **the false-
+   positive trap was avoided** - the model correctly recognized the
+   timing statement as consistent, not a conflict. All 7 candidates were
+   factually defensible; none contained an invented fact or citation.
+4. Conducted a real human review, exercising every decision path for
+   real: 2 candidates accepted and published as real shared findings,
+   1 marked a real duplicate of an already-published finding, 1 left
+   unresolved, 1 more accepted (a real, undesigned true positive - an
+   unsupported "comparable transaction multiples" claim with zero
+   comparables data anywhere in the materials), and 2 rejected (correct
+   observations, judged not to warrant a headline finding). Resumed the
+   mandate's own checkpoint; the run succeeded and the mandate completed.
+5. **Found and fixed a real gap live** - published findings' lineage
+   identified the review but not the originating mandate/run/attempt,
+   short of the spec's own explicit requirement. Root cause: the mandate
+   runtime never passed run/attempt context into any capability
+   executor at all (pre-existing, shared with reconciliation, not
+   unique to this task). Fixed by having `_run_stages` inject reserved
+   context keys into a local copy of the stage input at execution time
+   only; `IntegrityReview` gained real `mandate_id`/`run_id`/
+   `attempt_id` fields (additive migration); the real review record
+   from this session was backfilled with its own already-known correct
+   values via one targeted, disclosed `UPDATE`. Locked in by new
+   assertions in both integrity-review test files. The findings already
+   published before the fix keep their original immutable snapshot,
+   unmodified, per this app's own immutability principle - their
+   lineage remains reconstructable in one hop via the review record.
+
+**Test/type evidence**: `./venv/bin/python -m unittest discover -s
+tests` -> `Ran 691 tests ... OK`. `./venv/bin/python -m mypy $(ls *.py)
+tests` -> `Success: no issues found in 72 source files`. Both re-run
+clean after the lineage fix.
+
+**Files changed**: `integrity_reviews.py` (new `mandate_id`/`run_id`/
+`attempt_id` fields and column); `mandates.py` (`_run_stages`' context
+injection, `_integrity_review_executor`'s use of it); `server.py` (the
+candidate-decision lineage dict); `tests/test_integrity_review.py` and
+`tests/test_integrity_review_endpoints.py` (extended with lineage
+assertions); `docs/workspace-shift/tasks/14.2-integrity-review.md`
+(fully updated with the real live-proof narrative and scoring). Real
+data changed, all on the "Browser Verification" scratch project (never
+Universal Logic): one real task, one real PDF valuation memo, one real
+PDF term sheet, one real mandate, one real completed run, one real
+IntegrityReview record, 7 real candidates, 3 real published shared
+findings.
+
+**Unrelated state, confirmed untouched**: the four concurrent-session
+files - same as every prior entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - the lineage fix is
+a bug fix against this task's own already-stated requirements, not a
+new architectural choice; the manual-scoring-instead-of-Validation-Lab
+boundary is recorded as a disclosed task-level limitation, not a
+standing decision.
+
+**Blockers**: none. The two disclosed scope boundaries (manual scoring
+vs. dedicated Validation Lab integration; full-restart vs. mid-run-
+interruption persistence proof) are recorded as follow-on opportunities,
+not blockers to calling this task complete.
+
+**Next task**: none yet explicitly authorized. The disclosed Validation-
+Lab-integration gap is the most direct follow-on if a future task wants
+to extend that subsystem to a second capability; M14.3 (decision-package
+production) and M14.4 (readiness template) remain the next roadmap items
+in sequence but were not requested.
+
+**Permissions needed**: founder decision on what to work on next, or
+whether to commit the accumulated Tasks 12.5-14.2 changes (now including
+the real live-proof evidence and the lineage fix).

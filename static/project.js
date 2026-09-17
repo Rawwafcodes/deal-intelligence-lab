@@ -84,6 +84,15 @@ const workstreamDescriptionInputEl = document.getElementById("workstream-descrip
 const workstreamErrorEl = document.getElementById("workstream-error");
 let devIdentities = [];
 
+// Task 13.4: deal memberships ("Deal access")
+const membershipsCardEl = document.getElementById("memberships-card");
+const membershipsListEl = document.getElementById("memberships-list");
+const membershipsEmptyEl = document.getElementById("memberships-empty");
+const membershipFormEl = document.getElementById("membership-form");
+const membershipUserSelectEl = document.getElementById("membership-user");
+const membershipRoleSelectEl = document.getElementById("membership-role");
+const membershipErrorEl = document.getElementById("membership-error");
+
 // Task 13.1: tasks, comments, work-product submissions
 const tasksCardEl = document.getElementById("tasks-card");
 const tasksListEl = document.getElementById("tasks-list");
@@ -94,7 +103,10 @@ const taskDescriptionInputEl = document.getElementById("task-description");
 const taskWorkstreamSelectEl = document.getElementById("task-workstream");
 const taskAssigneeSelectEl = document.getElementById("task-assignee");
 const taskErrorEl = document.getElementById("task-error");
-const TASK_STATUS_LABELS = { open: "Open", in_progress: "In progress", submitted: "Submitted", cancelled: "Cancelled" };
+const TASK_STATUS_LABELS = {
+  open: "Open", in_progress: "In progress", submitted: "Submitted",
+  returned: "Returned for revision", approved: "Approved", cancelled: "Cancelled",
+};
 // loadTasks() re-fetches and re-renders the whole list after every action
 // (a comment, a status change, a submission) - tracked here so an
 // in-progress conversation on one task doesn't visually collapse after
@@ -199,6 +211,7 @@ async function loadProject() {
   renderProject(project);
   briefCardEl.hidden = false;
   workstreamsCardEl.hidden = false;
+  membershipsCardEl.hidden = false;
   tasksCardEl.hidden = false;
   uploadCardEl.hidden = false;
   documentsCardEl.hidden = false;
@@ -699,6 +712,91 @@ workstreamFormEl.addEventListener("submit", async (event) => {
   await loadWorkstreams();
 });
 
+// -- Task 13.4: deal memberships ("Deal access") ----------------------------
+
+const MEMBERSHIP_ROLE_LABELS = {
+  analyst: "Analyst",
+  reviewer: "Reviewer",
+  deal_lead: "Deal lead",
+  external_executive: "External executive",
+};
+
+function renderMembership(membership) {
+  const li = document.createElement("li");
+  li.className = "workstream-item";
+
+  const header = document.createElement("div");
+  header.className = "workstream-header";
+  const nameEl = document.createElement("div");
+  nameEl.className = "name";
+  const displayName = membership.user ? membership.user.display_name : "Unknown identity";
+  const roleLabel = MEMBERSHIP_ROLE_LABELS[membership.role] || membership.role;
+  nameEl.textContent = `${displayName} — ${roleLabel}`;
+  header.appendChild(nameEl);
+
+  if (membership.revoked_at) {
+    const revokedEl = document.createElement("span");
+    revokedEl.className = "desc";
+    revokedEl.textContent = "Revoked";
+    header.appendChild(revokedEl);
+  } else {
+    const revokeButton = document.createElement("button");
+    revokeButton.type = "button";
+    revokeButton.className = "link-action danger";
+    revokeButton.textContent = "Revoke";
+    revokeButton.addEventListener("click", () => revokeMembership(membership));
+    header.appendChild(revokeButton);
+  }
+  li.appendChild(header);
+  return li;
+}
+
+async function loadMemberships() {
+  await loadDevIdentities();
+  membershipUserSelectEl.textContent = "";
+  devIdentities.forEach((identity) => {
+    const option = document.createElement("option");
+    option.value = identity.user.id;
+    option.textContent = identity.user.display_name;
+    membershipUserSelectEl.appendChild(option);
+  });
+
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships`);
+  if (!res.ok) return;
+  const list = await res.json();
+  const active = list.filter((m) => !m.revoked_at);
+  membershipsListEl.textContent = "";
+  membershipsEmptyEl.hidden = active.length !== 0;
+  active.forEach((membership) => membershipsListEl.appendChild(renderMembership(membership)));
+}
+
+async function revokeMembership(membership) {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/memberships/${encodeURIComponent(membership.user_id)}`,
+    { method: "DELETE" }
+  );
+  if (res.ok) await loadMemberships();
+}
+
+membershipFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  membershipErrorEl.textContent = "";
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: membershipUserSelectEl.value,
+      role: membershipRoleSelectEl.value,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    membershipErrorEl.textContent = body.error || "Could not grant access.";
+    return;
+  }
+  await loadMemberships();
+});
+
 // -- Task 13.1: tasks, comments, work-product submissions ------------------
 
 async function populateTaskFormOptions() {
@@ -764,7 +862,66 @@ function renderWorkProduct(task, workProduct) {
     }));
     header.appendChild(versionsButton);
   }
+  if (workProduct.current_version_approved) {
+    const approvedBadge = document.createElement("span");
+    approvedBadge.className = "task-status task-status-approved";
+    approvedBadge.textContent = "Current version approved";
+    header.appendChild(approvedBadge);
+  }
   li.appendChild(header);
+
+  if (workProduct.review_decisions.length > 0) {
+    const historyHeading = document.createElement("p");
+    historyHeading.className = "task-review-history-heading";
+    historyHeading.textContent = "Review history";
+    li.appendChild(historyHeading);
+
+    const historyList = document.createElement("ul");
+    historyList.className = "task-comments";
+    workProduct.review_decisions.forEach((decision) => {
+      const item = document.createElement("li");
+      const reviewer = decision.reviewer ? decision.reviewer.display_name : "Unknown identity";
+      const meta = document.createElement("div");
+      meta.className = "version-meta";
+      const verb = decision.decision === "approved" ? "Approved" : "Returned for revision";
+      meta.textContent = `${verb} by ${reviewer} · v${workProduct.versions.find((v) => v.id === decision.submission_version_id)?.version_number ?? "?"} · ${formatDate(decision.created_at)}`;
+      item.appendChild(meta);
+      if (decision.rationale) {
+        const body = document.createElement("div");
+        body.textContent = decision.rationale;
+        item.appendChild(body);
+      }
+      historyList.appendChild(item);
+    });
+    li.appendChild(historyList);
+  }
+
+  if (task.status === "submitted") {
+    const reviewForm = document.createElement("form");
+    reviewForm.className = "task-review-form";
+    const rationaleInput = document.createElement("textarea");
+    rationaleInput.rows = 2;
+    rationaleInput.maxLength = 4000;
+    rationaleInput.placeholder = "Rationale (required to return for revision)";
+    rationaleInput.setAttribute("aria-label", `Review rationale for ${workProduct.title}`);
+    const approveButton = document.createElement("button");
+    approveButton.type = "button";
+    approveButton.textContent = "Approve";
+    approveButton.addEventListener("click", () => reviewWorkProduct(task.id, workProduct.id, "approved", rationaleInput.value));
+    const returnButton = document.createElement("button");
+    returnButton.type = "button";
+    returnButton.className = "button-secondary";
+    returnButton.textContent = "Return for revision";
+    returnButton.addEventListener("click", () => {
+      if (!rationaleInput.value.trim()) {
+        rationaleInput.focus();
+        return;
+      }
+      reviewWorkProduct(task.id, workProduct.id, "returned", rationaleInput.value);
+    });
+    reviewForm.append(rationaleInput, approveButton, returnButton);
+    li.appendChild(reviewForm);
+  }
 
   const addVersionForm = document.createElement("form");
   addVersionForm.className = "task-add-version-form";
@@ -809,13 +966,17 @@ function renderTaskDetail(task) {
     if (value === task.status) option.selected = true;
     statusSelect.appendChild(option);
   });
-  if (task.status === "submitted") {
-    const submittedOption = document.createElement("option");
-    submittedOption.value = "submitted";
-    submittedOption.textContent = "Submitted";
-    submittedOption.selected = true;
-    submittedOption.disabled = true;
-    statusSelect.appendChild(submittedOption);
+  // "submitted"/"returned"/"approved" are set automatically (a
+  // work-product submission or a review decision), never by this select -
+  // shown, disabled, only when the task is currently in one of them, so
+  // the pill and the dropdown never disagree about the task's own status.
+  if (["submitted", "returned", "approved"].includes(task.status)) {
+    const autoOption = document.createElement("option");
+    autoOption.value = task.status;
+    autoOption.textContent = TASK_STATUS_LABELS[task.status];
+    autoOption.selected = true;
+    autoOption.disabled = true;
+    statusSelect.appendChild(autoOption);
   }
   statusSelect.addEventListener("change", () => updateTaskStatus(task.id, statusSelect.value));
   controls.appendChild(statusSelect);
@@ -1031,6 +1192,20 @@ async function addWorkProductVersion(taskId, workProductId, file) {
   } else {
     window.alert(body.error || "Could not upload a new version.");
   }
+}
+
+async function reviewWorkProduct(taskId, workProductId, decision, rationale) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProductId)}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision, rationale }),
+  });
+  if (res.ok) {
+    await loadTasks();
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  window.alert(body.error || "Could not record the review decision.");
 }
 
 taskFormEl.addEventListener("submit", async (event) => {
@@ -1625,6 +1800,7 @@ loadProject().then(() => {
     loadReconciliations();
     loadBrief();
     loadWorkstreams();
+    loadMemberships();
     loadTasks();
   }
 });

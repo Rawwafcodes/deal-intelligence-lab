@@ -112,7 +112,7 @@ class Session:
     expires_at: str
 
 
-DEAL_ROLES = ("analyst", "reviewer", "deal_lead")
+DEAL_ROLES = ("analyst", "reviewer", "deal_lead", "external_executive")
 ORG_ROLES = ("admin", "member")
 
 
@@ -211,6 +211,7 @@ def _seed_defaults() -> None:
         memberships = list_organization_memberships_for_user(existing_default.id)
         default_org_id = memberships[0].organization_id if memberships else create_organization(_DEFAULT_ORG_NAME).id
         _backfill_legacy_projects(default_org_id=default_org_id, default_user_id=existing_default.id)
+        _ensure_external_executive_seeded(default_org_id)
         return
 
     org = create_organization(_DEFAULT_ORG_NAME)
@@ -221,6 +222,20 @@ def _seed_defaults() -> None:
     add_organization_membership(org.id, analyst.id, "member")
     add_organization_membership(org.id, reviewer.id, "member")
     _backfill_legacy_projects(default_org_id=org.id, default_user_id=lead.id)
+    _ensure_external_executive_seeded(org.id)
+
+
+def _ensure_external_executive_seeded(organization_id: str) -> None:
+    """Additive, idempotent (Task 13.4): a 4th seeded dev identity for the
+    new `external_executive` deal role - checked and created
+    independently of the branch above so it appears even in a database
+    whose `_seed_defaults()` already ran (and took the early-return
+    path) before this task existed, without re-running the original
+    one-time seeding branch a second time."""
+    if _find_user_by_email("external@local.dev") is not None:
+        return
+    external = create_user("external@local.dev", "Morgan Reyes (External Executive)")
+    add_organization_membership(organization_id, external.id, "member")
 
 
 def _find_user_by_email(email: str) -> User | None:
@@ -468,6 +483,23 @@ def revoke_deal_membership(project_id: str, user_id: str) -> bool:
     finally:
         conn.close()
     return row is not None
+
+
+def get_deal_role(project_id: str, user_id: str) -> str | None:
+    """The caller's own active role on this deal, or None if they have no
+    active membership. Task 13.4: the literal mechanism behind "analyst
+    cannot approve final package" (docs/09-acceptance.md T04) and the
+    restricted external-executive Deal Overview - server.py checks this
+    directly rather than trusting any client-supplied role."""
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT role FROM deal_memberships WHERE project_id = %s AND user_id = %s AND revoked_at IS NULL",
+            (project_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row["role"] if row else None
 
 
 def has_deal_access(project_id: str, user_id: str) -> bool:

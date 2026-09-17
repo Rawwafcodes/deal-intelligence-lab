@@ -32,11 +32,20 @@ class IdentityTests(unittest.TestCase):
 
     # -- seeding ------------------------------------------------------
 
-    def test_seeding_creates_one_org_and_three_users(self):
+    def test_seeding_creates_one_org_and_four_users(self):
+        # Task 13.4 added a 4th seeded identity for the external_executive
+        # deal role, alongside the original analyst/reviewer/deal_lead.
         orgs = identity.list_organizations()
         users = identity.list_users()
         self.assertEqual(len(orgs), 1)
-        self.assertEqual(len(users), 3)
+        self.assertEqual(len(users), 4)
+
+    def test_external_executive_is_seeded_with_org_membership_but_no_deal_role(self):
+        external = next(u for u in identity.list_users() if u.email == "external@local.dev")
+        memberships = identity.list_organization_memberships_for_user(external.id)
+        self.assertEqual(len(memberships), 1)
+        project = store.create_project("Acme Merger", "")
+        self.assertIsNone(identity.get_deal_role(project.id, external.id))
 
     def test_default_user_is_stable_across_calls(self):
         self.assertEqual(identity.get_default_user_id(), identity.get_default_user_id())
@@ -92,6 +101,20 @@ class IdentityTests(unittest.TestCase):
         active = [m for m in history if m.revoked_at is None]
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0].role, "reviewer")
+
+    def test_get_deal_role_reflects_active_membership(self):
+        project = store.create_project("Acme Merger", "")
+        user = identity.create_user("a@example.com", "Analyst A")
+        self.assertIsNone(identity.get_deal_role(project.id, user.id))
+        identity.add_deal_membership(project.id, user.id, "analyst")
+        self.assertEqual(identity.get_deal_role(project.id, user.id), "analyst")
+
+    def test_get_deal_role_is_none_after_revocation(self):
+        project = store.create_project("Acme Merger", "")
+        user = identity.create_user("a@example.com", "Analyst A")
+        identity.add_deal_membership(project.id, user.id, "reviewer")
+        identity.revoke_deal_membership(project.id, user.id)
+        self.assertIsNone(identity.get_deal_role(project.id, user.id))
 
     def test_org_admin_without_deal_membership_has_no_deal_access(self):
         """docs/06-security-and-collaboration.md: 'Organization admins do

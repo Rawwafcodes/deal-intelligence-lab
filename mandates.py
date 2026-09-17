@@ -85,9 +85,13 @@ import cross_format_analysis
 import deal_briefs
 import documents
 import evaluations
+import integrity_review
+import integrity_reviews
 import mandate_planning
 import store
+import work_products
 import workspaces
+import workstreams
 
 MANDATE_STATUSES = {
     "draft", "planning", "awaiting_approval", "active", "under_review",
@@ -133,6 +137,19 @@ class CapabilityDescriptor:
     # real-money meaning - but the check that enforces it against a Run's
     # budget is real, not a stub.
     unit_cost: float = 0.0
+    # Task 14.1: formalizes docs/04's capability-boundary contract
+    # verbatim - "Register each capability with: name/version; input
+    # schema; output schema; allowed formats..." - as real, enforced
+    # fields rather than the ad hoc, capability-name-keyed checks that
+    # used to live scattered across _default_input_for_stage and each
+    # executor. A minimal, hand-rolled JSON-Schema-shaped dict (object/
+    # required/properties/type/items/minItems only) - see
+    # _validate_against_schema below; not a general JSON Schema engine,
+    # since this app's own schemas never need more than that.
+    input_schema: dict = field(default_factory=dict)
+    output_schema: dict = field(default_factory=dict)
+    # None for a capability with no source documents at all (fixture.echo).
+    allowed_source_formats: tuple[str, ...] | None = None
 
 
 _CAPABILITIES: dict[str, CapabilityDescriptor] = {}
@@ -144,6 +161,57 @@ def register_capability(descriptor: CapabilityDescriptor) -> None:
 
 def get_capability(name: str) -> CapabilityDescriptor | None:
     return _CAPABILITIES.get(name)
+
+
+def _validate_field(value: Any, schema: dict, context: str) -> None:
+    expected = schema.get("type")
+    if expected == "string":
+        if not isinstance(value, str):
+            raise PlanValidationError(f"{context}: expected a string")
+    elif expected == "array":
+        if not isinstance(value, list):
+            raise PlanValidationError(f"{context}: expected an array")
+        min_items = schema.get("minItems")
+        if min_items is not None and len(value) < min_items:
+            raise PlanValidationError(f"{context}: expected at least {min_items} item(s)")
+        item_schema = schema.get("items")
+        if item_schema is not None:
+            for i, item in enumerate(value):
+                _validate_field(item, item_schema, f"{context}[{i}]")
+    elif expected == "number":
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise PlanValidationError(f"{context}: expected a number")
+    elif expected == "boolean":
+        if not isinstance(value, bool):
+            raise PlanValidationError(f"{context}: expected a boolean")
+    elif expected == "object":
+        _validate_against_schema(value, schema, context)
+    # No "type" at all (e.g. pinned_versions' free-form value shape) is
+    # deliberately unchecked beyond the object/array/string/number/boolean
+    # cases above - this validator only pins what this app's own two
+    # capabilities actually need, not a general schema language.
+
+
+def _validate_against_schema(value: Any, schema: dict, context: str) -> None:
+    """Task 14.1: the one place every capability's declared input_schema/
+    output_schema is actually enforced, not merely documented - see
+    CapabilityDescriptor's own docstring comment above. Raises
+    PlanValidationError (propose-time) the same way validate_plan_stages
+    already does, so an out-of-contract stage input is rejected before a
+    run is ever created; called again at execution time in _run_stages
+    against output_schema, so an executor whose real return value drifts
+    from its own declared contract fails loudly (attempt/run marked
+    failed) rather than propagating a malformed shape downstream."""
+    if not schema or schema.get("type") != "object":
+        return
+    if not isinstance(value, dict):
+        raise PlanValidationError(f"{context}: expected an object, got {type(value).__name__}")
+    for key in schema.get("required", []):
+        if key not in value:
+            raise PlanValidationError(f"{context}: missing required field {key!r}")
+    for key, subschema in schema.get("properties", {}).items():
+        if key in value:
+            _validate_field(value[key], subschema, f"{context}.{key}")
 
 
 def _fixture_echo_executor(project_id: str, stage_input: dict) -> dict:
@@ -158,6 +226,15 @@ register_capability(
         permission_check=lambda project_id: True,
         executor=_fixture_echo_executor,
         unit_cost=1.0,
+        input_schema={
+            "type": "object", "required": ["message"],
+            "properties": {"message": {"type": "string"}},
+        },
+        output_schema={
+            "type": "object", "required": ["echoed", "processed_at"],
+            "properties": {"echoed": {"type": "string"}, "processed_at": {"type": "string"}},
+        },
+        allowed_source_formats=None,
     )
 )
 
@@ -275,6 +352,264 @@ register_capability(
         # not this task's job. The budget-ledger mechanism itself (Task
         # 12.2) is real and enforced against this number regardless.
         unit_cost=1.0,
+        # Task 14.1: pins the exact contract this capability has always
+        # informally had - see docs/workspace-shift/docs/
+        # 12-reconciliation-capability-contract.md for the full formal
+        # spec (evidence semantics, outputs, limitations) this schema is
+        # drawn from. pinned_versions has no declared "type" deliberately -
+        # its values are plain document_id -> version_id strings, already
+        # enforced by _default_input_for_stage's own document lookups
+        # rather than this generic validator.
+        input_schema={
+            "type": "object", "required": ["document_ids"],
+            "properties": {
+                "document_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "pinned_versions": {"type": "object"},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "required": [
+                "cross_format_analysis_id", "workspace_id", "workspace_created",
+                "finding_count", "model",
+            ],
+            "properties": {
+                "cross_format_analysis_id": {"type": "string"},
+                "workspace_id": {"type": "string"},
+                "workspace_created": {"type": "boolean"},
+                "finding_count": {"type": "number"},
+                "model": {"type": "string"},
+            },
+        },
+        allowed_source_formats=(".pdf", ".xlsx", ".xls"),
+    )
+)
+
+
+class IntegrityReviewInputError(Exception):
+    """Task 14.2's analogue of ReconciliationInputError - raised at
+    execution time when a plan's pinned target/source/peer version was
+    deleted since approval. Unlike reconciliation, there is no "current
+    version drifted" case to check here: this capability pins an exact,
+    human-chosen SubmissionVersion/DocumentVersion (never "whatever is
+    current"), and a version row, once created, is never replaced or
+    deleted independently of its parent Document/WorkProduct - so the
+    only drift possible is the parent itself having been deleted."""
+
+
+def _lookup_target_or_peer(
+    project_id: str, ref: Any
+) -> tuple[work_products.WorkProduct, work_products.SubmissionVersion] | None:
+    """Resolves a `{work_product_id, version_id}` reference against the
+    real, current project state - used for both the target submission and
+    any peer submissions, which share the exact same shape. Returns None
+    on any failure (unknown/forged id, cross-project id, deleted parent)
+    rather than raising, so propose-time and execution-time callers can
+    each wrap the failure in whatever exception fits their own moment."""
+    if not isinstance(ref, dict):
+        return None
+    work_product = work_products.get_work_product(project_id, str(ref.get("work_product_id", "")))
+    if work_product is None:
+        return None
+    version = work_products.get_version(work_product.id, str(ref.get("version_id", "")))
+    if version is None:
+        return None
+    return work_product, version
+
+
+def _lookup_source(project_id: str, ref: Any) -> tuple[documents.Document, documents.DocumentVersion] | None:
+    if not isinstance(ref, dict):
+        return None
+    document = documents.get_document(project_id, str(ref.get("document_id", "")))
+    if document is None:
+        return None
+    version = documents.get_version(document.id, str(ref.get("version_id", "")))
+    if version is None:
+        return None
+    return document, version
+
+
+def _build_integrity_review_context(project_id: str, stage_input: dict, error_cls: type[Exception]) -> str:
+    """Assembles the plain-text review context sent to the model - pinned
+    brief fields and the workstream name, if selected, plus the
+    reviewer's own stated scope. Raises `error_cls` if a pinned
+    brief_version_id/workstream_id no longer resolves (deleted since
+    approval) - the same "re-verify every identifier independently"
+    discipline as every other lookup in this capability."""
+    parts = []
+    brief_version_id = stage_input.get("brief_version_id")
+    if brief_version_id:
+        brief = deal_briefs.get_version(project_id, brief_version_id)
+        if brief is None:
+            raise error_cls(f"brief version not found: {brief_version_id!r} (deleted since the plan was approved?)")
+        brief_lines = [
+            f"{field.capitalize()}: {getattr(brief, field)}"
+            for field in deal_briefs.BRIEF_FIELDS
+            if getattr(brief, field)
+        ]
+        if brief_lines:
+            parts.append("Deal brief:\n" + "\n".join(brief_lines))
+    workstream_id = stage_input.get("workstream_id")
+    if workstream_id:
+        workstream = workstreams.get_workstream(project_id, workstream_id)
+        if workstream is None:
+            raise error_cls(f"workstream not found: {workstream_id!r} (deleted since the plan was approved?)")
+        parts.append(f"Workstream: {workstream.name}")
+    review_scope = str(stage_input.get("review_scope", "") or "")
+    if review_scope.strip():
+        parts.append(f"Reviewer's stated scope: {review_scope.strip()}")
+    return "\n\n".join(parts)
+
+
+def _integrity_review_executor(project_id: str, stage_input: dict) -> dict:
+    """Task 14.2's real capability adapter: independently re-resolves
+    every identifier in the plan's pinned input against the real, current
+    project state (never trusts the plan's own copy of a filename or
+    title), builds the exact Selection objects integrity_review.py's pure
+    adapter needs, persists the audit record and every candidate exactly
+    as produced (never auto-published - see integrity_reviews.py's own
+    module docstring), and materializes an (initially empty) shared
+    workspace ready to receive published findings once a human accepts a
+    candidate."""
+    target_ref = stage_input["target"]
+    resolved_target = _lookup_target_or_peer(project_id, target_ref)
+    if resolved_target is None:
+        raise IntegrityReviewInputError(
+            f"target submission version not found: {target_ref!r} (deleted since the plan was approved?)"
+        )
+    target_work_product, target_version = resolved_target
+    target = integrity_review.TargetSelection(work_product=target_work_product, version=target_version)
+
+    sources = []
+    for doc_ref in stage_input.get("documents", []):
+        resolved_source = _lookup_source(project_id, doc_ref)
+        if resolved_source is None:
+            raise IntegrityReviewInputError(
+                f"source document version not found: {doc_ref!r} (deleted since the plan was approved?)"
+            )
+        document, doc_version = resolved_source
+        sources.append(integrity_review.SourceSelection(document=document, version=doc_version))
+
+    peers = []
+    for peer_ref in stage_input.get("peers", []):
+        resolved_peer = _lookup_target_or_peer(project_id, peer_ref)
+        if resolved_peer is None:
+            raise IntegrityReviewInputError(
+                f"peer submission version not found: {peer_ref!r} (deleted since the plan was approved?)"
+            )
+        peer_work_product, peer_version = resolved_peer
+        peers.append(integrity_review.PeerSelection(work_product=peer_work_product, version=peer_version))
+
+    validation_error = integrity_review.validate_selection(target, sources, peers)
+    if validation_error is not None:
+        error_type, error_message = validation_error
+        raise IntegrityReviewInputError(f"{error_type}: {error_message}")
+
+    review_context = _build_integrity_review_context(project_id, stage_input, IntegrityReviewInputError)
+    outcome = integrity_review.run_integrity_review(target, sources, peers, review_context)
+
+    record = integrity_reviews.create_integrity_review(
+        project_id=project_id,
+        # Task 14.2 lineage fix (found live, during this task's own real
+        # paid proof run - see STATUS.md): _run_stages injects these three
+        # reserved keys into a local copy of the stage input at execution
+        # time only (never at propose time, since no Run/Attempt exists
+        # yet then) - satisfies the spec's own "Published findings
+        # identify: Originating mandate/run/attempt" requirement.
+        mandate_id=stage_input.get("_mandate_id"), run_id=stage_input.get("_run_id"),
+        attempt_id=stage_input.get("_attempt_id"),
+        target_work_product_id=target_work_product.id, target_version_id=target_version.id,
+        source_document_ids=[s.document.id for s in sources], source_version_ids=[s.version.id for s in sources],
+        peer_work_product_ids=[p.work_product.id for p in peers], peer_version_ids=[p.version.id for p in peers],
+        brief_version_id=stage_input.get("brief_version_id"), workstream_id=stage_input.get("workstream_id"),
+        review_scope=str(stage_input.get("review_scope", "") or ""),
+        status="success" if outcome.success else "error", transmitted=outcome.transmitted,
+        analysis_seconds=outcome.analysis_seconds, model=outcome.model,
+        review_template_version=integrity_review.REVIEW_TEMPLATE_VERSION, stop_reason=outcome.stop_reason,
+        input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+        output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+        code_execution_requests=outcome.usage.get("code_execution_requests") if outcome.usage else None,
+        error_type=outcome.error_type, error_message=outcome.error_message,
+        materials_reviewed_text=outcome.materials_reviewed_text, tool_trace=outcome.tool_trace,
+        excel_cleanup=[c.to_dict() for c in outcome.excel_cleanup] if outcome.excel_cleanup else None,
+        excel_verification=[v.to_dict() for v in outcome.excel_verification] if outcome.excel_verification else None,
+    )
+
+    if not outcome.success:
+        # Audit record persisted above regardless (same as reconciliation's
+        # own pattern) - the failure is real and should fail this
+        # attempt/run/mandate, but the record of what was attempted, and
+        # why it failed, is not lost.
+        raise RuntimeError(f"integrity review failed (see integrity_review {record.id}): {outcome.error_message}")
+
+    candidate_dicts = [c.to_dict() for c in (outcome.candidates or [])]
+    candidates = integrity_reviews.create_candidates(record.id, candidate_dicts)
+    workspace, workspace_created = workspaces.get_or_create_workspace_for_integrity_review(project_id, record.id)
+
+    return {
+        "integrity_review_id": record.id,
+        "workspace_id": workspace.id,
+        "workspace_created": workspace_created,
+        "candidate_count": len(candidates),
+        "model": record.model,
+    }
+
+
+_INTEGRITY_REVIEW_REF_SCHEMA = {
+    "type": "object", "required": ["work_product_id", "version_id"],
+    "properties": {"work_product_id": {"type": "string"}, "version_id": {"type": "string"}},
+}
+_INTEGRITY_REVIEW_DOCUMENT_REF_SCHEMA = {
+    "type": "object", "required": ["document_id", "version_id"],
+    "properties": {"document_id": {"type": "string"}, "version_id": {"type": "string"}},
+}
+
+register_capability(
+    CapabilityDescriptor(
+        name="integrity.review_work_product",
+        version="1",
+        side_effect_class="external_paid_call",
+        permission_check=lambda project_id: True,
+        executor=_integrity_review_executor,
+        unit_cost=1.0,
+        # Task 14.2: unlike reconciliation.cross_format's flat
+        # document_ids list, this capability pins an exact *version* per
+        # reference (docs/workspace-shift/integrations/
+        # workspace-integrity-integration-v1.0.0/05-task-14.2-integrity-
+        # review.md: "The UI must make exact version selection visible") -
+        # a human picks specific SubmissionVersion/DocumentVersion ids,
+        # never "whatever is current," so there is no server-side
+        # "pin to current" step the way reconciliation's own
+        # _default_input_for_stage performs.
+        input_schema={
+            "type": "object", "required": ["target", "documents"],
+            "properties": {
+                "target": _INTEGRITY_REVIEW_REF_SCHEMA,
+                "documents": {"type": "array", "items": _INTEGRITY_REVIEW_DOCUMENT_REF_SCHEMA, "minItems": 1},
+                "peers": {"type": "array", "items": _INTEGRITY_REVIEW_REF_SCHEMA},
+                "brief_version_id": {"type": "string"},
+                "workstream_id": {"type": "string"},
+                "review_scope": {"type": "string"},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "required": ["integrity_review_id", "workspace_id", "workspace_created", "candidate_count", "model"],
+            "properties": {
+                "integrity_review_id": {"type": "string"},
+                "workspace_id": {"type": "string"},
+                "workspace_created": {"type": "boolean"},
+                "candidate_count": {"type": "number"},
+                "model": {"type": "string"},
+            },
+        },
+        # The target submission and any peer submissions must be PDF
+        # (this capability's own v1 scope boundary); source documents may
+        # be PDF or Excel, exactly like reconciliation - see
+        # integrity_review.py's own module docstring for why this single
+        # flat tuple undersells the real, per-role restriction actually
+        # enforced by integrity_review.validate_selection.
+        allowed_source_formats=(".pdf", ".xlsx", ".xls"),
     )
 )
 
@@ -396,6 +731,37 @@ register_template(
     )
 )
 
+register_template(
+    Template(
+        key="integrity-review",
+        version=1,
+        name="Work-product Integrity Review",
+        description=(
+            "Task 14.2: reviews one immutable analyst SubmissionVersion "
+            "against selected source-evidence DocumentVersions and, "
+            "optionally, peer SubmissionVersions, proposing candidate "
+            "integrity challenges - never authorized here as a "
+            "reconciliation-style automatic finding. The human_checkpoint "
+            "stage marks the mandate reviewed only once a human has "
+            "worked through the candidates via the dedicated candidate-"
+            "decision endpoints (accept/reject/edit/link-duplicate/leave-"
+            "unresolved); accepted candidates publish into the same "
+            "shared workspace findings register reconciliation already "
+            "uses, with origin 'integrity' and full version/mandate "
+            "lineage. Proposed manually only (stage_inputs, exact version "
+            "ids) - never by the LLM planner; see mandates.py's own "
+            "_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING for why."
+        ),
+        stages=[
+            {
+                "id": "review", "kind": "capability", "capability": "integrity.review_work_product",
+                "depends_on": [], "outputs": ["integrity_review_id", "workspace_id"],
+            },
+            {"id": "checkpoint", "kind": "human_checkpoint", "depends_on": ["review"], "outputs": ["review_decision"]},
+        ],
+    )
+)
+
 
 # Capabilities whose stage input is a source document selection, not
 # something derivable purely from the mandate's objective - Task 12.4's
@@ -403,7 +769,23 @@ register_template(
 # it knows when a model-proposed plan must name document_ids at all, and
 # which stage id to attach them to. Keyed by capability name rather than
 # template key, matching _default_input_for_stage's own dispatch below.
+# integrity.review_work_product is deliberately absent - see
+# _TEMPLATES_EXCLUDED_FROM_LLM_PLANNING below, not this set.
 _CAPABILITIES_NEEDING_DOCUMENT_SELECTION = {"reconciliation.cross_format"}
+
+# Task 14.2: templates never offered to the LLM planner at all - the
+# M14.2 spec's own "The planner may propose this pipeline, but it may
+# not authorize new sources, expand access, or skip the human
+# publication checkpoint" and "exact version selection visible" are a
+# human-UI job (a specific SubmissionVersion/DocumentVersion/peer
+# selection, not "whatever document the model thinks looks relevant"),
+# not something reconciliation's own document_ids-only planner support
+# generalizes to safely. A model that somehow still proposed this
+# template would simply see its own plan rejected as unsupported (empty
+# stage_inputs fails this capability's own input_schema) rather than
+# anything unsafe - this set only avoids offering a template the planner
+# cannot use well in the first place.
+_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING = {"integrity-review"}
 
 
 def _document_selection_stage(template: Template) -> dict | None:
@@ -438,12 +820,15 @@ def _default_input_for_stage(stage: dict, mandate: "Mandate", stage_inputs: dict
 
     if capability == "reconciliation.cross_format":
         provided = (stage_inputs or {}).get(stage["id"]) or {}
-        document_ids = provided.get("document_ids")
-        if not document_ids or not isinstance(document_ids, list) or not all(isinstance(d, str) for d in document_ids):
-            raise PlanValidationError(
-                f"stage {stage['id']!r} (reconciliation.cross_format) requires a non-empty "
-                "document_ids list in stage_inputs at propose time"
-            )
+        descriptor = get_capability(capability)
+        assert descriptor is not None  # validate_plan_stages already confirmed this is registered
+        # Task 14.1: the capability's own declared input_schema is what
+        # enforces "a non-empty document_ids list of strings" now - not a
+        # hand-written check specific to this one capability's name.
+        _validate_against_schema(
+            provided, descriptor.input_schema, f"stage {stage['id']!r} ({capability}) input"
+        )
+        document_ids = provided["document_ids"]
         pinned_versions: dict[str, str] = {}
         for document_id in document_ids:
             document = documents.get_document(mandate.project_id, document_id)
@@ -452,6 +837,41 @@ def _default_input_for_stage(stage: dict, mandate: "Mandate", stage_inputs: dict
             if document.current_version_id is not None:
                 pinned_versions[document_id] = document.current_version_id
         return {"document_ids": document_ids, "pinned_versions": pinned_versions}
+
+    if capability == "integrity.review_work_product":
+        provided = (stage_inputs or {}).get(stage["id"]) or {}
+        descriptor = get_capability(capability)
+        assert descriptor is not None
+        # Task 14.2: unlike reconciliation, there is no "pin to current
+        # version" step here at all - the human already named an exact
+        # SubmissionVersion/DocumentVersion in `provided` (the M14.2
+        # spec's own "exact version selection visible" requirement), so
+        # this function's only job is to verify every referenced id is
+        # real, in this project, before the plan is ever approved -
+        # never to silently substitute or derive one.
+        _validate_against_schema(
+            provided, descriptor.input_schema, f"stage {stage['id']!r} ({capability}) input"
+        )
+        if _lookup_target_or_peer(mandate.project_id, provided["target"]) is None:
+            raise PlanValidationError(f"target submission version not found: {provided['target']!r}")
+        for doc_ref in provided["documents"]:
+            if _lookup_source(mandate.project_id, doc_ref) is None:
+                raise PlanValidationError(f"source document version not found: {doc_ref!r}")
+        for peer_ref in provided.get("peers", []):
+            if _lookup_target_or_peer(mandate.project_id, peer_ref) is None:
+                raise PlanValidationError(f"peer submission version not found: {peer_ref!r}")
+        # Re-verifies brief_version_id/workstream_id too, so an approved
+        # plan can never reference a context record that never existed -
+        # the error is raised here (PlanValidationError), not deferred.
+        _build_integrity_review_context(mandate.project_id, provided, PlanValidationError)
+        return {
+            "target": provided["target"],
+            "documents": provided["documents"],
+            "peers": provided.get("peers", []),
+            "brief_version_id": provided.get("brief_version_id"),
+            "workstream_id": provided.get("workstream_id"),
+            "review_scope": str(provided.get("review_scope", "") or ""),
+        }
 
     return {}
 
@@ -971,6 +1391,7 @@ def propose_plan_llm(project_id: str, mandate_id: str, feedback: str | None = No
             needs_documents=_document_selection_stage(t) is not None,
         )
         for t in list_templates()
+        if t.key not in _TEMPLATES_EXCLUDED_FROM_LLM_PLANNING
     ]
     brief = deal_briefs.get_current_version(project_id)
 
@@ -993,7 +1414,7 @@ def propose_plan_llm(project_id: str, mandate_id: str, feedback: str | None = No
     # every claim before trusting any of it (see this function's own
     # docstring, layer 1).
     template = get_template(outcome.template_key) if outcome.template_key else None
-    if template is None:
+    if template is None or template.key in _TEMPLATES_EXCLUDED_FROM_LLM_PLANNING:
         return LlmPlanProposalResult(
             status="unsupported", reasoning=outcome.reasoning,
             reason=f"the planner proposed an unregistered template: {outcome.template_key!r}",
@@ -1326,7 +1747,27 @@ def _run_stages(project_id: str, mandate: Mandate, plan: PlanRevision, run_id: s
         attempt_id = _record_attempt(run_id, stage["id"], capability=capability_name,
                                       status="running", output=None, error=None)
         try:
-            output = descriptor.executor(project_id, stage.get("input", {}))
+            # Task 14.2: a local copy only - never written back into the
+            # plan's own stored stages_json. Reserved, underscore-prefixed
+            # keys carrying the mandate/run/attempt context an executor
+            # may need for its own audit record's lineage (see
+            # _integrity_review_executor) - harmless for every existing
+            # executor, which reads only the specific keys it already
+            # expects and ignores the rest; not part of any capability's
+            # own declared input_schema, and never checked by it.
+            stage_input_with_context = dict(stage.get("input", {}))
+            stage_input_with_context["_mandate_id"] = mandate.id
+            stage_input_with_context["_run_id"] = run_id
+            stage_input_with_context["_attempt_id"] = attempt_id
+            output = descriptor.executor(project_id, stage_input_with_context)
+            # Task 14.1: the executor's real return value must match its
+            # own declared output_schema - a capability whose output
+            # drifts from its own pinned contract fails loudly here,
+            # exactly like any other executor exception, rather than
+            # propagating a malformed shape into a persisted Attempt.
+            _validate_against_schema(
+                output, descriptor.output_schema, f"stage {stage['id']!r} ({capability_name}) output"
+            )
         except Exception as exc:  # the executor is untrusted third-party-shaped code
             _update_attempt(attempt_id, status="failed", output=None, error=str(exc))
             _set_run(run_id, status="failed", finished_at=_now())

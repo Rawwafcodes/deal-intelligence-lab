@@ -87,11 +87,41 @@
       </form>
     </div>
 
+    <div class="card" id="memberships-card" hidden>
+      <h2>Deal access</h2>
+      <p class="section-hint">
+        Who can see this deal, and in what role. Only a deal lead can grant or revoke access.
+        Revoking access takes effect on that person's very next request.
+      </p>
+      <ul class="project-list" id="memberships-list"></ul>
+      <div class="empty-state" id="memberships-empty" hidden>
+        <p>No one has been granted access yet.</p>
+      </div>
+      <form id="membership-form">
+        <div class="field">
+          <label for="membership-user">Grant access to</label>
+          <select id="membership-user"></select>
+        </div>
+        <div class="field">
+          <label for="membership-role">Role</label>
+          <select id="membership-role">
+            <option value="analyst">Analyst</option>
+            <option value="reviewer">Reviewer</option>
+            <option value="deal_lead">Deal lead</option>
+            <option value="external_executive">External executive</option>
+          </select>
+        </div>
+        <button type="submit">Grant access</button>
+        <div id="membership-error" class="error"></div>
+      </form>
+    </div>
+
     <div class="card" id="tasks-card" hidden>
       <h2>Tasks</h2>
       <p class="section-hint">
-        Assigned work items for this deal. Comment on a task and submit a work-product version when
-        it is ready to be looked at - a full review/approval workflow is still to come.
+        Assigned work items for this deal. Comment on a task, submit a work-product version when it
+        is ready for review, and approve or return it for revision - approval always targets the
+        exact version reviewed and never silently carries over to a later one.
       </p>
       <ul class="project-list task-list" id="tasks-list"></ul>
       <div class="empty-state" id="tasks-empty" hidden>
