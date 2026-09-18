@@ -56,6 +56,25 @@ Nothing in `_run_stages`, `_default_input_for_stage`, or
 of existing capabilities should normally require configuration only"
 line from AGENTS.md, proven true rather than just claimed.
 
+Task 15.3 added opt-in trigger firing (triggers.py, plus this module's
+own `fire_triggers_for_event`): an authorized user configures a Trigger
+naming an event type, a compatible template, and an owner/budget/reason;
+when the real event actually happens (a document gets a new version, a
+decision package is drafted), every matching active trigger gets a real
+Mandate created and a real Plan proposed against the affected
+workspace - never auto-approved, never auto-run (docs/04-mandate-
+engine.md: "AI can request adaptation... [but] cannot rewrite its own
+policy or mark human gates approved" - the same principle applied to a
+trigger's own proposal). `triggers.py` itself imports nothing from this
+module (a leaf, like version_dependencies.py) specifically so this
+module can import it without a cycle; the actual mandate/plan creation
+happens here, in `fire_triggers_for_event`, called from wherever the
+real event already occurs (`_decision_package_executor` in this same
+module for `decision_package_prepared`; `server.py`'s document-version-
+upload handler for `document_version_changed`, since `documents.py`
+itself stays completely unaware of mandates, exactly as it stays
+unaware of every other higher-level concern).
+
 Task 15.2 added `reassessment.compare_versions` - the mandate that turns
 a staleness flag (15.1) into an actual decision: given a workspace
 already marked potentially_stale by a document version change, it sends
@@ -146,6 +165,7 @@ import readiness_assessments
 import reassessment
 import reassessments
 import store
+import triggers
 import version_dependencies
 import work_products
 import workspaces
@@ -777,6 +797,14 @@ def _decision_package_executor(project_id: str, stage_input: dict) -> dict:
     # stale whenever the workspace itself is (or becomes) stale, not on
     # any direct version comparison of its own.
     version_dependencies.record_dependency("deliverable_version", record.id, "workspace", workspace_id)
+
+    # Task 15.3: fires only whatever active triggers are actually
+    # configured for this event in this project - a no-op list when none
+    # exist, never a hidden analytical step of its own.
+    fire_triggers_for_event(
+        project_id, "decision_package_prepared", workspace_id,
+        {"deliverable_id": record.id, "version": record.version_number},
+    )
 
     return {
         "deliverable_id": record.id, "workspace_id": workspace_id, "version": record.version_number,
@@ -2445,6 +2473,57 @@ def cancel_run(project_id: str, mandate_id: str, run_id: str) -> Run:
     updated = get_run(mandate_id, run_id)
     assert updated is not None
     return updated
+
+
+# -- opt-in trigger firing (Task 15.3) -----------------------------------
+
+# The one stage id, per compatible template, whose input is exactly
+# {"workspace_id": ...} - the only shape either compatible template's
+# stage needs (see triggers.py's own EVENT_TEMPLATE_COMPATIBILITY and
+# module docstring for why only these two templates qualify for v1).
+_TRIGGER_TEMPLATE_STAGE_ID = {"readiness": "assess", "reassessment": "reassess"}
+
+
+def fire_triggers_for_event(
+    project_id: str, event_type: str, workspace_id: str, event_detail: dict,
+    document_id: str | None = None,
+) -> list[triggers.TriggerFiring]:
+    """Called from wherever a real, matching event actually happens -
+    never on a schedule, never speculatively. Finds every active trigger
+    whose event type and scope match, and for each one creates a real
+    Mandate and proposes a real Plan against `workspace_id` using the
+    trigger's own configured template - exactly the same `create_mandate`/
+    `propose_plan` a human's own manual proposal already goes through, so
+    a trigger-created plan is exactly as unapproved as a manually-created
+    one (docs/04: a model, or here a trigger, "cannot rewrite its own
+    policy or mark human gates approved"). A failure proposing one
+    trigger's plan (e.g. the workspace stopped being stale between the
+    event and this call) is isolated to that trigger's own `TriggerFiring`
+    row - it never raises out of this function, so firing a trigger can
+    never break the real request (an upload, a decision-package creation)
+    that caused the event in the first place."""
+    matches = triggers.match_active_triggers(project_id, event_type, document_id=document_id, workspace_id=workspace_id)
+    firings = []
+    for trigger in matches:
+        stage_id = _TRIGGER_TEMPLATE_STAGE_ID[trigger.template_key]
+        try:
+            mandate = create_mandate(
+                project_id, f"Triggered by {trigger.name!r} ({event_type})", created_by=trigger.owner_user_id,
+            )
+            plan = propose_plan(
+                project_id, mandate.id, trigger.template_key, stage_inputs={stage_id: {"workspace_id": workspace_id}},
+            )
+            firing = triggers.record_firing(
+                trigger_id=trigger.id, project_id=project_id, workspace_id=workspace_id, event_detail=event_detail,
+                mandate_id=mandate.id, plan_id=plan.id, status="proposed", error_message=None,
+            )
+        except Exception as exc:  # noqa: BLE001 - isolate one trigger's failure from the rest and from the caller
+            firing = triggers.record_firing(
+                trigger_id=trigger.id, project_id=project_id, workspace_id=workspace_id, event_detail=event_detail,
+                mandate_id=None, plan_id=None, status="error", error_message=str(exc),
+            )
+        firings.append(firing)
+    return firings
 
 
 # -- durable local worker (Task 12.2) ----------------------------------

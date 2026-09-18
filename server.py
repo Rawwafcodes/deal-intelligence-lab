@@ -42,6 +42,7 @@ import reassessments
 import reviews
 import store
 import tasks
+import triggers
 import validation_cases
 import validation_runs
 import version_dependencies
@@ -188,6 +189,10 @@ _REASSESSMENT_RECORD_RE = re.compile(r"^/api/projects/([^/]+)/reassessments/([^/
 _REASSESSMENT_ITEM_DECISION_RE = re.compile(
     r"^/api/projects/([^/]+)/reassessments/([^/]+)/items/([^/]+)/decision$"
 )
+
+_TRIGGERS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/triggers$")
+_TRIGGER_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/triggers/([^/]+)$")
+_TRIGGER_DISABLE_RE = re.compile(r"^/api/projects/([^/]+)/triggers/([^/]+)/disable$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1245,6 +1250,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, out)
             return
 
+        trigger_item_match = _TRIGGER_ITEM_RE.match(path)
+        if trigger_item_match:
+            project_id, trigger_id = trigger_item_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            trigger = triggers.get_trigger(project_id, trigger_id)
+            if trigger is None:
+                self._send_json(404, {"error": "trigger not found"})
+                return
+            trigger_out = trigger.to_dict()
+            trigger_out["firings"] = [f.to_dict() for f in triggers.list_firings(trigger.id)]
+            self._send_json(200, trigger_out)
+            return
+
+        triggers_collection_match = _TRIGGERS_COLLECTION_RE.match(path)
+        if triggers_collection_match:
+            (project_id,) = triggers_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [t.to_dict() for t in triggers.list_triggers(project_id)]
+            self._send_json(200, out)
+            return
+
         if path.startswith("/api/projects/"):
             project_id = path.removeprefix("/api/projects/")
             project = self._authorized_project(project_id)
@@ -1417,6 +1445,18 @@ class Handler(BaseHTTPRequestHandler):
         if reassessment_item_decision_match:
             project_id, reassessment_id, item_id = reassessment_item_decision_match.groups()
             self._handle_reassessment_item_decision(project_id, reassessment_id, item_id)
+            return
+
+        trigger_disable_match = _TRIGGER_DISABLE_RE.match(path)
+        if trigger_disable_match:
+            project_id, trigger_id = trigger_disable_match.groups()
+            self._handle_disable_trigger(project_id, trigger_id)
+            return
+
+        triggers_create_match = _TRIGGERS_COLLECTION_RE.match(path)
+        if triggers_create_match:
+            (project_id,) = triggers_create_match.groups()
+            self._handle_create_trigger(project_id)
             return
 
         mandate_run_resume_match = _MANDATE_RUN_RESUME_RE.match(path)
@@ -1742,6 +1782,24 @@ class Handler(BaseHTTPRequestHandler):
 
         result = documents.add_version(project_id, document_id, file_parts[0].data)
         status_code = {"new_version": 201, "duplicate": 409, "failed": 500}.get(result.status, 500)
+
+        # Task 15.3: fires only whatever active "document_version_changed"
+        # triggers are actually configured for this project/document - a
+        # no-op scan when none exist. documents.py itself stays completely
+        # unaware of mandates/triggers, so this composition happens here,
+        # at the API boundary, exactly like every other cross-module
+        # composition in this app.
+        if result.status == "new_version" and result.document is not None:
+            new_version_id = result.document.current_version_id
+            affected_workspaces = version_dependencies.list_dependents_of(
+                "document", document_id, dependent_type="workspace"
+            )
+            for _, workspace_id in affected_workspaces:
+                mandates.fire_triggers_for_event(
+                    project_id, "document_version_changed", workspace_id,
+                    {"document_id": document_id, "new_version_id": new_version_id}, document_id=document_id,
+                )
+
         self._send_json(status_code, result.to_dict())
 
     # -- deal brief (Task 11.4) -------------------------------------------
@@ -2218,6 +2276,54 @@ class Handler(BaseHTTPRequestHandler):
             version_dependencies.clear_staleness("workspace", record.workspace_id)
 
         self._send_json(200, updated.to_dict())
+
+    # -- opt-in triggers (Task 15.3) -----------------------------------------
+
+    def _handle_create_trigger(self, project_id: str) -> None:
+        """Configuring a standing trigger is a more consequential, longer-
+        lived action than proposing one mandate - gated to reviewer/
+        deal_lead, the same role pair docs/06-security-and-collaboration.md
+        gives "Create mandate... Yes within workspace policy" beyond a
+        plain analyst's own scoped capability/budget."""
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only a reviewer or deal lead may configure a trigger"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        try:
+            trigger = triggers.create_trigger(
+                project_id=project_id,
+                name=str(data.get("name", "")),
+                event_type=str(data.get("event_type", "")),
+                template_key=str(data.get("template_key", "")),
+                owner_user_id=str(data.get("owner_user_id") or self.current_user_id),
+                scope_document_id=data.get("scope_document_id"),
+                scope_workspace_id=data.get("scope_workspace_id"),
+                budget_limit=data.get("budget_limit"),
+                reason=str(data.get("reason", "")),
+                created_by=self.current_user_id,
+            )
+        except triggers.TriggerValidationError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, trigger.to_dict())
+
+    def _handle_disable_trigger(self, project_id: str, trigger_id: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only a reviewer or deal lead may disable a trigger"})
+            return
+        try:
+            trigger = triggers.disable_trigger(project_id, trigger_id)
+        except triggers.TriggerValidationError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        self._send_json(200, trigger.to_dict())
 
     # -- mandates (Task 12.1) --------------------------------------------
 
@@ -3375,6 +3481,7 @@ def main() -> None:
     readiness_assessments.init_readiness_assessments_db()
     version_dependencies.init_version_dependencies_db()
     reassessments.init_reassessments_db()
+    triggers.init_triggers_db()
     mandates.init_mandates_db()
     # Task 12.2: the durable local worker - a real background thread,
     # independent of any HTTP request, that executes queued/resumed

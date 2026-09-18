@@ -12,24 +12,26 @@ light navy/gold identity — see the dated entries below. Also as of
 2026-09-16, the untracked `frontend/` React scaffold's own `src/index.css`
 was retheme'd to the same Meridian identity (see dated entry below) — the
 two stacks (static pages, React scaffold) now read as one product visually.
-Current task: tasks/15.2-targeted-reassessment.md (complete for this
-task's own bounded scope - document-caused staleness only; 15.3's
-trigger policy remains separate). Given a workspace Task 15.1 already
-flagged stale, a real mandate now compares the old and new document
-versions against the workspace's current findings and proposes, per
-finding, still_valid/materially_changed/needs_human_reconsideration -
-proven live and for real (two real paid calls): a real reconciliation,
-a real revised term sheet whose new figure happened to exactly match
-the model's own hardcoded value, and a real reassessment that correctly
-recognized the underlying conflict was *resolved* rather than merely
-restated, correctly flagged a genuinely ambiguous finding for human
-judgment instead of guessing, and - once every item was acknowledged -
-automatically cleared the workspace's staleness flag, with the
-underlying findings never mutated throughout. Disclosed boundaries:
-only document-caused staleness (not cascaded or submission-version
-staleness); no cascade un-staling; acknowledging doesn't auto-update a
-finding's own workflow fields. See below). Next recommended: `15.3`
-(trigger policy), not yet authorized.
+Current task: tasks/15.3-trigger-policy.md (complete for this task's own
+bounded scope - 2 of the roadmap's 5 example event types. **This closes
+M15 entirely.**). An authorized reviewer/deal lead can now configure a
+standing, named trigger (event type + template + owner/budget/reason);
+when the real event fires (a document gets a new version, a decision
+package is drafted), a real Mandate with a real proposed Plan is created
+automatically - never auto-approved or auto-run. Proven live and for
+free (reusing Task 15.2's own real workspace, firing the zero-cost
+`readiness` template): uploading a real new document version
+automatically created a real, correctly-targeted, still-`awaiting_
+approval` mandate, with Task 15.1's own independent staleness mechanism
+firing correctly alongside it on the same real event.
+`decision_package_prepared` is proven only by the mocked test suite (the
+founder declined a further real paid call for it), not a live call.
+Disclosed boundaries: only 2 of 5 roadmap-listed event types (the other
+three lack a natural, unambiguous workspace_id or an existing action to
+hook); approval_policy is always "manual"; no trigger editing. See
+below). Next recommended: none yet authorized past M15 - M16 is
+explicitly evidence-gated in the roadmap, a founder decision rather than
+an automatic next step.
 Application repository: /Users/rawwafa/Projects/deal-intelligence-lab, this session
 had live, direct access to it.
 Application revision: as of 2026-09-17, the founder asked to commit the
@@ -3795,3 +3797,112 @@ and propose it manually.
 
 **Permissions needed**: founder decision on what to work on next, or
 whether to commit the accumulated Tasks 12.5-15.2 changes.
+
+## 2026-09-18 — Task 15.3 executed (trigger policy, real free live proof) — closes M15
+
+**Authorization**: the founder said "next" immediately after M15.2's
+completion, continuing the standing "implement the tasks you're
+performing, don't draft it" instruction. When asked whether to spend a
+further real paid call proving `decision_package_prepared` live, the
+founder chose the free-only proof option.
+
+**App commit**: `456e435` (Tasks 14.3-15.2 were committed between the
+previous entry and this one, at the founder's request); nothing in this
+task itself was committed.
+
+**What changed** (full detail and the real live-proof narrative:
+`tasks/15.3-trigger-policy.md`, status `complete` for this task's own
+scope):
+1. New `triggers.py`: a freestanding leaf module (only `store` imported,
+   deliberately never `mandates.py`, avoiding a circular import) holding
+   `Trigger`/`TriggerFiring` persistence and matching logic. v1 supports
+   exactly two of the roadmap's five example event types -
+   `document_version_changed` (pairs with `readiness` or `reassessment`)
+   and `decision_package_prepared` (pairs with `readiness` only) - both
+   chosen because they already have a real hook point and a workspace_id
+   the fired template can use directly.
+2. `version_dependencies.py`: new `list_dependents_of` reverse lookup -
+   every workspace that has ever depended on a given document.
+3. `mandates.py`: new `fire_triggers_for_event`, called from wherever the
+   real event already happens. Calls the exact same `create_mandate`/
+   `propose_plan` a human's own manual proposal already goes through - a
+   trigger-created plan is exactly as unapproved as one typed by hand. A
+   failure proposing one trigger's plan is isolated to its own `"error"`
+   firing record, never raised out to break the real request that caused
+   the event.
+4. `server.py`: the `document_version_changed` hook lives in
+   `_handle_add_document_version` (documents.py itself stays unaware of
+   mandates/triggers, composed here at the API boundary); new
+   `POST/GET/POST` trigger CRUD routes, gated to reviewer/deal_lead for
+   configuration.
+5. Tests: `tests/test_triggers.py` (19) and `tests/test_trigger_
+   endpoints.py` (9) - 28 new, including two real end-to-end HTTP
+   integration tests for both event hooks.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 809 tests ... OK` (781 baseline + 28 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 90 source files`.
+
+**Real, free live-proof evidence** (reused the real, already-cleared
+workspace from Task 15.2's own live-proof session - zero incremental
+cost, since the trigger fires the free `readiness` template):
+1. Restarted the real server; confirmed the reused workspace was not
+   stale.
+2. Created a real trigger via the real API (`document_version_changed`,
+   `readiness`, unscoped).
+3. Uploaded a real third version of that workspace's own term-sheet
+   document via the plain, real versions route - an ordinary upload, no
+   mandate call made directly.
+4. **Confirmed the trigger fired automatically and for free**: a real
+   `TriggerFiring` (`status: "proposed"`) naming the exact real document,
+   version, and workspace ids, created the instant the upload completed.
+5. **Confirmed the resulting real Mandate/Plan never runs unapproved**:
+   `status: "awaiting_approval"`, `current_plan_id: null`, the proposed
+   plan's `stages[0].input.workspace_id` correctly set, `approved_at:
+   null` - nothing runs until a human takes the same explicit steps any
+   other plan requires.
+6. Confirmed the same real upload also correctly re-triggered Task
+   15.1's own independent staleness mechanism on the same workspace -
+   both M15 mechanisms operating correctly side by side on one real
+   event.
+7. `decision_package_prepared` was **not** proven with a real paid call
+   (founder's explicit choice) - it is proven only by the mocked test
+   suite's own real-HTTP end-to-end test, using the identical firing
+   code path already proven live for the other event type.
+8. Full suite (809) and mypy re-run clean after the live session.
+
+**Files changed**: new `triggers.py`, `version_dependencies.py`,
+`mandates.py`, `server.py`, new `tests/test_triggers.py`, new `tests/
+test_trigger_endpoints.py`, new `docs/workspace-shift/tasks/
+15.3-trigger-policy.md`, this entry. Real data changed, all on the
+pre-existing "M15.2 Live Smoke Test" project: one real document version,
+one real trigger, one real triggered (never approved/run) mandate/plan,
+one real firing record.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section, not a new architectural choice.
+
+**Blockers**: none. Disclosed exclusions (only 2 of 5 example event
+types; `approval_policy` always `"manual"`; budget_limit recorded but
+not auto-threaded into the run; no trigger editing) are recorded as
+follow-on opportunities, not blockers.
+
+**This closes M15 (15.1-15.3) entirely.** M16 ("Continuous workspace
+integrity") is explicitly evidence-gated in the roadmap and "must not
+begin merely because the architecture is attractive" - a founder
+decision, not an automatic next step, even though this effort's own real
+live proofs across M13-M15 largely satisfy M16's own stated entry
+criteria.
+
+**Next task**: none yet explicitly authorized past M15. M16 remains
+evidence-gated per docs/08-roadmap.md's own explicit language.
+
+**Permissions needed**: founder decision on what to work on next
+(M16, or something else entirely), or whether to commit the accumulated
+Task 15.3 changes.

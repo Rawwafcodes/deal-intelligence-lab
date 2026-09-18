@@ -21,6 +21,7 @@ import deliverables
 import documents
 import mandates
 import store
+import triggers
 import version_dependencies
 import workspaces
 
@@ -145,6 +146,7 @@ class DecisionPackageCapabilityTests(unittest.TestCase):
         workspaces.init_workspaces_db()
         deliverables.init_deliverables_db()
         version_dependencies.init_version_dependencies_db()
+        triggers.init_triggers_db()
         mandates.init_mandates_db()
 
         self.project = store.create_project("Decision Package Tests", "")

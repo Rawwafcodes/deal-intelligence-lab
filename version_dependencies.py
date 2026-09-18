@@ -189,6 +189,32 @@ def get_pinned_version(dependent_type: str, dependent_id: str, source_type: str,
     return row["pinned_version_id"] if row else None
 
 
+def list_dependents_of(source_type: str, source_id: str, dependent_type: str | None = None) -> list[tuple[str, str]]:
+    """Task 15.3: reverse lookup - every real dependent currently
+    recorded against this exact source, regardless of whether it is
+    presently stale. Used to find, e.g., every workspace that has ever
+    consumed a given document, so a trigger firing on "this document
+    changed" can be scoped to exactly the workspaces it actually affects,
+    independent of `mark_superseded`'s own staleness bookkeeping."""
+    conn = store.get_connection()
+    try:
+        if dependent_type is not None:
+            rows = conn.execute(
+                "SELECT DISTINCT dependent_type, dependent_id FROM dependency_edges "
+                "WHERE source_type = %s AND source_id = %s AND dependent_type = %s",
+                (source_type, source_id, dependent_type),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT DISTINCT dependent_type, dependent_id FROM dependency_edges "
+                "WHERE source_type = %s AND source_id = %s",
+                (source_type, source_id),
+            ).fetchall()
+    finally:
+        conn.close()
+    return [(r["dependent_type"], r["dependent_id"]) for r in rows]
+
+
 def get_staleness(dependent_type: str, dependent_id: str) -> StalenessFlag | None:
     conn = store.get_connection()
     try:

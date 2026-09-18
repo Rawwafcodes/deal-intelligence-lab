@@ -33,6 +33,7 @@ import identity
 import mandates
 import server
 import store
+import triggers
 import version_dependencies
 import workspaces
 
@@ -91,6 +92,7 @@ class DecisionPackageEndpointTests(unittest.TestCase):
         workspaces.init_workspaces_db()
         deliverables.init_deliverables_db()
         version_dependencies.init_version_dependencies_db()
+        triggers.init_triggers_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

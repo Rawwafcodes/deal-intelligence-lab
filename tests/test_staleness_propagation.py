@@ -37,6 +37,7 @@ import mandates
 import reviews
 import store
 import tasks
+import triggers
 import version_dependencies
 import work_products
 import workspaces
@@ -80,6 +81,7 @@ class StalenessPropagationTests(unittest.TestCase):
         deliverables.init_deliverables_db()
         reviews.init_reviews_db()
         version_dependencies.init_version_dependencies_db()
+        triggers.init_triggers_db()
         mandates.init_mandates_db()
 
         self.project = store.create_project("Staleness Propagation Tests", "")
