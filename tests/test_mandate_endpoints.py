@@ -34,6 +34,7 @@ import mandate_planning
 import mandates
 import server
 import store
+import version_dependencies
 import workspaces
 from cross_format_analysis import CrossFormatAnalysisOutcome
 
@@ -54,6 +55,7 @@ class MandateEndpointTests(unittest.TestCase):
         store.SCHEMA = cls._schema
         store.init_db()
         identity.init_identity_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -358,6 +360,7 @@ class ReconciliationEndpointTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -504,6 +507,7 @@ class ReconciliationWithReviewEndpointTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -644,6 +648,7 @@ class LlmPlanningEndpointTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

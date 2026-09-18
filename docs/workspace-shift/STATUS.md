@@ -12,21 +12,24 @@ light navy/gold identity — see the dated entries below. Also as of
 2026-09-16, the untracked `frontend/` React scaffold's own `src/index.css`
 was retheme'd to the same Meridian identity (see dated entry below) — the
 two stacks (static pages, React scaffold) now read as one product visually.
-Current task: tasks/14.2-integrity-review.md (complete, with two
-disclosed scope boundaries — the `integrity.review_work_product`
-capability's full backend and frontend exist, are tested, and have now
-been proven with a real, paid live run: a real known-answer test case
-scored 2/2 recall on its pre-registered issues with zero false
-positives, a real human review exercised all four candidate decisions
-(accept/reject/duplicate/unresolved), and 3 real findings were published
-to the shared register with complete lineage. A real gap (incomplete
-mandate/run/attempt lineage) was found live and fixed on the spot,
-locked in by new tests. Disclosed boundaries: scoring was manual against
-docs/08's own metrics, not through the dedicated Validation Lab UI/
-schema (a separate, unauthorized future task); the persistence proof
-covers full-restart durability, not a genuine mid-run interruption
-(to avoid a second paid call). See below). Next recommended: none yet
-explicitly authorized.
+Current task: tasks/15.2-targeted-reassessment.md (complete for this
+task's own bounded scope - document-caused staleness only; 15.3's
+trigger policy remains separate). Given a workspace Task 15.1 already
+flagged stale, a real mandate now compares the old and new document
+versions against the workspace's current findings and proposes, per
+finding, still_valid/materially_changed/needs_human_reconsideration -
+proven live and for real (two real paid calls): a real reconciliation,
+a real revised term sheet whose new figure happened to exactly match
+the model's own hardcoded value, and a real reassessment that correctly
+recognized the underlying conflict was *resolved* rather than merely
+restated, correctly flagged a genuinely ambiguous finding for human
+judgment instead of guessing, and - once every item was acknowledged -
+automatically cleared the workspace's staleness flag, with the
+underlying findings never mutated throughout. Disclosed boundaries:
+only document-caused staleness (not cascaded or submission-version
+staleness); no cascade un-staling; acknowledging doesn't auto-update a
+finding's own workflow fields. See below). Next recommended: `15.3`
+(trigger policy), not yet authorized.
 Application repository: /Users/rawwafa/Projects/deal-intelligence-lab, this session
 had live, direct access to it.
 Application revision: as of 2026-09-17, the founder asked to commit the
@@ -3370,3 +3373,425 @@ in sequence but were not requested.
 **Permissions needed**: founder decision on what to work on next, or
 whether to commit the accumulated Tasks 12.5-14.2 changes (now including
 the real live-proof evidence and the lineage fix).
+
+## 2026-09-18 — Task 14.3 executed (decision-package production, real paid live proof)
+
+**Authorization**: the founder chose "Implement directly" for M14.3 in
+session (the next roadmap task after M14.2), then separately authorized
+one real paid call for live proof ("Yes, run one real call now").
+
+**App commit**: `50d4dad`, unchanged - this task, like every task since
+11.1, was implemented and tested but never committed, per instruction.
+
+**What changed** (full detail, acceptance evidence, and the real
+live-proof narrative: `tasks/14.3-decision-package.md`, status
+`complete`):
+1. New `decision_package.py`: docs/04-mandate-engine.md's own
+   "draft-production capability", explicitly deferred since Task 12.2
+   (`mandates.py`'s own module docstring named it
+   `draft_from_reviewed_findings`). Genuinely lighter than reconciliation
+   or Integrity Review - no PDF/Excel/work-product bytes sent at all,
+   just a deterministic digest of a workspace's own already-reviewed
+   findings and open requests, one plain-text Claude call, a simple
+   heading-split parser (no citation stream to reconstruct).
+   `validate_selection` requires at least one finding with explicit
+   review activity - the literal operationalization of the roadmap's own
+   "explicit reviewed... material."
+2. New `deliverables.py`: `DeliverableVersion` - docs/03-domain-model.md's
+   own named-but-never-built core record. Version-specific approval
+   mirrors `reviews.py`'s exact pattern precisely (approve targets one
+   exact version, refuses a superseded or already-approved one).
+3. `mandates.py`: new `decision_package.produce_draft` capability and
+   `decision-package` template (capability + human_checkpoint, the same
+   shape 12.5/14.2 already proved). Excluded from LLM planning - the
+   planner has no "workspace selection" concept today, only "document
+   selection."
+4. `server.py`: `GET/POST .../workspaces/<id>/deliverables[/<id>[/
+   approve]]`, gated to `deal_lead` only on approval (docs/06's own
+   permission table).
+5. Tests: `tests/test_decision_package.py` (19) and `tests/
+   test_decision_package_endpoints.py` (10) - 29 new, all mocked, no
+   real network calls.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 720 tests ... OK` (691 baseline + 29 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 76 source files` (72 baseline + 2 new
+source files + 2 new test files).
+
+**Real, paid live-proof evidence, in order performed** (scratch project
+"M14.3 Live Smoke Test" - never Universal Logic, never "Browser
+Verification"):
+1. Restarted the real server; confirmed `decision-package` listed
+   alongside every other template via `GET /api/mandate-templates`.
+2. Non-paid smoke test: proposing with a missing or unknown
+   `workspace_id` correctly 400s, live, against the real server.
+3. Generated and uploaded one real synthetic PDF term sheet and one real
+   synthetic Excel model (both explicitly labeled as test material),
+   engineered with a deliberate USD 500,000 Net Debt/Equity Consideration
+   discrepancy. Ran a real, paid `reconciliation` mandate
+   (`claude-opus-5`, 32,049 input / 6,449 output tokens, ~90s) -> 8 real
+   findings, correctly identifying both engineered conflicts as critical,
+   with real, independently-checked PDF and Excel citations.
+4. Marked two findings `review_status: "accepted"` via the real
+   finding-update endpoint - real human review, no AI.
+5. Proposed, approved, and ran a real, paid `decision-package` mandate
+   against that workspace with a real reviewer-supplied emphasis
+   ("Focus on whether the Net Debt and Equity Consideration conflicts
+   block signing.") - `claude-opus-5`, 2,985 input / 3,357 output tokens,
+   ~41s. Paused at its `human_checkpoint` with one real
+   `DeliverableVersion` (v1, draft).
+6. **The real drafted content** correctly separated the two accepted
+   findings from the six unreviewed ones in every section; answered the
+   reviewer's emphasis with a reasoned "do not proceed to signing on the
+   current record" position; explicitly labeled its own recommendation
+   as a non-authoritative draft; correctly preserved the underlying
+   finding's own distinction that the USD 17,500,000 equity figure was
+   the *reconciliation model's* computation, not a value read from the
+   workbook; introduced no fact absent from the digest.
+7. Real human approval via the real API as the bootstrap deal-lead
+   identity: `status` -> `approved`, `approved_by`/`approved_at`
+   populated for real.
+8. Resumed the mandate's own checkpoint with a real decision string; run
+   reached `succeeded`, mandate reached `completed`, for real.
+9. Full suite (720) and mypy re-run clean after the live session (no code
+   changed during or after it).
+
+**Files changed**: new `decision_package.py`, new `deliverables.py`,
+`mandates.py`, `server.py`, new `tests/test_decision_package.py`, new
+`tests/test_decision_package_endpoints.py`, new
+`docs/workspace-shift/tasks/14.3-decision-package.md`, this entry. Real
+data changed, all on "M14.3 Live Smoke Test": two real documents, one
+real reconciliation with 8 real findings (two marked reviewed), one real
+approved `DeliverableVersion`. No table, column, or row belonging to any
+other project was altered.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-specified roadmap line and an already-deferred
+capability name, not a new architectural choice.
+
+**Blockers**: none. Disclosed exclusions (no inline draft editing, no
+dedicated reviewer-recommend endpoint, no LLM-planner support for
+workspace selection) are recorded as follow-on opportunities in the task
+file, not blockers.
+
+**Next task**: `14.4` (readiness template) per docs/08-roadmap.md, not
+started, not yet authorized.
+
+**Permissions needed**: founder decision on what to work on next, or
+whether to commit the accumulated Tasks 12.5-14.3 changes.
+
+## 2026-09-18 — Task 14.4 executed (readiness template, real free live proof)
+
+**Authorization**: the founder said "do next" immediately after M14.3's
+completion, continuing the standing "implement the tasks you're
+performing, don't draft it" instruction.
+
+**App commit**: `50d4dad`, unchanged - this task, like every task since
+11.1, was implemented and tested but never committed.
+
+**What changed** (full detail and the real live-proof narrative:
+`tasks/14.4-readiness-template.md`, status `complete`):
+1. New `readiness.py`: a fixed, named, fully documented six-item
+   checklist (`has_brief`, `has_documents`, `no_open_critical_or_high_
+   findings`, `no_unreviewed_findings`, `no_open_information_requests`,
+   `position_approved`) evaluated purely from already-persisted state -
+   docs/07-architecture.md's own "No paid AI to compute basic dashboard
+   counts" principle, applied for real. `SCOPE_DESCRIPTION` states
+   plainly what is and is not claimed, carried on every persisted
+   assessment.
+2. New `readiness_assessments.py`: one immutable record per run - a
+   report, not a decision, so unlike `deliverables.py` there is no
+   status/approver field at all.
+3. `mandates.py`: new `readiness.assess_scope` capability - the first
+   real (non-fixture) `side_effect_class="read_only"` capability in this
+   codebase, `unit_cost=0.0` - and a new single-stage `readiness`
+   template with deliberately no `human_checkpoint` (viewing an
+   assessment commits and publishes nothing). Unlike `decision_package`,
+   no readiness precondition blocks proposing the plan - the capability
+   must be runnable precisely when a workspace is *not* ready, to report
+   that fact.
+4. `server.py`: read-only `GET .../workspaces/<id>/readiness[/<id>]` -
+   no `POST` action of any kind.
+5. Tests: `tests/test_readiness.py` (17) and `tests/test_readiness_
+   endpoints.py` (6) - 23 new, and (a first for this codebase's
+   capability tests) **no mocking anywhere**, since this capability makes
+   no external call to mock.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 743 tests ... OK` (720 baseline + 23 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 80 source files`.
+
+**Real, free live-proof evidence** (the roadmap's own explicit "Validate
+on independently reviewed real authorized material" requirement,
+satisfied at zero incremental cost by reusing Task 14.3's own real
+scratch workspace rather than spending on a new paid call):
+1. Restarted the real server; confirmed `readiness` listed via `GET
+   /api/mandate-templates`.
+2. Ran a real `readiness` mandate against the exact real workspace Task
+   14.3's own live-proof session produced (8 real findings from a real
+   paid reconciliation, 2 marked reviewed, 1 real approved
+   `DeliverableVersion`). Completed in <30ms, `budget_consumed: 0.0`, no
+   checkpoint pause.
+3. **The real result matched ground truth exactly**: `has_brief` false
+   (no brief on that project); `has_documents` true; `no_open_critical_
+   or_high_findings` false, correctly naming all 4 real findings
+   responsible; `no_unreviewed_findings` false, correctly naming exactly
+   the 6 real unreviewed findings; `no_open_information_requests` true;
+   `position_approved` true, correctly attributed to the real approved
+   decision package (not a memo, which does not exist on that
+   workspace) - proving the memo-or-deliverable union works as designed.
+4. Read the assessment back via both the list and detail routes with
+   correct real mandate/run/attempt lineage.
+5. Full suite (743) and mypy re-run clean after the live session.
+
+**Files changed**: new `readiness.py`, new `readiness_assessments.py`,
+`mandates.py`, `server.py`, new `tests/test_readiness.py`, new `tests/
+test_readiness_endpoints.py`, new `docs/workspace-shift/tasks/
+14.4-readiness-template.md`, this entry. Real data changed: one new
+`readiness_assessments` row on the existing "M14.3 Live Smoke Test"
+workspace - nothing else touched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified roadmap line, not a new architectural choice.
+
+**Blockers**: none. Disclosed exclusions (fixed checklist, not
+configurable per deal/org; no workstream-completion item, since
+Workstream has no status field today; not offered to the LLM planner; no
+dedicated frontend panel) are recorded as follow-on opportunities, not
+blockers.
+
+**Next task**: M15 (change awareness and monitoring) per
+docs/08-roadmap.md - this closes out M14 (14.1-14.4) entirely. Not yet
+started or authorized.
+
+**Permissions needed**: founder decision on what to work on next, or
+whether to commit the accumulated Tasks 12.5-14.4 changes.
+
+## 2026-09-18 — Task 15.1 executed (version dependency tracking, real free live proof)
+
+**Authorization**: the founder said "next" immediately after M14.4's
+completion, continuing the standing "implement the tasks you're
+performing, don't draft it" instruction.
+
+**App commit**: `50d4dad`, unchanged - this task, like every task since
+11.1, was implemented and tested but never committed.
+
+**Scope note**: this task covers 15.1 only (dependency tracking and
+staleness propagation). The full M15 spec's own completion gate spans
+15.1-15.3; steps 4-6 (a targeted reassessment mandate, and its exposure
+in Deal Overview) depend on 15.2, not yet built - not attempted here,
+per this effort's "each numbered task is separately reviewable" norm.
+
+**What changed** (full detail and the real live-proof narrative:
+`tasks/15.1-version-dependency-tracking.md`, status `complete` for this
+task's own scope):
+1. New `version_dependencies.py`: a freestanding (only `store` imported)
+   generic dependency-edge + staleness-flag mechanism. Leaf edges compare
+   real version ids on `mark_superseded`; cascade edges (no version of
+   their own) propagate unconditionally once their source is stale - one
+   generic BFS mechanism walks the spec's whole relationship chain
+   instead of one hand-written propagator per relationship. Self-healing:
+   a brand-new edge onto an already-stale source flags the new dependent
+   immediately.
+2. Closed a real, disclosed baseline gap: `cross_format_analyses.py`
+   persisted which *documents* a reconciliation used but never which
+   *version* - new additive `pdf_document_version_ids`/`excel_document_
+   version_ids` fields, populated by both reconciliation entry points.
+3. `mandates.py`'s three real executors (reconciliation, integrity
+   review, decision package) now record the dependency edges their own
+   outputs create; `documents.py`/`work_products.py`'s `add_version`
+   calls `mark_superseded` the instant a new version exists;
+   `reviews.py`'s `record_decision` records the SubmissionVersion ->
+   approval-decision edge.
+4. `server.py`: staleness surfaced on workspace/deliverable reads and a
+   new `stale_items` array on the Deal Overview.
+5. Tests: `tests/test_version_dependencies.py` (10, no mocking - this
+   module makes no external call) and `tests/test_staleness_
+   propagation.py` (3, end-to-end, mocked only at the provider-call
+   boundary). Twelve pre-existing test files needed one additive DB-init
+   fixture line each (no production behavior changed by any of those
+   edits).
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 756 tests ... OK` (743 baseline + 13 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 83 source files`.
+
+**Real, free live-proof evidence** (chose the SubmissionVersion ->
+approval-decision relationship specifically because it needs no provider
+call at all, unlike reconciliation or Integrity Review - proving the
+roadmap's own completion-gate steps 1-3 for zero incremental cost):
+1. Restarted the real server; created a real scratch project ("M15.1
+   Live Smoke Test"), a real task, and a real work-product submission
+   (version 1).
+2. Recorded a real `ReviewDecision` approving it via the real API - step
+   1, "an approved submission depends on source version 1," now real.
+3. Uploaded a real version 2 of that same submission via the real `POST
+   .../versions` route - step 2, plain HTTP, no mandate involved.
+4. **Step 3, confirmed live** by reading `version_dependencies.
+   get_staleness("review_decision", <the real id>)` directly against the
+   real running Postgres database: a real, populated `StalenessFlag`
+   naming the exact work product and both exact version ids, created
+   automatically the instant the new version was uploaded.
+5. Confirmed the original `ReviewDecision` row itself is completely
+   untouched (same decision, rationale, timestamp) - staleness lives
+   entirely in the side table. Cross-checked against the pre-existing
+   (13.2) `is_current_version_approved`, which correctly still reports
+   `False` for the new version - the two mechanisms are independent and
+   consistent.
+6. Full suite (756) and mypy re-run clean after the live session.
+
+**Files changed**: new `version_dependencies.py`, `cross_format_
+analyses.py`, `mandates.py`, `documents.py`, `work_products.py`,
+`reviews.py`, `workspaces.py`, `server.py`, new `tests/test_version_
+dependencies.py`, new `tests/test_staleness_propagation.py`, twelve
+pre-existing test files (fixture-only additions), new `docs/workspace-
+shift/tasks/15.1-version-dependency-tracking.md`, this entry. Real data
+changed: one task, one two-version work product, one review decision,
+one staleness flag, all on "M15.1 Live Smoke Test" - nothing else
+touched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section, not a new architectural choice.
+
+**Blockers**: none. Disclosed exclusions (no 15.2 reassessment, no
+un-staling, workspace- not finding-level granularity, review-decision
+staleness not yet in a dedicated UI route) are recorded as follow-on
+opportunities, not blockers.
+
+**Next task**: `15.2` (targeted reassessment mandate) per
+docs/08-roadmap.md - not yet started or authorized.
+
+**Permissions needed**: founder decision on what to work on next, or
+whether to commit the accumulated Tasks 12.5-15.1 changes.
+
+## 2026-09-18 — Task 15.2 executed (targeted reassessment, real paid live proof)
+
+**Authorization**: the founder said "next" immediately after M15.1's
+completion, continuing the standing "implement the tasks you're
+performing, don't draft it" instruction, then separately authorized two
+real paid calls for live proof ("Yes, run it now").
+
+**App commit**: `50d4dad`, unchanged - this task, like every task since
+11.1, was implemented and tested but never committed.
+
+**What changed** (full detail and the real live-proof narrative:
+`tasks/15.2-targeted-reassessment.md`, status `complete` for this task's
+own scope):
+1. New `reassessment.py`: mirrors Integrity Review's PDF-transport and
+   citation-extraction machinery, comparing exactly two versions of one
+   document against a deterministic digest of a workspace's own current
+   findings. Classifies each finding `still_valid` | `materially_
+   changed` | `needs_human_reconsideration`, always with a concrete,
+   citation-backed explanation. v1 scope: document-caused staleness
+   only, PDF only - the same disclosed boundary Integrity Review's own
+   target/peer submissions carry.
+2. New `reassessments.py`: `Reassessment` (audit record) + `Reassessment
+   Item` (one per finding, `decision` starting "pending" - acknowledging
+   never creates or mutates a finding, only records that a human looked
+   at the proposal).
+3. `version_dependencies.py`: new `clear_staleness` - Task 15.1's own
+   explicitly deferred "no un-staling" boundary, resolved here and only
+   here, once every item of a reassessment is acknowledged. Deliberately
+   does not cascade.
+4. `mandates.py`: new `reassessment.compare_versions` capability and
+   `reassessment` template (capability + human_checkpoint). The
+   precondition (workspace must be stale, cause must be a document) is
+   verified independently at both propose and execution time.
+5. `server.py`: `GET/POST .../reassessments[/<id>[/items/<id>/
+   decision]]`, gated the same as Integrity Review's own candidate
+   decisions.
+6. Tests: `tests/test_reassessment.py` (16) and `tests/test_
+   reassessment_endpoints.py` (9) - 25 new, all mocked, no real network
+   calls.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest discover -s tests
+```
+-> `Ran 781 tests ... OK` (756 baseline + 25 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+-> `Success: no issues found in 87 source files`.
+
+**Real, paid live-proof evidence, in order performed** (scratch project
+"M15.2 Live Smoke Test"):
+1. Restarted the real server; confirmed `reassessment` listed via `GET
+   /api/mandate-templates`.
+2. Uploaded a real synthetic term sheet (v1, Net Debt USD 3,000,000) and
+   Excel model (hardcoded Net Debt USD 3,500,000 - a deliberate
+   mismatch), and ran a real, paid `reconciliation` mandate
+   (`claude-opus-5`, 31,911 input / 9,085 output tokens) -> 11 real
+   findings, including two real critical cross-source conflicts.
+3. Confirmed the fresh workspace was not stale.
+4. Uploaded a real, revised term-sheet v2 (Net Debt now USD 3,500,000 -
+   **exactly matching the model's own hardcoded value**, closing date
+   moved Q2->Q3 2027) via the real versions route. Confirmed the
+   workspace was automatically flagged stale, with a real, precise
+   reason - no AI call, Task 15.1's own mechanism firing correctly on
+   genuinely new real data.
+5. Proposed, approved, and ran a real, paid `reassessment` mandate
+   against that now-stale workspace (`claude-opus-5`, 7,146 input /
+   6,116 output tokens, ~70s) - 11 real items persisted, one per real
+   finding, **all 11 correctly matched to their real finding ids**.
+6. **The real reassessment was substantively correct**: recognized the
+   revised term-sheet figures now match the workbook (reclassifying both
+   critical conflicts `materially_changed`, explicitly noting the
+   conflict was *resolved*, not merely altered); correctly flagged the
+   closing-date change; correctly recognized the new version resolved an
+   earlier "no later version to compare" finding; correctly left six
+   unaffected findings `still_valid`; correctly flagged one genuinely
+   ambiguous finding `needs_human_reconsideration` rather than guessing.
+7. Acknowledged all 11 real items via the real API. **Confirmed staleness
+   cleared automatically** the instant the last item was acknowledged -
+   no separate action taken.
+8. Resumed the mandate's own checkpoint; run reached `succeeded`, mandate
+   reached `completed`, for real.
+9. **Confirmed the underlying finding was never mutated** throughout the
+   entire flow - re-read after acknowledgment, still `"unreviewed"`,
+   title byte-for-byte identical.
+10. Full suite (781) and mypy re-run clean after the live session.
+
+**Files changed**: new `reassessment.py`, new `reassessments.py`,
+`version_dependencies.py`, `mandates.py`, `server.py`, new `tests/
+test_reassessment.py`, new `tests/test_reassessment_endpoints.py`, new
+`docs/workspace-shift/tasks/15.2-targeted-reassessment.md`, this entry.
+Real data changed, all on "M15.2 Live Smoke Test": two real documents
+(one with two versions), one real reconciliation with 11 real findings,
+one real reassessment with 11 real acknowledged items. No table,
+column, or row belonging to any other project was altered.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section, not a new architectural choice.
+
+**Blockers**: none. Disclosed exclusions (document-caused staleness
+only, no cascade reassessment, no auto-update of a finding's own
+workflow fields on acknowledgment, no cascade un-staling) are recorded
+as follow-on opportunities, not blockers.
+
+**Next task**: `15.3` (trigger policy) per docs/08-roadmap.md - not yet
+started or authorized. This closes out the reassessment half of M15;
+15.3 would be the first mechanism to commission a reassessment mandate
+automatically rather than requiring a human to notice a staleness flag
+and propose it manually.
+
+**Permissions needed**: founder decision on what to work on next, or
+whether to commit the accumulated Tasks 12.5-15.2 changes.

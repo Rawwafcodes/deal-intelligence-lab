@@ -55,6 +55,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import store
+import version_dependencies
 
 REVIEW_DECISIONS = {"approved", "returned"}
 
@@ -154,6 +155,16 @@ def record_decision(
         conn.commit()
     finally:
         conn.close()
+
+    # Task 15.1 (roadmap M15.1's own "SubmissionVersion -> approval
+    # decision" required relationship): a leaf edge pinned to the exact
+    # version this decision targeted - version_dependencies.py has no
+    # dependency on this module or work_products.py, so this stays a
+    # one-directional addition, not new coupling between the two.
+    version_dependencies.record_dependency(
+        "review_decision", record.id, "work_product", work_product_id, submission_version_id,
+    )
+
     return record
 
 

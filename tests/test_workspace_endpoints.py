@@ -29,6 +29,7 @@ import documents
 import identity
 import server
 import store
+import version_dependencies
 import workspaces
 
 FAKE_SECRET = "sk-ant-api03-WORKSPACE-ENDPOINT-TEST-FAKE-SECRET-DO-NOT-LEAK"
@@ -103,6 +104,7 @@ class WorkspaceEndpointTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]

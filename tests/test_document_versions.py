@@ -20,6 +20,7 @@ import documents
 import identity
 import server
 import store
+import version_dependencies
 from tests.test_multipart import build_body
 
 
@@ -36,6 +37,7 @@ class DocumentVersionsModuleTests(unittest.TestCase):
         store.SCHEMA = self._schema
         store.init_db()
         documents.init_documents_db()
+        version_dependencies.init_version_dependencies_db()
         self.project = store.create_project("Acme Merger", "")
 
     def tearDown(self):
@@ -192,6 +194,7 @@ class DocumentVersionsEndpointTests(unittest.TestCase):
         store.init_db()
         identity.init_identity_db()
         documents.init_documents_db()
+        version_dependencies.init_version_dependencies_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]

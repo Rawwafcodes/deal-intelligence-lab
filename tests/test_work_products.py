@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import documents
 import store
 import tasks
+import version_dependencies
 import work_products
 
 
@@ -29,6 +30,7 @@ class WorkProductTests(unittest.TestCase):
         store.init_db()
         tasks.init_tasks_db()
         work_products.init_work_products_db()
+        version_dependencies.init_version_dependencies_db()
         self.project = store.create_project("Acme Merger", "")
         self.task = tasks.create_task(self.project.id, "Draft the financial model")
 

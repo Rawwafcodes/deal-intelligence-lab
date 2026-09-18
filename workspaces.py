@@ -441,6 +441,20 @@ def get_workspace(project_id: str, workspace_id: str) -> Workspace | None:
     return _row_to_workspace(row) if row else None
 
 
+def list_workspaces(project_id: str) -> list[Workspace]:
+    """Task 15.1: needed to surface staleness project-wide (Deal
+    Overview) without the caller having to already know each workspace's
+    id via its own analysis/review record first."""
+    conn = store.get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM workspaces WHERE project_id = %s ORDER BY created_at ASC", (project_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_workspace(r) for r in rows]
+
+
 def get_workspace_for_analysis(project_id: str, cross_format_analysis_id: str) -> Workspace | None:
     conn = store.get_connection()
     try:

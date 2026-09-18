@@ -31,6 +31,7 @@ from pathlib import Path
 
 import documents
 import store
+import version_dependencies
 
 DATA_DIR = documents.DATA_DIR
 
@@ -292,6 +293,11 @@ def add_version(project_id: str, work_product_id: str, data: bytes, uploaded_by:
 
     updated = get_work_product(project_id, work_product.id)
     assert updated is not None
+
+    # Task 15.1: propagate potential staleness the moment a new version
+    # exists - see documents.add_version's own matching comment.
+    version_dependencies.mark_superseded("work_product", work_product.id, new_version_id)
+
     return SubmissionResult(title=updated.title, status="new_version", work_product=updated)
 
 

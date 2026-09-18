@@ -30,6 +30,20 @@ class CrossFormatAnalysis:
     excel_document_filenames: list[str]
     excel_document_checksums: list[str]
     status: str  # "success" | "error"
+    # Task 15.1 (roadmap M15.1, version dependency tracking): the exact
+    # DocumentVersion id consumed for each entry in pdf_document_ids/
+    # excel_document_ids, same order, same length - a real gap this task
+    # closed (previously only Document ids and a checksum were recorded,
+    # which cannot answer "was this the *current* version at the time" or
+    # "has a newer version since appeared" without independently matching
+    # the checksum against document_versions yourself). Additive; defaults
+    # to an empty list for every row created before this task, via
+    # `pdf_document_version_ids`/`excel_document_version_ids`'s own
+    # `None` default in `create_cross_format_analysis` below and the
+    # idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `init_
+    # cross_format_analyses_db`.
+    pdf_document_version_ids: list[str]
+    excel_document_version_ids: list[str]
     transmitted: bool
     created_at: str
     completed_at: str
@@ -57,6 +71,8 @@ class CrossFormatAnalysis:
             "excel_document_ids": self.excel_document_ids,
             "excel_document_filenames": self.excel_document_filenames,
             "excel_document_checksums": self.excel_document_checksums,
+            "pdf_document_version_ids": self.pdf_document_version_ids,
+            "excel_document_version_ids": self.excel_document_version_ids,
             "status": self.status,
             "transmitted": self.transmitted,
             "created_at": self.created_at,
@@ -91,6 +107,8 @@ def init_cross_format_analyses_db() -> None:
                 excel_document_ids_json TEXT NOT NULL,
                 excel_document_filenames_json TEXT NOT NULL,
                 excel_document_checksums_json TEXT NOT NULL,
+                pdf_document_version_ids_json TEXT,
+                excel_document_version_ids_json TEXT,
                 status TEXT NOT NULL,
                 transmitted INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
@@ -111,6 +129,13 @@ def init_cross_format_analyses_db() -> None:
             )
             """
         )
+        # Task 15.1, additive migration for a table created under earlier
+        # tasks (this codebase's real Postgres install already has real
+        # rows from Milestones 7/12/14 without these columns) - the
+        # CREATE TABLE above already includes them for a fresh install,
+        # so these are no-ops there.
+        conn.execute("ALTER TABLE cross_format_analyses ADD COLUMN IF NOT EXISTS pdf_document_version_ids_json TEXT")
+        conn.execute("ALTER TABLE cross_format_analyses ADD COLUMN IF NOT EXISTS excel_document_version_ids_json TEXT")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cross_format_analyses_project ON cross_format_analyses(project_id)"
         )
@@ -129,6 +154,8 @@ def _row_to_cross_format_analysis(row) -> CrossFormatAnalysis:
         excel_document_ids=json.loads(row["excel_document_ids_json"]),
         excel_document_filenames=json.loads(row["excel_document_filenames_json"]),
         excel_document_checksums=json.loads(row["excel_document_checksums_json"]),
+        pdf_document_version_ids=json.loads(row["pdf_document_version_ids_json"]) if row["pdf_document_version_ids_json"] else [],
+        excel_document_version_ids=json.loads(row["excel_document_version_ids_json"]) if row["excel_document_version_ids_json"] else [],
         status=row["status"],
         transmitted=bool(row["transmitted"]),
         created_at=row["created_at"],
@@ -160,6 +187,8 @@ def create_cross_format_analysis(
     excel_document_checksums: list[str],
     status: str,
     transmitted: bool,
+    pdf_document_version_ids: list[str] | None = None,
+    excel_document_version_ids: list[str] | None = None,
     analysis_seconds: float,
     model: str,
     mandate_version: str,
@@ -184,6 +213,8 @@ def create_cross_format_analysis(
         excel_document_ids=excel_document_ids,
         excel_document_filenames=excel_document_filenames,
         excel_document_checksums=excel_document_checksums,
+        pdf_document_version_ids=pdf_document_version_ids or [],
+        excel_document_version_ids=excel_document_version_ids or [],
         status=status,
         transmitted=transmitted,
         created_at=now,
@@ -211,11 +242,12 @@ def create_cross_format_analysis(
                 id, project_id, pdf_document_ids_json, pdf_document_filenames_json,
                 pdf_document_checksums_json, excel_document_ids_json,
                 excel_document_filenames_json, excel_document_checksums_json,
+                pdf_document_version_ids_json, excel_document_version_ids_json,
                 status, transmitted, created_at, completed_at, analysis_seconds,
                 model, mandate_version, stop_reason, input_tokens, output_tokens,
                 code_execution_requests, error_type, error_message, segments_json,
                 tool_trace_json, excel_cleanup_json, excel_verification_json
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 record.id,
@@ -226,6 +258,8 @@ def create_cross_format_analysis(
                 json.dumps(record.excel_document_ids),
                 json.dumps(record.excel_document_filenames),
                 json.dumps(record.excel_document_checksums),
+                json.dumps(record.pdf_document_version_ids),
+                json.dumps(record.excel_document_version_ids),
                 record.status,
                 int(record.transmitted),
                 record.created_at,

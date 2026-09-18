@@ -23,6 +23,7 @@ import integrity_reviews
 import mandates
 import store
 import tasks
+import version_dependencies
 import work_products
 import workspaces
 import workstreams
@@ -203,6 +204,7 @@ class IntegrityReviewCapabilityTests(unittest.TestCase):
         deal_briefs.init_deal_briefs_db()
         workstreams.init_workstreams_db()
         integrity_reviews.init_integrity_reviews_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         self.project = store.create_project("Integrity Review Tests", "")

@@ -29,6 +29,7 @@ import reviews
 import server
 import store
 import tasks
+import version_dependencies
 import work_products
 import workspaces
 import workstreams
@@ -77,6 +78,7 @@ class OverviewEndpointTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

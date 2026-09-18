@@ -42,6 +42,7 @@ import documents
 import mandate_planning
 import mandates
 import store
+import version_dependencies
 import workspaces
 from cross_format_analysis import AnalysisSegment, CrossFormatAnalysisOutcome, Part, PdfCitation
 
@@ -53,6 +54,7 @@ class MandateLifecycleTests(unittest.TestCase):
         store.ensure_schema(self._schema)
         store.SCHEMA = self._schema
         store.init_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Acme Merger", "")
         self.worker = mandates.Worker()
@@ -523,6 +525,7 @@ class WorkerRecoveryTests(unittest.TestCase):
         store.ensure_schema(self._schema)
         store.SCHEMA = self._schema
         store.init_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Acme Merger", "")
         self.worker = mandates.Worker()
@@ -616,6 +619,7 @@ class WorkerThreadTests(unittest.TestCase):
         store.ensure_schema(self._schema)
         store.SCHEMA = self._schema
         store.init_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Acme Merger", "")
         self.worker = mandates.Worker(poll_interval=0.02)
@@ -713,6 +717,7 @@ class ReconciliationCapabilityTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Reconciliation Capability Tests", "")
         self.pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", PDF_BYTES).document
@@ -1017,6 +1022,7 @@ class ReconciliationWithReviewTests(unittest.TestCase):
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Reconciliation With Review Tests", "")
         self.pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", PDF_BYTES).document
@@ -1158,6 +1164,7 @@ class LlmPlanningTests(unittest.TestCase):
         store.init_db()
         documents.init_documents_db()
         deal_briefs.init_deal_briefs_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
         self.project = store.create_project("LLM Planning Tests", "")
         self.other_project = store.create_project("A Different Deal", "")

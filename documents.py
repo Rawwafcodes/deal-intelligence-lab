@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import store
+import version_dependencies
 
 DATA_DIR = Path(os.environ.get("DEAL_LAB_DATA_DIR", str(Path.home() / "DealLabData")))
 
@@ -407,6 +408,12 @@ def add_version(project_id: str, document_id: str, data: bytes) -> UploadResult:
 
     updated = get_document(document.project_id, document.id)
     assert updated is not None
+
+    # Task 15.1: propagate potential staleness the moment a new version
+    # exists - deterministic, no AI call, and never mutates whatever it
+    # marks (version_dependencies.py's own module docstring).
+    version_dependencies.mark_superseded("document", document.id, new_version_id)
+
     return UploadResult(
         filename=updated.original_filename, relative_path=updated.relative_path,
         status="new_version", document=updated,

@@ -26,6 +26,7 @@ import reviews
 import server
 import store
 import tasks
+import version_dependencies
 import work_products
 import workstreams
 
@@ -51,6 +52,7 @@ class TaskAndWorkProductEndpointTests(unittest.TestCase):
         tasks.init_tasks_db()
         work_products.init_work_products_db()
         reviews.init_reviews_db()
+        version_dependencies.init_version_dependencies_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]

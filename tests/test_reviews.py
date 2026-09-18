@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import reviews
 import store
+import version_dependencies
 
 
 class ReviewDecisionTests(unittest.TestCase):
@@ -19,6 +20,7 @@ class ReviewDecisionTests(unittest.TestCase):
         store.SCHEMA = self._schema
         store.init_db()
         reviews.init_reviews_db()
+        version_dependencies.init_version_dependencies_db()
 
     def tearDown(self):
         store.SCHEMA = self._original_schema

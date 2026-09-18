@@ -35,6 +35,7 @@ import mandates
 import server
 import store
 import tasks
+import version_dependencies
 import work_products
 import workspaces
 import workstreams
@@ -84,6 +85,7 @@ class IntegrityReviewEndpointTests(unittest.TestCase):
         deal_briefs.init_deal_briefs_db()
         workstreams.init_workstreams_db()
         integrity_reviews.init_integrity_reviews_db()
+        version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

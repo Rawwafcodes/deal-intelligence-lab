@@ -56,12 +56,63 @@ Nothing in `_run_stages`, `_default_input_for_stage`, or
 of existing capabilities should normally require configuration only"
 line from AGENTS.md, proven true rather than just claimed.
 
-Explicitly deferred to later, separately-authorized tasks (see
-docs/workspace-shift/docs/08-roadmap.md's M12 breakdown and
-docs/workspace-shift/tasks/12.2-durable-worker.md's own Exclusions):
-- A `draft_from_reviewed_findings` capability (examples/reconciliation-
-  template.json's own `draft`/`approve` stages) - still does not exist;
-  `reconciliation-with-review` stops at `review`, on purpose.
+Task 15.2 added `reassessment.compare_versions` - the mandate that turns
+a staleness flag (15.1) into an actual decision: given a workspace
+already marked potentially_stale by a document version change, it sends
+Claude both the old and new document versions plus a digest of the
+workspace's existing findings, and asks which findings remain valid,
+change materially, or need human reconsideration. Like Integrity
+Review, proposed candidates ("items") are never auto-applied - a human
+must explicitly acknowledge each one (reassessments.py); once every item
+for a run is acknowledged, the workspace's staleness flag is cleared
+(version_dependencies.clear_staleness) - Task 15.1's own deferred
+"no un-staling" resolved here, not before. v1 scope, disclosed: only
+handles a staleness flag whose direct cause is a `document` (not a
+cascaded staleness whose direct cause is another dependent, and not a
+superseded submission version) - a distinct, larger future task.
+
+Task 15.1 added version dependency tracking (version_dependencies.py):
+every capability executor that materializes a workspace or a deliverable
+now also records which exact document/submission versions it consumed
+(and, for reconciliation, which Run consumed them) as dependency edges;
+`documents.add_version`/`work_products.add_version` (outside this
+module) call `version_dependencies.mark_superseded` the moment a new
+version is created, propagating a `potentially_stale` flag outward
+through those edges with no AI call and no historical row rewritten.
+Closing a real, disclosed gap found while designing this: `_reconciliation_
+executor` previously persisted which *documents* a reconciliation used,
+never which *version* of each - `cross_format_analyses.py`'s new,
+additive `pdf_document_version_ids`/`excel_document_version_ids` fields
+close it, populated here from the same `pinned_versions` this executor
+already validates against.
+
+Task 14.4 added `readiness.assess_scope` - the first real (non-fixture)
+capability with `side_effect_class="read_only"`: a bounded, explicitly
+documented checklist (readiness.py) evaluated purely from already-
+persisted state (a brief, documents, findings, requests, memo/deliverable
+approval), never a paid provider call. Registered as its own single-stage
+`readiness` template with no human_checkpoint at all - unlike every paid
+capability so far, viewing a readiness assessment commits nothing and
+publishes nothing, so there is no decision here for a checkpoint to gate
+(docs/04-mandate-engine.md: "avoid approval bureaucracy for every
+internal thought").
+
+Task 14.3 added the `decision_package.produce_draft` capability -
+docs/04-mandate-engine.md's own "draft-production capability", explicitly
+deferred (as `draft_from_reviewed_findings`) since Task 12.2. Unlike
+reconciliation and Integrity Review, it sends no original document bytes
+to the model at all: its input is a deterministic digest of a workspace's
+own already-reviewed findings and open requests (decision_package.py),
+and its output is a `DeliverableVersion` (deliverables.py) - a genuinely
+new persisted domain record, not a variant of an existing one. The
+`decision-package` template follows the exact same "capability then
+human_checkpoint" shape as `reconciliation-with-review`/`integrity-
+review`; approving the resulting draft into an official position happens
+through a dedicated `deliverables.approve_deliverable_version` call
+(server.py), gated to deal_lead only, independent of resuming the
+mandate's own checkpoint - the same separation Integrity Review's
+candidate-decision endpoints already established relative to their own
+run's checkpoint.
 
 Two logical registries live here, both **in-memory, code-level** (like a
 plugin registry, not user data - see docs/04-mandate-engine.md's
@@ -83,12 +134,19 @@ from typing import Any, Callable
 import cross_format_analyses
 import cross_format_analysis
 import deal_briefs
+import decision_package
+import deliverables
 import documents
 import evaluations
 import integrity_review
 import integrity_reviews
 import mandate_planning
+import readiness
+import readiness_assessments
+import reassessment
+import reassessments
 import store
+import version_dependencies
 import work_products
 import workspaces
 import workstreams
@@ -293,6 +351,18 @@ def _reconciliation_executor(project_id: str, stage_input: dict) -> dict:
 
     pdf_docs = [d for d in selected if d.extension == ".pdf"]
     excel_docs = [d for d in selected if d.extension in (".xlsx", ".xls")]
+    # Task 15.1: the exact version consumed for each document, closing
+    # the gap CrossFormatAnalysis previously had (see this module's own
+    # docstring) - falls back to the document's current version only in
+    # the defensive case pinned_versions is missing an entry (should not
+    # happen given _default_input_for_stage always populates it).
+    def _version_id_for(document: documents.Document) -> str:
+        version_id = pinned_versions.get(document.id) or document.current_version_id
+        assert version_id is not None  # every selected document already has a real version by this point
+        return version_id
+
+    pdf_version_ids = [_version_id_for(d) for d in pdf_docs]
+    excel_version_ids = [_version_id_for(d) for d in excel_docs]
 
     record = cross_format_analyses.create_cross_format_analysis(
         project_id=project_id,
@@ -302,6 +372,8 @@ def _reconciliation_executor(project_id: str, stage_input: dict) -> dict:
         excel_document_ids=[d.id for d in excel_docs],
         excel_document_filenames=[d.original_filename for d in excel_docs],
         excel_document_checksums=[d.sha256 for d in excel_docs],
+        pdf_document_version_ids=pdf_version_ids,
+        excel_document_version_ids=excel_version_ids,
         status="success" if outcome.success else "error",
         transmitted=outcome.transmitted,
         analysis_seconds=outcome.analysis_seconds,
@@ -328,6 +400,20 @@ def _reconciliation_executor(project_id: str, stage_input: dict) -> dict:
 
     workspace, workspace_created = workspaces.get_or_create_workspace(project_id, record)
     finding_count = len(evaluations.extract_findings(record.segments))
+
+    # Task 15.1: leaf dependency edges, one per document version actually
+    # consumed - both at the workspace level (satisfies "DocumentVersion
+    # -> assertion/evidence snapshot", since every finding in this
+    # workspace shares the same source set) and at the mandate-run level
+    # (satisfies "MandateRun -> every version it consumed" directly,
+    # independent of whichever workspace the run happened to produce).
+    version_edges = [("document", d.id, v) for d, v in zip(pdf_docs, pdf_version_ids)] + [
+        ("document", d.id, v) for d, v in zip(excel_docs, excel_version_ids)
+    ]
+    version_dependencies.record_dependencies("workspace", workspace.id, version_edges)
+    run_id = stage_input.get("_run_id")
+    if run_id:
+        version_dependencies.record_dependencies("mandate_run", run_id, version_edges)
 
     return {
         "cross_format_analysis_id": record.id,
@@ -546,6 +632,19 @@ def _integrity_review_executor(project_id: str, stage_input: dict) -> dict:
     candidates = integrity_reviews.create_candidates(record.id, candidate_dicts)
     workspace, workspace_created = workspaces.get_or_create_workspace_for_integrity_review(project_id, record.id)
 
+    # Task 15.1: leaf edges for every version this review actually pinned
+    # - the target and peer submission versions, and every source
+    # document version - at both the workspace and mandate-run level,
+    # the same shape _reconciliation_executor now records.
+    version_edges = (
+        [("work_product", target_work_product.id, target_version.id)]
+        + [("document", s.document.id, s.version.id) for s in sources]
+        + [("work_product", p.work_product.id, p.version.id) for p in peers]
+    )
+    version_dependencies.record_dependencies("workspace", workspace.id, version_edges)
+    if record.run_id:
+        version_dependencies.record_dependencies("mandate_run", record.run_id, version_edges)
+
     return {
         "integrity_review_id": record.id,
         "workspace_id": workspace.id,
@@ -610,6 +709,310 @@ register_capability(
         # flat tuple undersells the real, per-role restriction actually
         # enforced by integrity_review.validate_selection.
         allowed_source_formats=(".pdf", ".xlsx", ".xls"),
+    )
+)
+
+
+class DecisionPackageInputError(Exception):
+    """Task 14.3's analogue of ReconciliationInputError/IntegrityReview
+    InputError - raised at execution time when the plan's pinned
+    workspace_id no longer resolves (deleted since approval) or no longer
+    has any explicitly reviewed finding (review activity can, in
+    principle, be undone between propose and execute - re-verified here,
+    not just at propose time)."""
+
+
+def _decision_package_executor(project_id: str, stage_input: dict) -> dict:
+    """Task 14.3's real capability adapter: independently re-resolves the
+    plan's pinned workspace_id against the real, current project state
+    (never trusts the plan's own copy), builds a deterministic digest of
+    that workspace's own findings and open requests, calls decision_
+    package.py's pure adapter, and persists the result as a new
+    DeliverableVersion - never auto-approved (see deliverables.py's own
+    module docstring)."""
+    workspace_id = stage_input["workspace_id"]
+    workspace = workspaces.get_workspace(project_id, workspace_id)
+    if workspace is None:
+        raise DecisionPackageInputError(
+            f"workspace not found: {workspace_id!r} (deleted since the plan was approved?)"
+        )
+
+    findings = [f for f in workspaces.list_findings(workspace) if not f["is_duplicate"]]
+    request_list = workspaces.list_requests(workspace_id)
+    digest = decision_package.build_digest(workspace_id, findings, request_list)
+
+    validation_error = decision_package.validate_selection(digest)
+    if validation_error is not None:
+        error_type, error_message = validation_error
+        raise DecisionPackageInputError(f"{error_type}: {error_message}")
+
+    emphasis = str(stage_input.get("emphasis", "") or "")
+    outcome = decision_package.run_decision_package_draft(digest, emphasis)
+
+    if not outcome.success:
+        # Unlike reconciliation/Integrity Review, there is no separate
+        # audit table to persist a failed attempt's own record into (see
+        # deliverables.py's own module docstring) - the mandate Attempt
+        # row's `error` field (set by _run_stages when this exception
+        # propagates) is that record here.
+        raise RuntimeError(f"decision package drafting failed: {outcome.error_message}")
+
+    record = deliverables.create_deliverable_version(
+        project_id=project_id, workspace_id=workspace_id,
+        mandate_id=stage_input.get("_mandate_id"), run_id=stage_input.get("_run_id"),
+        attempt_id=stage_input.get("_attempt_id"),
+        title=f"Decision package - {workspace_id}",
+        executive_summary=outcome.executive_summary, recommendation=outcome.recommendation,
+        key_evidence_and_findings=outcome.key_evidence_and_findings,
+        outstanding_and_unresolved_matters=outcome.outstanding_and_unresolved_matters,
+        risks_and_limitations=outcome.risks_and_limitations, emphasis=emphasis,
+        source_finding_ids=[f["id"] for f in findings], source_request_ids=[r.id for r in request_list],
+        model=outcome.model, draft_template_version=decision_package.DRAFT_TEMPLATE_VERSION,
+        input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+        output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+    )
+
+    # Task 15.1: a cascade edge, not a leaf one - a workspace has no
+    # version id of its own to pin against, so this deliverable becomes
+    # stale whenever the workspace itself is (or becomes) stale, not on
+    # any direct version comparison of its own.
+    version_dependencies.record_dependency("deliverable_version", record.id, "workspace", workspace_id)
+
+    return {
+        "deliverable_id": record.id, "workspace_id": workspace_id, "version": record.version_number,
+        "model": record.model,
+    }
+
+
+register_capability(
+    CapabilityDescriptor(
+        name="decision_package.produce_draft",
+        version="1",
+        side_effect_class="external_paid_call",
+        permission_check=lambda project_id: True,
+        executor=_decision_package_executor,
+        # Nominal, like every other capability's own unit_cost - a real
+        # dollar-cost model is out of this contract's scope (see
+        # docs/12-reconciliation-capability-contract.md's own "Usage
+        # accounting" section, which this mirrors).
+        unit_cost=1.0,
+        input_schema={
+            "type": "object", "required": ["workspace_id"],
+            "properties": {"workspace_id": {"type": "string"}, "emphasis": {"type": "string"}},
+        },
+        output_schema={
+            "type": "object", "required": ["deliverable_id", "workspace_id", "version", "model"],
+            "properties": {
+                "deliverable_id": {"type": "string"}, "workspace_id": {"type": "string"},
+                "version": {"type": "number"}, "model": {"type": "string"},
+            },
+        },
+        # No source documents at all - this capability's only input is
+        # already-persisted, already-reviewed structured findings/requests,
+        # never a PDF/Excel/work-product file (see decision_package.py's
+        # own module docstring for why that is the point, not a gap).
+        allowed_source_formats=None,
+    )
+)
+
+
+class ReadinessInputError(Exception):
+    """Task 14.4's analogue of DecisionPackageInputError - raised at
+    execution time when the plan's pinned workspace_id no longer
+    resolves (deleted since approval)."""
+
+
+def _readiness_executor(project_id: str, stage_input: dict) -> dict:
+    """Task 14.4's real capability adapter - and the first one that makes
+    no external call of any kind. Independently re-resolves the plan's
+    pinned workspace_id against the real, current project state, gathers
+    exactly the already-persisted signals readiness.py's checklist needs
+    (never a document's actual bytes, never a paid call), and persists
+    the result as a new, immutable ReadinessAssessmentRecord - a report,
+    not a decision, so unlike decision_package there is nothing here for
+    a human to later approve."""
+    workspace_id = stage_input["workspace_id"]
+    workspace = workspaces.get_workspace(project_id, workspace_id)
+    if workspace is None:
+        raise ReadinessInputError(
+            f"workspace not found: {workspace_id!r} (deleted since the plan was approved?)"
+        )
+
+    brief = deal_briefs.get_current_version(project_id)
+    has_documents = bool(documents.list_documents(project_id))
+    findings = [f for f in workspaces.list_findings(workspace) if not f["is_duplicate"]]
+    request_list = workspaces.list_requests(workspace_id)
+    open_request_count = sum(1 for r in request_list if r.status == "sent")
+
+    memo_approved = False
+    if workspace.cross_format_analysis_id is not None:
+        memo = workspaces.get_memo(workspace_id)
+        memo_approved = memo is not None and memo.status == "approved"
+    latest_deliverable = deliverables.latest_deliverable_version(workspace_id)
+    deliverable_approved = latest_deliverable is not None and latest_deliverable.status == "approved"
+
+    assessment = readiness.assess_readiness(
+        has_brief=brief is not None, has_documents=has_documents, findings=findings,
+        open_request_count=open_request_count, memo_approved=memo_approved,
+        deliverable_approved=deliverable_approved,
+    )
+
+    record = readiness_assessments.create_readiness_assessment(
+        project_id=project_id, workspace_id=workspace_id, mandate_id=stage_input.get("_mandate_id"),
+        run_id=stage_input.get("_run_id"), attempt_id=stage_input.get("_attempt_id"), assessment=assessment,
+    )
+
+    return {
+        "assessment_id": record.id, "workspace_id": workspace_id, "ready": record.ready,
+        "unmet_count": len(assessment.unmet_items),
+    }
+
+
+register_capability(
+    CapabilityDescriptor(
+        name="readiness.assess_scope",
+        version="1",
+        # Task 14.4's own point: a genuine, real read_only capability, not
+        # merely fixture.echo's proof-of-plumbing use of the class. No
+        # provider call is made, so there is nothing to bill against a
+        # Run's budget for real - unit_cost is 0.0, not a nominal
+        # placeholder like every paid capability's own unit_cost=1.0.
+        side_effect_class="read_only",
+        permission_check=lambda project_id: True,
+        executor=_readiness_executor,
+        unit_cost=0.0,
+        input_schema={
+            "type": "object", "required": ["workspace_id"],
+            "properties": {"workspace_id": {"type": "string"}},
+        },
+        output_schema={
+            "type": "object", "required": ["assessment_id", "workspace_id", "ready", "unmet_count"],
+            "properties": {
+                "assessment_id": {"type": "string"}, "workspace_id": {"type": "string"},
+                "ready": {"type": "boolean"}, "unmet_count": {"type": "number"},
+            },
+        },
+        # No source documents at all - see readiness.py's own module
+        # docstring for why that is the point, not a gap.
+        allowed_source_formats=None,
+    )
+)
+
+
+class ReassessmentInputError(Exception):
+    """Task 15.2's analogue of DecisionPackageInputError/
+    ReconciliationInputError - raised at execution time when the plan's
+    pinned workspace_id no longer resolves, is no longer stale (staleness
+    could in principle be cleared by another reassessment between
+    approval and execution), or the staleness flag's direct cause is not
+    a `document` (this v1's disclosed scope boundary)."""
+
+
+def _reassessment_executor(project_id: str, stage_input: dict) -> dict:
+    """Task 15.2's real capability adapter: re-verifies the workspace is
+    still stale and its direct cause is still a document version change
+    (never trusts the plan's own copy - a plan could be approved, then
+    the underlying staleness reassessed and cleared by someone else,
+    before this ever runs), looks up the exact old and new document
+    versions, builds a digest of the workspace's own current findings,
+    calls reassessment.py's pure adapter, and persists every item exactly
+    as produced - never auto-acknowledged (see reassessments.py's own
+    module docstring)."""
+    workspace_id = stage_input["workspace_id"]
+    workspace = workspaces.get_workspace(project_id, workspace_id)
+    if workspace is None:
+        raise ReassessmentInputError(
+            f"workspace not found: {workspace_id!r} (deleted since the plan was approved?)"
+        )
+
+    flag = version_dependencies.get_staleness("workspace", workspace_id)
+    if flag is None:
+        raise ReassessmentInputError("this workspace is not currently flagged potentially stale")
+    if flag.superseded_source_type != "document":
+        raise ReassessmentInputError(
+            f"this workspace's staleness was not caused directly by a document version change "
+            f"(cause: {flag.superseded_source_type!r}) - unsupported in this version of reassessment"
+        )
+
+    document = documents.get_document(project_id, flag.superseded_source_id)
+    if document is None:
+        raise ReassessmentInputError(f"document not found: {flag.superseded_source_id!r}")
+    new_version = documents.get_version(document.id, flag.superseded_version_id)
+    if new_version is None:
+        raise ReassessmentInputError(f"superseding document version not found: {flag.superseded_version_id!r}")
+    old_version_id = version_dependencies.get_pinned_version(
+        "workspace", workspace_id, "document", document.id
+    )
+    if old_version_id is None:
+        raise ReassessmentInputError("no prior pinned version found for this workspace/document pair")
+    old_version = documents.get_version(document.id, old_version_id)
+    if old_version is None:
+        raise ReassessmentInputError(f"prior document version not found: {old_version_id!r}")
+
+    findings = [f for f in workspaces.list_findings(workspace) if not f["is_duplicate"]]
+    digest = reassessment.build_digest(
+        document.original_filename, old_version.uploaded_at, new_version.uploaded_at, findings,
+    )
+    validation_error = reassessment.validate_digest(digest)
+    if validation_error is not None:
+        error_type, error_message = validation_error
+        raise ReassessmentInputError(f"{error_type}: {error_message}")
+
+    outcome = reassessment.run_reassessment(document, old_version, new_version, digest)
+
+    if not outcome.success:
+        raise RuntimeError(f"reassessment failed: {outcome.error_message}")
+
+    findings_by_title = {f["title"].strip().lower(): f["id"] for f in findings}
+    item_dicts = []
+    for item in outcome.items or []:
+        d = item.to_dict()
+        d["finding_id"] = findings_by_title.get(d.get("finding_title", "").strip().lower())
+        item_dicts.append(d)
+
+    record = reassessments.create_reassessment(
+        project_id=project_id, workspace_id=workspace_id, mandate_id=stage_input.get("_mandate_id"),
+        run_id=stage_input.get("_run_id"), attempt_id=stage_input.get("_attempt_id"), document_id=document.id,
+        old_version_id=old_version.id, new_version_id=new_version.id,
+        status="success", transmitted=outcome.transmitted, analysis_seconds=outcome.analysis_seconds,
+        model=outcome.model, reassessment_template_version=reassessment.REASSESSMENT_TEMPLATE_VERSION,
+        stop_reason=outcome.stop_reason,
+        input_tokens=outcome.usage["input_tokens"] if outcome.usage else None,
+        output_tokens=outcome.usage["output_tokens"] if outcome.usage else None,
+        error_type=None, error_message=None, executive_summary=outcome.executive_summary,
+        what_changed=outcome.what_changed,
+    )
+    items = reassessments.create_items(record.id, item_dicts)
+
+    return {
+        "reassessment_id": record.id, "workspace_id": workspace_id, "item_count": len(items),
+        "model": record.model,
+    }
+
+
+register_capability(
+    CapabilityDescriptor(
+        name="reassessment.compare_versions",
+        version="1",
+        side_effect_class="external_paid_call",
+        permission_check=lambda project_id: True,
+        unit_cost=1.0,
+        executor=_reassessment_executor,
+        input_schema={
+            "type": "object", "required": ["workspace_id"],
+            "properties": {"workspace_id": {"type": "string"}},
+        },
+        output_schema={
+            "type": "object", "required": ["reassessment_id", "workspace_id", "item_count", "model"],
+            "properties": {
+                "reassessment_id": {"type": "string"}, "workspace_id": {"type": "string"},
+                "item_count": {"type": "number"}, "model": {"type": "string"},
+            },
+        },
+        # v1: the changed source must be a PDF document - see
+        # reassessment.py's own module docstring for why an Excel-format
+        # or submission-version change is a separate, larger future task.
+        allowed_source_formats=(".pdf",),
     )
 )
 
@@ -762,6 +1165,110 @@ register_template(
     )
 )
 
+register_template(
+    Template(
+        key="decision-package",
+        version=1,
+        name="Decision package (draft from reviewed findings)",
+        description=(
+            "Task 14.3: drafts a decision package - executive summary, "
+            "recommendation, evidence synthesis, outstanding matters, "
+            "risks - from one workspace's own already-reviewed findings "
+            "and open requests. Sends no original document bytes to the "
+            "model; requires the workspace to have at least one finding "
+            "with explicit review activity (docs/04-mandate-engine.md's "
+            "own 'draft-production capability', deferred since Task "
+            "12.2 as draft_from_reviewed_findings). The human_checkpoint "
+            "stage records that a human looked at the run; approving the "
+            "draft itself into an official position is a separate, "
+            "deal-lead-only action (deliverables.approve_deliverable_"
+            "version via server.py) - the same 'run checkpoint records a "
+            "decision, a dedicated endpoint records the real disposition' "
+            "split Integrity Review's own candidate-decision endpoints "
+            "already use. Proposed manually only (stage_inputs naming an "
+            "existing workspace_id) - never by the LLM planner; see "
+            "_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING."
+        ),
+        stages=[
+            {
+                "id": "draft", "kind": "capability", "capability": "decision_package.produce_draft",
+                "depends_on": [], "outputs": ["deliverable_id"],
+            },
+            {"id": "checkpoint", "kind": "human_checkpoint", "depends_on": ["draft"], "outputs": ["review_decision"]},
+        ],
+    )
+)
+
+register_template(
+    Template(
+        key="readiness",
+        version=1,
+        name="Readiness checklist",
+        description=(
+            "Task 14.4: evaluates one workspace against a fixed, "
+            "explicitly documented checklist (readiness.py's own "
+            "SCOPE_DESCRIPTION) - a deal brief, at least one source "
+            "document, no open critical/high finding, no unreviewed "
+            "finding, no open information request, and an approved memo "
+            "or decision package. Deterministic, no provider call, no "
+            "human_checkpoint stage - viewing an assessment commits "
+            "nothing and publishes nothing, so there is no decision here "
+            "for a checkpoint to gate. Explicitly not a claim of "
+            "universal deal completeness - see readiness.py's own "
+            "SCOPE_DESCRIPTION, carried on every persisted assessment. "
+            "Proposed manually only (stage_inputs naming an existing "
+            "workspace_id) - never by the LLM planner; see "
+            "_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING."
+        ),
+        stages=[
+            {
+                "id": "assess", "kind": "capability", "capability": "readiness.assess_scope",
+                "depends_on": [], "outputs": ["assessment_id"],
+            },
+        ],
+    )
+)
+
+register_template(
+    Template(
+        key="reassessment",
+        version=1,
+        name="Targeted reassessment",
+        description=(
+            "Task 15.2: given a workspace Task 15.1 has already flagged "
+            "potentially_stale because a source document received a new "
+            "version, compares the old and new document versions against "
+            "the workspace's own current findings and proposes, per "
+            "finding, whether it remains valid, changes materially, or "
+            "needs human reconsideration. Requires the workspace to "
+            "already be flagged stale, with the direct cause being a "
+            "document (not a cascaded staleness or a submission-version "
+            "change) - see reassessment.py's own module docstring. The "
+            "human_checkpoint stage marks the mandate reviewed only once "
+            "a human has worked through the proposed items via the "
+            "dedicated item-decision endpoint; acknowledging every item "
+            "clears the workspace's own staleness flag "
+            "(version_dependencies.clear_staleness) - the only way "
+            "staleness is ever cleared. No item creates or mutates a "
+            "finding - the workspace's own findings stay exactly as they "
+            "were, per docs/03-domain-model.md's immutability rule; a "
+            "human who agrees a finding materially changed records that "
+            "through the finding's own existing workflow fields "
+            "(resolution_status/reviewer_notes), not through this "
+            "endpoint. Proposed manually only (stage_inputs naming an "
+            "existing, currently-stale workspace_id) - never by the LLM "
+            "planner; see _TEMPLATES_EXCLUDED_FROM_LLM_PLANNING."
+        ),
+        stages=[
+            {
+                "id": "reassess", "kind": "capability", "capability": "reassessment.compare_versions",
+                "depends_on": [], "outputs": ["reassessment_id"],
+            },
+            {"id": "checkpoint", "kind": "human_checkpoint", "depends_on": ["reassess"], "outputs": ["review_decision"]},
+        ],
+    )
+)
+
 
 # Capabilities whose stage input is a source document selection, not
 # something derivable purely from the mandate's objective - Task 12.4's
@@ -784,8 +1291,13 @@ _CAPABILITIES_NEEDING_DOCUMENT_SELECTION = {"reconciliation.cross_format"}
 # template would simply see its own plan rejected as unsupported (empty
 # stage_inputs fails this capability's own input_schema) rather than
 # anything unsafe - this set only avoids offering a template the planner
-# cannot use well in the first place.
-_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING = {"integrity-review"}
+# cannot use well in the first place. "decision-package", "readiness",
+# and "reassessment" are excluded for a simpler, shared reason: all three
+# need a workspace_id, not a document selection, and mandate_planning.
+# propose_candidate_plan/TemplateSummary has no concept of "workspace
+# selection" at all today - extending it is a separate, unauthorized
+# future task (roadmap M14: "One template at a time").
+_TEMPLATES_EXCLUDED_FROM_LLM_PLANNING = {"integrity-review", "decision-package", "readiness", "reassessment"}
 
 
 def _document_selection_stage(template: Template) -> dict | None:
@@ -872,6 +1384,73 @@ def _default_input_for_stage(stage: dict, mandate: "Mandate", stage_inputs: dict
             "workstream_id": provided.get("workstream_id"),
             "review_scope": str(provided.get("review_scope", "") or ""),
         }
+
+    if capability == "decision_package.produce_draft":
+        provided = (stage_inputs or {}).get(stage["id"]) or {}
+        descriptor = get_capability(capability)
+        assert descriptor is not None
+        _validate_against_schema(
+            provided, descriptor.input_schema, f"stage {stage['id']!r} ({capability}) input"
+        )
+        workspace_id = provided["workspace_id"]
+        workspace = workspaces.get_workspace(mandate.project_id, workspace_id)
+        if workspace is None:
+            raise PlanValidationError(f"workspace not found: {workspace_id!r}")
+        # Verified again here (not deferred to execution) so an approved
+        # plan can never be created against a workspace with no reviewed
+        # material at all - the same "reject before a run is ever created"
+        # discipline every other capability's own input verification uses.
+        findings = [f for f in workspaces.list_findings(workspace) if not f["is_duplicate"]]
+        request_list = workspaces.list_requests(workspace_id)
+        digest = decision_package.build_digest(workspace_id, findings, request_list)
+        validation_error = decision_package.validate_selection(digest)
+        if validation_error is not None:
+            error_type, error_message = validation_error
+            raise PlanValidationError(f"{error_type}: {error_message}")
+        return {"workspace_id": workspace_id, "emphasis": str(provided.get("emphasis", "") or "")}
+
+    if capability == "readiness.assess_scope":
+        provided = (stage_inputs or {}).get(stage["id"]) or {}
+        descriptor = get_capability(capability)
+        assert descriptor is not None
+        _validate_against_schema(
+            provided, descriptor.input_schema, f"stage {stage['id']!r} ({capability}) input"
+        )
+        workspace_id = provided["workspace_id"]
+        if workspaces.get_workspace(mandate.project_id, workspace_id) is None:
+            raise PlanValidationError(f"workspace not found: {workspace_id!r}")
+        # Unlike decision_package, no readiness-of-the-workspace
+        # precondition is checked here - the whole point of this
+        # capability is to report whether the workspace is ready, so it
+        # must be runnable at any time, including (especially) when it
+        # is not yet ready.
+        return {"workspace_id": workspace_id}
+
+    if capability == "reassessment.compare_versions":
+        provided = (stage_inputs or {}).get(stage["id"]) or {}
+        descriptor = get_capability(capability)
+        assert descriptor is not None
+        _validate_against_schema(
+            provided, descriptor.input_schema, f"stage {stage['id']!r} ({capability}) input"
+        )
+        workspace_id = provided["workspace_id"]
+        if workspaces.get_workspace(mandate.project_id, workspace_id) is None:
+            raise PlanValidationError(f"workspace not found: {workspace_id!r}")
+        # Unlike decision_package, the precondition here is the opposite
+        # of readiness's own: a reassessment plan can only be proposed
+        # against a workspace that is *already* flagged stale, with a
+        # document as the direct cause - re-verified independently here
+        # (never trusted from the caller) so an approved plan can never
+        # target a workspace with nothing to reassess.
+        flag = version_dependencies.get_staleness("workspace", workspace_id)
+        if flag is None:
+            raise PlanValidationError(f"workspace {workspace_id!r} is not currently flagged potentially stale")
+        if flag.superseded_source_type != "document":
+            raise PlanValidationError(
+                f"workspace {workspace_id!r}'s staleness was not caused directly by a document version "
+                f"change (cause: {flag.superseded_source_type!r}) - unsupported in this version of reassessment"
+            )
+        return {"workspace_id": workspace_id}
 
     return {}
 

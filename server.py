@@ -26,6 +26,7 @@ import cross_document_analysis
 import cross_format_analyses
 import cross_format_analysis
 import deal_briefs
+import deliverables
 import documents
 import evaluations
 import identity
@@ -36,11 +37,14 @@ import mandates
 import multipart
 import overview
 import pdf_inspection
+import readiness_assessments
+import reassessments
 import reviews
 import store
 import tasks
 import validation_cases
 import validation_runs
+import version_dependencies
 import work_products
 import workspace_exports
 import workspaces
@@ -124,6 +128,13 @@ _WORKSPACE_MEMO_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/memo
 _WORKSPACE_MEMO_APPROVE_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/memo/approve$")
 _WORKSPACE_AUDIT_LOG_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/audit-log$")
 _WORKSPACE_EXPORT_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/export/([a-z.]+)$")
+_WORKSPACE_DELIVERABLES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/deliverables$")
+_WORKSPACE_DELIVERABLE_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/deliverables/([^/]+)$")
+_WORKSPACE_DELIVERABLE_APPROVE_RE = re.compile(
+    r"^/api/projects/([^/]+)/workspaces/([^/]+)/deliverables/([^/]+)/approve$"
+)
+_WORKSPACE_READINESS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/readiness$")
+_WORKSPACE_READINESS_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/readiness/([^/]+)$")
 
 _BRIEF_RE = re.compile(r"^/api/projects/([^/]+)/brief$")
 _BRIEF_VERSIONS_RE = re.compile(r"^/api/projects/([^/]+)/brief/versions$")
@@ -170,6 +181,12 @@ _INTEGRITY_REVIEWS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/integrity
 _INTEGRITY_REVIEW_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/integrity-reviews/([^/]+)$")
 _INTEGRITY_REVIEW_CANDIDATE_DECISION_RE = re.compile(
     r"^/api/projects/([^/]+)/integrity-reviews/([^/]+)/candidates/([^/]+)/decision$"
+)
+
+_REASSESSMENTS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/reassessments$")
+_REASSESSMENT_RECORD_RE = re.compile(r"^/api/projects/([^/]+)/reassessments/([^/]+)$")
+_REASSESSMENT_ITEM_DECISION_RE = re.compile(
+    r"^/api/projects/([^/]+)/reassessments/([^/]+)/items/([^/]+)/decision$"
 )
 
 
@@ -424,6 +441,18 @@ class Handler(BaseHTTPRequestHandler):
             "findings": overview.findings_summary(all_findings),
         }
 
+        # Task 15.1 (roadmap M15.1's own completion gate: "A lead sees
+        # the change and its unresolved decision exposure in Deal
+        # Overview") - every workspace in this project, flagged if
+        # version_dependencies has marked it potentially stale. A pure
+        # read-side lookup: no new domain data, same "compose at the API
+        # boundary" shape as every other section of this response.
+        stale_items = []
+        for ws in workspaces.list_workspaces(project_id):
+            flag = version_dependencies.get_staleness("workspace", ws.id)
+            if flag is not None:
+                stale_items.append({"workspace_id": ws.id, **flag.to_dict()})
+
         return {
             "project": project.to_dict(),
             "brief": brief.to_dict() if brief is not None else None,
@@ -433,6 +462,7 @@ class Handler(BaseHTTPRequestHandler):
             "reconciliations": reconciliations_out,
             "documents": {"count": len(documents.list_documents(project_id))},
             "activity": self._project_activity_feed(project_id, task_list),
+            "stale_items": stale_items,
         }
 
     def _deal_overview_restricted(self, project: "store.Project", brief: "deal_briefs.BriefVersion | None") -> dict:
@@ -531,6 +561,18 @@ class Handler(BaseHTTPRequestHandler):
             [f for f in workspaces.list_findings(workspace) if f["origin"] == "integrity"]
             if workspace is not None else []
         )
+        return out
+
+    def _reassessment_with_items(self, record: reassessments.Reassessment) -> dict:
+        """A reassessment's own audit record plus every item it proposed
+        - composed here at the API boundary, the same shape
+        _integrity_review_with_candidates already uses."""
+        out = record.to_dict()
+        out["items"] = [i.to_dict() for i in reassessments.list_items(record.id)]
+        out["workspace_staleness"] = None
+        flag = version_dependencies.get_staleness("workspace", record.workspace_id)
+        if flag is not None:
+            out["workspace_staleness"] = flag.to_dict()
         return out
 
     def _handle_list_dev_identities(self) -> None:
@@ -875,6 +917,30 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_get_memo(project_id, workspace_id)
             return
 
+        workspace_deliverable_item_match = _WORKSPACE_DELIVERABLE_ITEM_RE.match(path)
+        if workspace_deliverable_item_match:
+            project_id, workspace_id, deliverable_id = workspace_deliverable_item_match.groups()
+            self._handle_get_deliverable(project_id, workspace_id, deliverable_id)
+            return
+
+        workspace_deliverables_match = _WORKSPACE_DELIVERABLES_COLLECTION_RE.match(path)
+        if workspace_deliverables_match:
+            project_id, workspace_id = workspace_deliverables_match.groups()
+            self._handle_list_deliverables(project_id, workspace_id)
+            return
+
+        workspace_readiness_item_match = _WORKSPACE_READINESS_ITEM_RE.match(path)
+        if workspace_readiness_item_match:
+            project_id, workspace_id, assessment_id = workspace_readiness_item_match.groups()
+            self._handle_get_readiness_assessment(project_id, workspace_id, assessment_id)
+            return
+
+        workspace_readiness_collection_match = _WORKSPACE_READINESS_COLLECTION_RE.match(path)
+        if workspace_readiness_collection_match:
+            project_id, workspace_id = workspace_readiness_collection_match.groups()
+            self._handle_list_readiness_assessments(project_id, workspace_id)
+            return
+
         workspace_requests_match = _WORKSPACE_REQUESTS_COLLECTION_RE.match(path)
         if workspace_requests_match:
             project_id, workspace_id = workspace_requests_match.groups()
@@ -1158,6 +1224,27 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, out)
             return
 
+        reassessment_record_match = _REASSESSMENT_RECORD_RE.match(path)
+        if reassessment_record_match:
+            project_id, reassessment_id = reassessment_record_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            reassessment_record = reassessments.get_reassessment(project_id, reassessment_id)
+            if reassessment_record is None:
+                self._send_json(404, {"error": "reassessment not found"})
+                return
+            self._send_json(200, self._reassessment_with_items(reassessment_record))
+            return
+
+        reassessments_collection_match = _REASSESSMENTS_COLLECTION_RE.match(path)
+        if reassessments_collection_match:
+            (project_id,) = reassessments_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [r.to_dict() for r in reassessments.list_reassessments(project_id)]
+            self._send_json(200, out)
+            return
+
         if path.startswith("/api/projects/"):
             project_id = path.removeprefix("/api/projects/")
             project = self._authorized_project(project_id)
@@ -1326,6 +1413,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_integrity_candidate_decision(project_id, review_id, candidate_id)
             return
 
+        reassessment_item_decision_match = _REASSESSMENT_ITEM_DECISION_RE.match(path)
+        if reassessment_item_decision_match:
+            project_id, reassessment_id, item_id = reassessment_item_decision_match.groups()
+            self._handle_reassessment_item_decision(project_id, reassessment_id, item_id)
+            return
+
         mandate_run_resume_match = _MANDATE_RUN_RESUME_RE.match(path)
         if mandate_run_resume_match:
             project_id, mandate_id, run_id = mandate_run_resume_match.groups()
@@ -1474,6 +1567,12 @@ class Handler(BaseHTTPRequestHandler):
         if workspace_memo_approve_match:
             project_id, workspace_id = workspace_memo_approve_match.groups()
             self._handle_approve_memo(project_id, workspace_id)
+            return
+
+        workspace_deliverable_approve_match = _WORKSPACE_DELIVERABLE_APPROVE_RE.match(path)
+        if workspace_deliverable_approve_match:
+            project_id, workspace_id, deliverable_id = workspace_deliverable_approve_match.groups()
+            self._handle_approve_deliverable(project_id, workspace_id, deliverable_id)
             return
 
         workspace_memo_match = _WORKSPACE_MEMO_RE.match(path)
@@ -2075,6 +2174,51 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json(200, updated.to_dict())
 
+    # -- targeted reassessment (Task 15.2) -----------------------------------
+
+    def _handle_reassessment_item_decision(self, project_id: str, reassessment_id: str, item_id: str) -> None:
+        """Acknowledging a reassessment item never mutates or creates a
+        finding - it only records that a human looked at the proposed
+        reassessment (reassessments.py's own module docstring); a human
+        who agrees a finding materially changed records that separately,
+        through the finding's own existing workflow endpoint. Once every
+        item for this reassessment is acknowledged, the workspace's
+        staleness flag is cleared - the only path that ever clears one.
+        Gated the same as an Integrity Review candidate decision (docs/06:
+        "Recommend finding disposition: Yes/Yes/Yes/No")."""
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may decide a reassessment item"})
+            return
+        record = reassessments.get_reassessment(project_id, reassessment_id)
+        if record is None:
+            self._send_json(404, {"error": "reassessment not found"})
+            return
+        item = reassessments.get_item(reassessment_id, item_id)
+        if item is None:
+            self._send_json(404, {"error": "reassessment item not found"})
+            return
+
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        decision_notes = str(data.get("decision_notes", "") or "")
+
+        try:
+            updated = reassessments.acknowledge_item(
+                reassessment_id, item_id, decided_by=self.current_user_id, decision_notes=decision_notes,
+            )
+        except reassessments.ReassessmentItemDecisionError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        if reassessments.all_items_acknowledged(reassessment_id):
+            version_dependencies.clear_staleness("workspace", record.workspace_id)
+
+        self._send_json(200, updated.to_dict())
+
     # -- mandates (Task 12.1) --------------------------------------------
 
     def _handle_create_mandate(self, project_id: str) -> None:
@@ -2430,6 +2574,15 @@ class Handler(BaseHTTPRequestHandler):
             excel_document_ids=[d.id for d in excel_docs],
             excel_document_filenames=[d.original_filename for d in excel_docs],
             excel_document_checksums=[d.sha256 for d in excel_docs],
+            # Task 15.1: this direct (non-mandate) route selects "whatever
+            # is current right now" for each document, so its own current
+            # version id is exactly the version consumed - no separate
+            # pinned_versions dict to consult here, unlike the mandate path.
+            # Every selected document already has a real version by this
+            # point (it was just read back from storage), so the `or ""`
+            # only satisfies the type checker, never a real fallback.
+            pdf_document_version_ids=[d.current_version_id or "" for d in pdf_docs],
+            excel_document_version_ids=[d.current_version_id or "" for d in excel_docs],
             status="success" if outcome.success else "error",
             transmitted=outcome.transmitted,
             analysis_seconds=outcome.analysis_seconds,
@@ -2851,6 +3004,24 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         workspace, created = workspaces.get_or_create_workspace(project_id, analysis)
+
+        # Task 15.1: this static-page route never goes through mandates.py
+        # (no Run to attach a mandate_run edge to), but the workspace
+        # itself still needs the same leaf dependency edges the mandate
+        # path records, built directly from the analysis's own version
+        # fields - safe to call on every open (idempotent), not only when
+        # `created` is True.
+        version_edges = [
+            ("document", doc_id, version_id)
+            for doc_id, version_id in zip(
+                analysis.pdf_document_ids + analysis.excel_document_ids,
+                analysis.pdf_document_version_ids + analysis.excel_document_version_ids,
+            )
+            if version_id
+        ]
+        if version_edges:
+            version_dependencies.record_dependencies("workspace", workspace.id, version_edges)
+
         self._send_json(201 if created else 200, workspace.to_dict())
 
     def _handle_get_workspace(self, project_id: str, workspace_id: str) -> None:
@@ -2863,6 +3034,7 @@ class Handler(BaseHTTPRequestHandler):
         findings = workspaces.list_findings(workspace, analysis)
         request_list = workspaces.list_requests(workspace_id)
         summary = workspaces.compute_summary(workspace, analysis, request_list)
+        staleness = version_dependencies.get_staleness("workspace", workspace_id)
         self._send_json(
             200,
             {
@@ -2870,6 +3042,7 @@ class Handler(BaseHTTPRequestHandler):
                 "analysis": analysis.to_dict(),
                 "findings": findings,
                 "summary": summary,
+                "staleness": staleness.to_dict() if staleness else None,
             },
         )
 
@@ -3063,6 +3236,73 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(200, memo.to_dict())
 
+    # -- decision packages (Task 14.3) --------------------------------------
+
+    def _handle_list_deliverables(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        versions = deliverables.list_deliverable_versions(workspace_id)
+        self._send_json(200, [v.to_dict() for v in versions])
+
+    def _handle_get_deliverable(self, project_id: str, workspace_id: str, deliverable_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        version = deliverables.get_deliverable_version(workspace_id, deliverable_id)
+        if version is None:
+            self._send_json(404, {"error": "deliverable version not found"})
+            return
+        staleness = version_dependencies.get_staleness("deliverable_version", deliverable_id)
+        self._send_json(200, {**version.to_dict(), "staleness": staleness.to_dict() if staleness else None})
+
+    def _handle_approve_deliverable(self, project_id: str, workspace_id: str, deliverable_id: str) -> None:
+        """docs/06-security-and-collaboration.md's own permission table:
+        "Approve decision package: No / Recommend / Yes / Explicit grant
+        only" (analyst/reviewer/deal_lead/external_executive) - only a
+        deal_lead may actually approve one in this v1; a reviewer's
+        "Recommend" role has no dedicated endpoint yet (disclosed scope
+        simplification, same shape as every other v1 permission gate this
+        app ships with a documented narrower-than-the-full-table scope)."""
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may approve a decision package"})
+            return
+        body = self._read_json_body()
+        if not body or body.get("confirm") is not True:
+            self._send_json(400, {"error": "approval requires {\"confirm\": true} in the request body"})
+            return
+        try:
+            version = deliverables.approve_deliverable_version(workspace_id, deliverable_id, self.current_user_id)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except deliverables.DeliverableValidationError as exc:
+            self._send_json(409, {"error": str(exc)})
+            return
+        self._send_json(200, version.to_dict())
+
+    # -- readiness assessments (Task 14.4) -----------------------------------
+
+    def _handle_list_readiness_assessments(self, project_id: str, workspace_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        records = readiness_assessments.list_readiness_assessments(workspace_id)
+        self._send_json(200, [r.to_dict() for r in records])
+
+    def _handle_get_readiness_assessment(self, project_id: str, workspace_id: str, assessment_id: str) -> None:
+        workspace = self._get_owned_workspace(project_id, workspace_id)
+        if workspace is None:
+            return
+        record = readiness_assessments.get_readiness_assessment(workspace_id, assessment_id)
+        if record is None:
+            self._send_json(404, {"error": "readiness assessment not found"})
+            return
+        self._send_json(200, record.to_dict())
+
     def _handle_workspace_export(self, project_id: str, workspace_id: str, export_name: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
@@ -3131,6 +3371,10 @@ def main() -> None:
     work_products.init_work_products_db()
     reviews.init_reviews_db()
     integrity_reviews.init_integrity_reviews_db()
+    deliverables.init_deliverables_db()
+    readiness_assessments.init_readiness_assessments_db()
+    version_dependencies.init_version_dependencies_db()
+    reassessments.init_reassessments_db()
     mandates.init_mandates_db()
     # Task 12.2: the durable local worker - a real background thread,
     # independent of any HTTP request, that executes queued/resumed
