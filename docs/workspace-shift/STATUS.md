@@ -12,26 +12,56 @@ light navy/gold identity — see the dated entries below. Also as of
 2026-09-16, the untracked `frontend/` React scaffold's own `src/index.css`
 was retheme'd to the same Meridian identity (see dated entry below) — the
 two stacks (static pages, React scaffold) now read as one product visually.
-Current task: tasks/15.3-trigger-policy.md (complete for this task's own
-bounded scope - 2 of the roadmap's 5 example event types. **This closes
-M15 entirely.**). An authorized reviewer/deal lead can now configure a
-standing, named trigger (event type + template + owner/budget/reason);
-when the real event fires (a document gets a new version, a decision
-package is drafted), a real Mandate with a real proposed Plan is created
-automatically - never auto-approved or auto-run. Proven live and for
-free (reusing Task 15.2's own real workspace, firing the zero-cost
-`readiness` template): uploading a real new document version
-automatically created a real, correctly-targeted, still-`awaiting_
-approval` mandate, with Task 15.1's own independent staleness mechanism
-firing correctly alongside it on the same real event.
-`decision_package_prepared` is proven only by the mocked test suite (the
-founder declined a further real paid call for it), not a live call.
-Disclosed boundaries: only 2 of 5 roadmap-listed event types (the other
-three lack a natural, unambiguous workspace_id or an existing action to
-hook); approval_policy is always "manual"; no trigger editing. See
-below). Next recommended: none yet authorized past M15 - M16 is
-explicitly evidence-gated in the roadmap, a founder decision rather than
-an automatic next step.
+Current task: tasks/16.6-inline-assistance-decision.md (complete). **This
+touches all six of M16's roadmap sub-tasks (16.1-16.6) for the first
+time** - see below for exactly what "touched" means for each (none of
+them close M16's own gates 4/5 outright). M15 closed with Task 15.3 (see
+that entry below: opt-in triggers, 2 of 5 roadmap event types, proven
+live and free). Before starting M16, this session ran an explicit gate
+check against docs/08-roadmap.md's M16 entry criteria across the real
+evidence in M13-M15's own task files and STATUS.md entries: gate 1 (M13
+multi-identity collaboration) and gate 3 (M15 dependency tracking/
+reassessment) are genuinely satisfied by live proof; gate 2 (M14.2
+independently scored real case) is only partially met - one real scored
+case exists but was scored by the same session that built the capability
+and wrote its own answer key, not independently, and docs/10-decisions.md's
+own O07 still lists independent scoring as unresolved; gates 4 (recurring
+reusable assertions) and 5 (measured failure modes) had **no supporting
+evidence at all** at the time M16 started. The founder was shown this
+breakdown directly and explicitly chose to proceed with full M16 (16.1
+through 16.6) despite gates 2/4/5 remaining unmet - a deliberate override
+of the roadmap's own "must not begin merely because the architecture is
+attractive" instruction, recorded here rather than glossed over.
+Tasks executed: 16.1 (taxonomy and golden set), 16.2 (evidence assertion
+ledger), 16.3 (deterministic reconciler - exactly one rule,
+`numerical_conflict_same_label_v1`), 16.4 (semantic review benchmark -
+**one leg only**, the "current strong-model review" baseline, on
+explicit scope-bounded authorization; real paid 3-case run,
+claude-opus-5, 3/3 substantive recall - the first actual measured
+evidence toward gate 5, still far short of "measured failure modes" at
+n=3 but no longer zero; also surfaced a real taxonomy gap between
+`integrity_review.CLASSIFICATIONS` and `golden_set.DefectType`), 16.5
+(incremental evaluation - wired `assertion_ledger.py` into Task 15.1's
+existing generic staleness engine, zero new schema, detection only, no
+automatic reevaluation), and 16.6 (inline assistance decision - Integrity
+Review candidates now render their own PDF citations as clickable,
+version-pinned, page-anchored links into the real submission/source/peer
+documents, reusing Task 14.2's own already-computed citation data; found
+and fixed one real pre-existing backend gap along the way, the
+work-product download route's missing `inline` query-param support; the
+spec's own second half, a CRDT editor, was correctly NOT built since no
+evidence exists that submission-time review is "too late," exactly the
+condition the spec itself requires before considering one). Gate 4
+(recurring assertions) remains completely unaddressed by any of 16.1-16.6.
+See each task's own file for full detail and disclosed limitations; none
+claims to close any gate on its own.
+Next recommended: a real "targeted reassessment for a stale assertion
+ledger entry" flow (16.5's own detection-to-action gap, left open by
+design); an analogous dependency-tracking wire-up for `reconciler.py`
+once it has a real caller; the other two 16.4 legs; reconciling the
+`CLASSIFICATIONS`/`DefectType` taxonomy gap; a second reconciler rule; or
+a different priority entirely, now that every M16 line item has been
+touched once. Not yet authorized; awaiting founder direction.
 Application repository: /Users/rawwafa/Projects/deal-intelligence-lab, this session
 had live, direct access to it.
 Application revision: as of 2026-09-17, the founder asked to commit the
@@ -3906,3 +3936,941 @@ evidence-gated per docs/08-roadmap.md's own explicit language.
 **Permissions needed**: founder decision on what to work on next
 (M16, or something else entirely), or whether to commit the accumulated
 Task 15.3 changes.
+
+## 2026-09-18 — Task 15.3 committed; M16 gate check performed; Task 16.1 executed
+
+**App commit at start**: `456e435` (Tasks 14.3-15.2). Task 15.3's own
+changes (`triggers.py`, `version_dependencies.py`, `mandates.py`,
+`server.py`, `tests/test_triggers.py`, `tests/test_trigger_endpoints.py`,
+new `docs/workspace-shift/tasks/15.3-trigger-policy.md`, this file) were
+still uncommitted at the start of this session, per this effort's
+standing "never commit unless explicitly asked" default.
+
+**Part 1: Task 15.3 committed.** The founder explicitly asked for the
+working tree to be committed. Staged everything from Task 15.3's own
+scope; deliberately left `SKILL (1).md` untracked (a stray, unrelated
+taste-skill duplicate with no connection to this app - the project
+already vendors `taste-skill-v1` under `.claude/skills/` - consistent
+with every prior commit in this effort excluding it). Committed as
+`58ea362` ("Task 15.3: opt-in triggers, closing Milestone 15").
+
+**Part 2: M16 gate check performed, before any M16 work started.** Per
+this session's own instructions, checked each of docs/08-roadmap.md's
+five M16 entry gates against the real evidence already in the M13-M15
+task files and this file's own dated entries, rather than trusting Task
+15.3's own closing self-assessment (which had claimed the gates were
+"largely satisfied" with no supporting citations for two of them - see
+that assessment quoted in the entry immediately above). Findings, in
+full:
+- **Gate 1** (M13 multi-identity collaboration) - **satisfied**. Task
+  13.4's real cross-role journey (analyst/reviewer/lead/external-
+  executive, genuinely distinct sessions) produced a live 403 on an
+  unauthorized approval, a live 201 on the authorized one, a correctly
+  restricted external-executive Deal Overview, and immediate effect from
+  a live membership revocation.
+- **Gate 2** (M14.2 independently scored real case) - **partial**. One
+  real scored case exists (Task 14.2: 2/2 recall, one false-positive
+  trap correctly avoided), but docs/09-acceptance.md itself distinguishes
+  "independent real-case human scoring" from other evidence tiers and
+  says not to conflate them - the scoring here was done by the same
+  session that built the capability and wrote its own answer key
+  immediately beforehand. docs/10-decisions.md's own **O07** ("Which real
+  case has independent human-scored ground truth") is still listed open,
+  unresolved as of this same check.
+- **Gate 3** (M15 dependency tracking/reassessment) - **satisfied**.
+  Tasks 15.1 and 15.2 both have real, live, non-mocked proof against the
+  real running Postgres database (staleness flagged automatically on a
+  real new document version; a real paid reassessment run correctly
+  reclassified resolved/still-valid/ambiguous findings and cleared
+  staleness on acknowledgment).
+- **Gate 4** (review outputs show recurring reusable assertions) - **not
+  satisfied, no evidence found**. Only one real M14.2 case and one real
+  M15.2 reassessment have ever been run - too few to observe recurrence
+  across. docs/10-decisions.md itself lists "which assertions recur
+  enough to justify a persistent ledger" as an **open question needing
+  evidence**, dated the same day the M16 section was adopted.
+- **Gate 5** (measured failure modes justify more structure than a
+  strong LLM plus native document access) - **not satisfied, no evidence
+  found**. No systematic failure-mode measurement (recall/precision
+  across multiple cases, or a benchmark against a "strong LLM + native
+  document access" baseline) exists anywhere in this repo - one designed
+  false-positive test in one case is not that. docs/10-decisions.md's
+  open-questions list treats exactly this comparison as unresolved.
+
+This was reported to the founder plainly, gate by gate, with citations,
+plus the observation that Task 15.3's own "largely satisfied" self-
+assessment is unsupported for gates 4 and 5 specifically. The founder
+was then asked explicitly whether to proceed with M16 or prioritize
+something else.
+
+**Founder decision**: initially "don't start M16 yet." Later in the same
+session, the founder reversed this and said "start m16." Given the
+directness of the reversal against gates that were just shown to be
+unmet, this was flagged back to the founder explicitly (not silently
+acted on) with a summary of exactly which gates remained open, and the
+founder was asked to choose between starting narrowly with 16.1 only, or
+proceeding with the full M16 scope despite the gap. The founder chose
+**"Proceed with full M16 despite unmet gates."** This is recorded here as
+a deliberate, explicit override of docs/08-roadmap.md's own "must not
+begin merely because the architecture is attractive" instruction - not
+an automatic continuation, and not a case where the gate language was
+quietly reinterpreted to fit.
+
+**Part 3: Task 16.1 (taxonomy and golden set) implemented.** Full detail,
+reasoning, and every file touched: `tasks/16.1-taxonomy-and-golden-set.md`
+(status `complete`). Summary: new `golden_set.py` defines the ten-member
+`DefectType` taxonomy from the M16 spec (with a one-sentence description
+per type) and a versioned `golden_cases` table modeled directly on
+`documents.py`'s Document/DocumentVersion split (`case_key` stable
+identity, incrementing `version_number`, `active`/`superseded` status);
+`create_case`/`supersede_case`/`get_case`/`get_case_history`/`list_cases`
+are the full surface. Ten synthetic seed cases (one per defect type,
+`[SYNTHETIC]`-labeled, invented company/figures) are inserted idempotently
+by `init_golden_set_db()`, following `identity.py`'s own idempotent
+seed-on-init pattern - no real deal content was used anywhere in this
+task, per the spec's own confidentiality instruction and this session's
+standing rule to keep Universal Logic untouched. `server.py` gained one
+import and one `init_*_db()` registration line; nothing else was
+modified.
+
+Deliberately excluded from this task (recorded in the task file's own
+Exclusions section): no HTTP route or frontend surface (nothing consumes
+the golden set yet; 16.3/16.4 will, by direct import); no editing/bulk-
+import UI; no `authorized_real` cases (no standing authorization to reuse
+any real deal's content outside its own workspace exists yet, though the
+`provenance` field supports it once one does).
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest tests.test_golden_set -v
+```
+→ 10 tests, all `ok` (seeding covers all ten types exactly once and is
+idempotent; all seeded cases are synthetic and `[SYNTHETIC]`-labeled;
+create/supersede/get/list behave correctly including carry-forward of
+unspecified fields on supersede; unknown `case_key` raises
+`GoldenCaseNotFoundError`; every `DefectType` has a description).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 819 tests ... OK` (809 prior + 10 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 92 source files` (91 prior + `golden_set.py`).
+
+**Files changed**: new `golden_set.py`, new `tests/test_golden_set.py`,
+`server.py` (one import, one registration line). Nothing else.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task
+implements an already-specified spec section (16.1), not a new
+architectural choice. The M16-override decision itself is recorded above
+in this same entry rather than in `10-decisions.md`, since it's a scope/
+sequencing call by the founder, not a technical direction.
+
+**Blockers**: none for 16.1 itself. Disclosed limitation (in the task
+file's own words): only synthetic cases exist, one per defect type - not
+yet proven sufficient to justify 16.3's reconciler rules or 16.4's
+benchmark, and this task cannot itself close M16 gates 4 or 5 (it creates
+the substrate those gates would need, nothing more).
+
+**Next task**: 16.2 (evidence assertion ledger) or 16.3 (deterministic
+reconciler) - not yet started, awaiting founder direction on which to
+pick up next. 16.3 is the more natural next step since each of its rules
+must be "justified by the golden set" per the spec, directly consuming
+this task's own output.
+
+**Permissions needed**: founder direction on which M16 sub-task to build
+next (16.2 vs. 16.3 vs. a different order).
+
+## 2026-09-18 — Task 16.2 executed (evidence assertion ledger)
+
+**Authorization**: founder said "16.2" directly in response to Task
+16.1's completion summary, which had offered 16.2/16.3 as the two natural
+next options. Same M16 override recorded in the entry immediately above
+applies here too.
+
+**App commit at start**: `58ea362`, unchanged - Task 16.1's own files
+were implemented and tested but not committed at the start of this task.
+
+**What changed** (full detail, reasoning, and every deviation
+justification: `tasks/16.2-evidence-assertion-ledger.md`, status
+`complete`): new `assertion_ledger.py` implements every field the M16.2
+spec lists - stable `entry_key` separate from any content hash, source-
+version and locator provenance (from `integrity_reviews.py`'s own
+`IntegrityReview`/`IntegrityReviewCandidate` records), original wording
+(`assertion_text`, copied verbatim - confirmed by inspection that
+`assertion` is not among `IntegrityReviewCandidate.EDITABLE_FIELDS`, so
+there was never a risk of promoting an already-edited version), optional
+`normalized_fields` (freeform, `None` by default - the spec's own "never
+require...rigid subject-predicate-object triples" honored by construction),
+`modality`/`verification_status`, `extraction_model`/
+`extraction_prompt_version`, and `published_finding_id` as the
+relationship to the shared finding. `promote_candidate` is the only way an
+entry is created, and only accepts a candidate whose `decision ==
+"accepted"` (raises `CandidateNotPromotableError` otherwise) that hasn't
+already been promoted (`AlreadyPromotedError` otherwise) - directly
+implementing docs/10-decisions.md I05's "only after validation" rule as
+code, not convention. `dispute_entry`/`confirm_entry` create new versions
+(supersession history) rather than mutating in place, reusing
+`reviews.py`'s existing "a rationale is required" pattern for disputes.
+`server.py` gained one import and one `init_assertion_ledger_db()`
+registration line; nothing else touched.
+
+Deliberately excluded (task file's own Exclusions section): no auto-
+wiring into the live M14.2 accept-decision handler (would silently change
+already-shipped production behavior without separate sign-off - left as
+a follow-on decision); no HTTP route/frontend surface (no consumer yet);
+no automatic `modality` classification or language detection (both are
+M16.4-shaped judgment calls, out of this task's scope - the fields exist
+because the spec requires them, populated only by explicit caller input
+or an honest default).
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest tests.test_assertion_ledger -v
+```
+→ 13 tests, all `ok` (accepted-candidate promotion captures every
+provenance field correctly; promotion refused for `pending`/`rejected`
+candidates and for an invalid `modality`; double-promotion raises
+`AlreadyPromotedError`; dispute/confirm each create a new version with
+full, correct supersession history; project-scoped `list_entries`
+filtering and superseded-exclusion both verified).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 832 tests ... OK` (819 prior + 13 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 94 source files` (92 prior + new
+`assertion_ledger.py` + new `tests/test_assertion_ledger.py`).
+
+**Files changed**: new `assertion_ledger.py`, new
+`tests/test_assertion_ledger.py`, `server.py` (one import, one
+registration line). `integrity_reviews.py` itself completely untouched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section (16.2) plus I05's own already-recorded
+scoping rule, not a new architectural choice.
+
+**Blockers**: none for 16.2 itself. Disclosed limitation (task file's own
+words): zero real ledger entries exist against real data yet, since
+wiring `promote_candidate` into the live accept path was deliberately
+left unwired; this task proves the mechanism, not that it has been used.
+Like Task 16.1, this task does not on its own move M16 gates 4 or 5 any
+closer to satisfied - it is substrate, not evidence.
+
+**Next task**: 16.3 (deterministic reconciler - can now be justified
+against Task 16.1's golden set) or 16.4 (semantic review benchmark), or
+wiring 16.2's `promote_candidate` into the live accept-decision handler.
+Not started; awaiting founder direction.
+
+**Permissions needed**: founder direction on which M16 sub-task to build
+next.
+
+## 2026-09-18 — Task 16.3 executed (deterministic reconciler)
+
+**Authorization**: founder said "next" directly in response to Task
+16.2's completion summary, which had named 16.3 as the more natural next
+option. Same M16 override recorded in the two entries above applies here.
+
+**App commit at start**: `58ea362`, unchanged - Tasks 16.1 and 16.2's own
+files were implemented and tested but not committed at the start of this
+task.
+
+**What changed** (full detail, reasoning, and every scoping decision:
+`tasks/16.3-deterministic-reconciler.md`, status `complete`): new
+`reconciler.py` implements exactly one rule,
+`numerical_conflict_same_label_v1`, per the spec's own "one rule at a
+time." Before writing it, explicitly considered and rejected staleness as
+this rule's target - Task 15.1/15.2 already built a complete, real,
+live-proven deterministic staleness mechanism
+(`version_dependencies.mark_superseded`/`get_staleness`), and 16.5's own
+spec line already anticipates reusing it; building a second one here
+would be relabeling, not new work. Also considered the other eight
+non-numerical defect types and confirmed none can be checked
+deterministically without first solving "which two passages/values
+correspond to the same fact" - a semantic-linking judgment this codebase
+has no extraction pipeline for (that's M14.2's LLM, and M16.4's future
+benchmarking). Scoped the rule accordingly: it takes already-labeled,
+already-linked `NumericFact` values as input (label/value/unit/source/
+locator) - deciding what counts as "the same quantity" stays a caller
+responsibility - and its own logic is then pure, exact arithmetic:
+same normalized label, same normalized unit (a unit mismatch is silently
+skipped, not converted - deferred as its own separate rule), values
+differing by more than 0.5% (a disclosed, unvalidated default) are
+flagged. `RuleDefinition` makes the spec's seven required per-rule
+properties (preconditions/normalization/tolerance/tier/evidence
+presentation/dismissal policy/regression fixtures) inspectable in code,
+not only prose. `dismiss_finding` requires a non-empty reason (reusing
+the same pattern as `reviews.record_decision` and Task 16.2's own
+`dispute_entry`) and is permanent - re-evaluating an already-dismissed
+source pair returns the still-dismissed finding rather than reopening
+it. Evaluation is idempotent per source pair regardless of argument
+order. `server.py` gained one import and one `init_reconciler_db()`
+registration line; nothing else touched.
+
+**Regression fixture tied to the golden set** (the spec's own seventh
+required property): since Task 16.1's golden cases are free-standing
+prose, not structured facts, this task didn't attempt to parse one
+automatically - instead, `tests/test_reconciler.py`'s
+`ReconcilerGoldenSetRegressionTests` hand-authors `NumericFact`s
+mirroring the seeded `numerical_conflict` case's own numbers ($50M/$52M
+purchase price) and asserts the golden case's own prose still contains
+those exact figures, so the fixture and the golden case can't silently
+drift apart, then confirms the rule actually flags them.
+
+Deliberately excluded (task file's own Exclusions): no fact-extraction
+pipeline (nothing parses real documents into `NumericFact`s yet); no
+unit/currency conversion or rule; only one rule total, nine of ten
+defect types uncovered; no HTTP route or workflow wiring (no real caller
+exists yet); no "reopen" action for a dismissed finding; re-evaluating an
+already-evaluated pair never refreshes its snapshot even if the
+underlying values later changed.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest tests.test_reconciler -v
+```
+→ 14 tests, all `ok` (rule arithmetic/preconditions across 6 tests;
+persistence/idempotency/dismissal across 6 tests; the golden-set
+regression fixture across 2 tests).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 846 tests ... OK` (832 prior + 14 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 96 source files` (94 prior + `reconciler.py`
++ `tests/test_reconciler.py`).
+
+**Files changed**: new `reconciler.py`, new `tests/test_reconciler.py`,
+`server.py` (one import, one registration line). Nothing else -
+`golden_set.py`, `version_dependencies.py`, `assertion_ledger.py`, and
+every other existing module completely untouched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section (16.3), not a new architectural choice.
+The staleness-exclusion reasoning and the "semantic linking is a
+precondition, not this rule's job" scoping are recorded in the task
+file's own Baseline/Exclusions rather than as a formal decision, since
+they follow directly from the spec's own "least ambiguous checks first"
+instruction rather than choosing between open alternatives.
+
+**Blockers**: none for 16.3 itself. Per the spec's own explicit
+instruction, **no false-positive/false-negative rate is claimed** - the
+0.5% tolerance is a conservative, unvalidated default, and whether real
+upstream fact-labeling would be reliable enough to avoid nuisance flags
+remains genuinely unmeasured, since nothing yet produces `NumericFact`s
+from real documents. Like Tasks 16.1 and 16.2, this is substrate with no
+real caller yet.
+
+**Next task**: a second reconciler rule (most plausibly
+`unit_currency_mismatch`), 16.4 (semantic review benchmark), or wiring a
+real producer/consumer around any of the three new M16 modules built so
+far. Not started; awaiting founder direction.
+
+**Permissions needed**: founder direction on which M16 sub-task to build
+next.
+
+## 2026-09-18 — Task 16.4 executed (semantic review benchmark, one leg only, real paid calls)
+
+**Authorization**: founder said "next" after Task 16.3's completion
+summary. Before writing any code, this task's own scoping problem was
+surfaced directly: the M16.4 spec requires benchmarking three legs
+(current strong-model review, retrieval-gated review, an NLI-plus-model
+pipeline), but building the second and third for real means building
+exactly the infrastructure the roadmap explicitly defers pending
+measured evidence (embeddings/vector retrieval, a dedicated NLI model) -
+a circular dependency - and a genuine benchmark needs real paid Anthropic
+calls, not a mock. Asked via `AskUserQuestion`; founder chose "Authorize
+a small bounded paid run now," described as scoping to "just the
+'current strong-model review' baseline leg, skipping retrieval-gated/NLI
+variants." This task's own completion is bounded accordingly - **only
+one of 16.4's three required legs was run.**
+
+**App commit at start**: `58ea362`, unchanged - Tasks 16.1-16.3's own
+files were implemented and tested but not committed at the start of this
+task.
+
+**What changed** (full detail, every case's exact result, and the
+methodology: `tasks/16.4-semantic-review-benchmark.md`, status `complete
+(bounded scope)`): new standalone script `semantic_review_benchmark.py`
+(not a persisted module, not registered in `server.py` - a one-off
+experiment tool, mirroring `migrate_sqlite_to_postgres.py`'s own
+"real script at repo root" precedent). Three `BenchmarkCase` fixtures
+were hand-authored to mirror three of Task 16.1's own seeded golden
+cases (`numerical_conflict`, `logical_contradiction`,
+`modality_escalation` - chosen for a deliberate spread), each a short,
+explicitly `[SYNTHETIC TEST MATERIAL]`-labeled submission-vs-source pair.
+Real PDFs were generated via `cupsfilter` (Task 14.2/14.3's own live-
+proof method, reused verbatim), uploaded as a real PDF work-product
+submission and a real PDF source document on a brand-new scratch project
+("Task 16.4 Semantic Review Benchmark (SYNTHETIC)"), then passed directly
+into `integrity_review.run_integrity_review` (the pure M14.2 capability,
+bypassing the mandate/plan/run orchestration layer already proven
+separately in Tasks 12.1-12.4/14.2). A `--dry-run`/`--confirm` split (like
+`migrate_finding_ids.py`'s own convention) let the full wiring be built
+and verified against the real database at zero cost before any real
+spend; the dry run succeeded first, creating real records with no
+network call, confirming the harness before the paid run.
+
+**The real, paid run** (3 calls, `claude-opus-5` - the deployment-wide
+model override, same already-disclosed behavior as Tasks 12.4/14.2's own
+live calls; 36,757 input / 13,147 output tokens, ~174 seconds total):
+**3/3 substantive recall** - every benchmarked case's core defect was
+correctly identified, with no fabricated fact or citation on inspection.
+Case 1 (numerical_conflict) was an exact match on both substance and
+classification label. Cases 2 and 3 (logical_contradiction,
+modality_escalation) were exact matches on substance but **surfaced a
+real, unplanned finding**: `integrity_review.CLASSIFICATIONS` (the M14.2
+review's own ten-item vocabulary, built before Task 16.1's
+`golden_set.DefectType` existed) has no literal entry for either defect
+type - the model correctly chose the closest available label instead of
+inventing one, but this confirms the two taxonomies were never
+reconciled with each other. Full per-case detail, exact candidate text,
+severities, and token counts are in the task file, not repeated here.
+
+Deliberately excluded (task file's own Exclusions): retrieval-gated and
+NLI-plus-model legs, both fully unbenchmarked; only 3 of 10 golden-set
+defect types covered; no automated scoring (scored by hand against the
+pre-registered expectations, same methodology as Task 14.2's own live
+proof); no `IntegrityReview`/candidate rows persisted (calling
+`run_integrity_review` directly, not through `mandates.py`'s executor,
+means this task's real API responses live only in its own printed
+output/task-file transcript, not in the app's own audit trail - a
+disclosed, deliberate tradeoff, not an oversight).
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest tests.test_semantic_review_benchmark -v
+```
+→ 5 tests, all `ok` (skipped automatically without `cupsfilter`) - zero
+real network calls from any test, per this codebase's standing
+convention; one bug found and fixed during this task's own test-writing
+(cupsfilter's byte-identical output for identical input text tripped
+`documents.py`'s duplicate-content detection when two test methods
+shared one project - fixed by giving each test method its own fresh
+scratch project).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 851 tests ... OK` (846 prior + 5 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 98 source files` (96 prior +
+`semantic_review_benchmark.py` + `tests/test_semantic_review_benchmark.py`).
+
+**Files changed**: new `semantic_review_benchmark.py`, new
+`tests/test_semantic_review_benchmark.py`. No existing module touched,
+no `server.py` change (a script, not a runtime capability - nothing to
+register). Real data created: one new scratch project with 3 real tasks,
+3 real PDF work-product submissions, and 3 real PDF source documents on
+the real local Postgres database (left in place as an inspectable audit
+trail, matching every prior live-proof task's own convention). Universal
+Logic and every other pre-existing project were never touched. The raw
+JSON results file the script wrote was deleted after its full contents
+were transcribed into the task file - not committed, not left as loose
+repo-root output.
+
+**Decisions**: none added to `docs/10-decisions.md` - this task's own
+scope boundary (one leg only) was recorded as an explicit founder
+authorization above, not a technical decision. The taxonomy-gap finding
+is flagged as a candidate follow-on in the task file, not acted on here.
+
+**Blockers**: none for the bounded scope actually executed. The full
+16.4 spec (three benchmarked legs) remains incomplete by design - the
+other two legs need their own scope decision (how to benchmark
+"retrieval-gated" and "NLI-plus-model" approaches without building the
+specialized infrastructure the roadmap defers pending exactly this kind
+of evidence) before they can be authorized.
+
+**Next task**: the other two 16.4 legs; reconciling the
+`CLASSIFICATIONS`/`DefectType` taxonomy gap; a second reconciler rule; or
+wiring 16.2/16.3's modules into a real workflow. Not started; awaiting
+founder direction. This task's own three-call paid-call budget is spent;
+any further paid work needs fresh authorization.
+
+**Permissions needed**: founder direction on which M16 sub-task to build
+next, and separately, authorization for any further paid Anthropic
+calls.
+
+## 2026-09-18 — Task 16.5 executed (incremental evaluation, detection only)
+
+**Authorization**: founder said "next" after Task 16.4's completion
+summary. Same M16 override recorded in the entries above applies here.
+Unlike 16.4, this task needed no separate scope-authorization round - no
+paid calls, no infrastructure the roadmap defers pending evidence, just
+wiring two already-proven mechanisms (Task 15.1's staleness engine, Task
+16.2's assertion ledger) together.
+
+**App commit at start**: `58ea362`, unchanged - Tasks 16.1-16.4's own
+files were implemented and tested but not committed at the start of this
+task.
+
+**What changed** (full detail: `tasks/16.5-incremental-evaluation.md`,
+status `complete (detection only)`): extended `assertion_ledger.py`, no
+new module, no new table. Before writing code, confirmed
+`version_dependencies.py` has no registry/allowlist of valid
+`dependent_type` strings - any module can register a new kind of
+dependent without touching that module at all (four already existed:
+`"workspace"`, `"mandate_run"`, `"deliverable_version"`, plus
+`"document"`/`"work_product"` as source types) - and confirmed
+`reassessments.py` (Task 15.2) is tightly coupled to workspace-finding
+reassessment specifically, so it was deliberately left untouched rather
+than stretched to fit a different domain. `promote_candidate` now also
+calls `version_dependencies.record_dependencies("assertion_ledger_entry",
+entry.entry_key, [...])`, one leaf edge per source document/version pair,
+reusing `mandates.py`'s own established edge-list pattern verbatim.
+Keyed on the entry's stable `entry_key` (not the per-version row `id`),
+so staleness tracking survives a later `dispute_entry`/`confirm_entry`
+version bump. New `get_staleness`/`is_stale` are thin, honest pass-
+throughs to the same already-proven `version_dependencies.get_staleness`
+Task 15.1 built - no new staleness computation exists anywhere. New
+`is_extraction_current`/`is_reusable` add the spec's other required
+cache-validity axis (prompt/model identity, which
+`version_dependencies.py` has no concept of) as a pure comparison
+against caller-supplied "what's current now" values, keeping
+`assertion_ledger.py` free of any new coupling to `integrity_review.py`'s
+executor. New `list_stale_entries` is the spec's own "reevaluate only
+changed assertions" query surface.
+
+**Deliberately excluded** (task file's own Exclusions): no automatic
+reevaluation of any kind - detecting staleness/non-reusability and
+acting on it stay separate, per the spec's own "full reassessment
+remains an explicit mandate"; no reassessment flow built for the ledger
+(that would be new, separate, real-paid-call work); `reconciler.py`'s
+findings are not wired into dependency tracking (nothing produces
+versioned `NumericFact`s yet, so there's no real staleness scenario to
+wire up - flagged as a natural future extension); no caching layer (only
+the *condition* for valid reuse is computed, nothing is memoized).
+
+**One real bug found and fixed while writing tests**: the pre-existing
+assertion-ledger test fixture hardcoded `"doc-1"`/`"doc-2"` for every
+created review. Since staleness is source-scoped (not entry-scoped), a
+`mark_superseded("document", "doc-1", ...)` call in one new test would
+have retroactively flagged entries from *other* tests that happened to
+share the same hardcoded document id - a real cross-test contamination
+risk in a test class using one shared schema. Fixed by adding optional
+`source_document_ids`/`source_version_ids` parameters to the shared
+`_make_review_and_candidate` helper (defaulting to the original
+literals, so the three pre-existing tests asserting on those exact
+values are unaffected) and giving every new staleness test its own
+unique document id.
+
+**Test/type evidence**:
+```
+./venv/bin/python -m unittest tests.test_assertion_ledger -v
+```
+→ 17 tests, all `ok` (13 prior + 4 new: not-stale-until-changed,
+staleness-persists-across-version-bump, is_extraction_current/is_reusable
+across four independent scenarios, list_stale_entries project scoping).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 855 tests ... OK` (851 prior + 4 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 98 source files` (unchanged count - this
+task extended two existing files, created no new module or test file).
+
+**Files changed**: `assertion_ledger.py` (new import, dependency-edge
+recording in `promote_candidate`, five new functions),
+`tests/test_assertion_ledger.py` (new import, one new `init_*_db()` call
+in `setUpClass`, two new optional fixture parameters, 4 new tests).
+Nothing else - `version_dependencies.py` itself completely untouched
+(consumed via its existing generic interface, not modified), neither
+`golden_set.py` nor `reconciler.py` touched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section (16.5) by pure reuse of two already-
+decided mechanisms, not a new architectural choice.
+
+**Blockers**: none for the scope actually executed. Per the spec's own
+explicit "full reassessment remains an explicit mandate," this task
+stops at detection - there is still no way to act on a stale or
+non-reusable entry other than a human reading `list_stale_entries` and
+deciding by hand, which is the deliberate boundary, not an oversight.
+
+**Next task**: a real reassessment flow for stale ledger entries (16.5's
+own detection-to-action gap); an analogous wire-up for `reconciler.py`
+once it has a real caller; the other two 16.4 legs; reconciling the
+`CLASSIFICATIONS`/`DefectType` taxonomy gap; a second reconciler rule; or
+16.6. Not started; awaiting founder direction.
+
+**Permissions needed**: founder direction on which M16 sub-task to build
+next.
+
+## 2026-09-18 — Task 16.6 executed (inline assistance decision - all six M16 sub-tasks now touched)
+
+**Authorization**: founder said "next" after Task 16.5's completion
+summary, which named 16.6 as the last remaining M16 roadmap item. Same
+M16 override recorded in the entries above applies here. No paid-call
+authorization was needed (no LLM call in scope).
+
+**App commit at start**: `58ea362`, unchanged - Tasks 16.1-16.5's own
+files were implemented and tested but not committed at the start of this
+task.
+
+**What changed** (full detail: `tasks/16.6-inline-assistance-decision.md`,
+status `complete`): confirmed by inspection that
+`IntegrityReviewCandidate.pdf_citations`/`excel_citations` (Task 14.2,
+already carrying verbatim cited text, page numbers, and document id) had
+never been surfaced anywhere in the frontend - grepped both `api.ts` and
+`MandateDetail.tsx` for "citation" and found zero references, despite the
+backend already returning this data in every API response. Added the
+missing TS types (`PdfCitation`/`ExcelCitation`, plus
+`pdf_citations`/`excel_citations` on `IntegrityCandidate` and the
+previously-untyped `source_version_ids`/`peer_version_ids` on
+`IntegrityReview`) and a new pure function `buildPdfCitationHref` that
+resolves a citation's `document_id` against the review's own
+target/peer/source id lists and returns a **version-pinned** download URL
+(the exact version actually reviewed, not "whatever is current") with a
+`#page=N` fragment. `MandateDetail.tsx` now renders a "Cited passages"
+section per candidate - clickable chips for PDF citations, plain
+informative text for Excel citations (no page-jump convention exists for
+spreadsheets - disclosed, not faked).
+
+**One real backend bug found and fixed during this task**: the
+work-product version download route (`server.py`) never read or
+forwarded the `inline` query parameter at all, unlike its two document-
+route siblings - meaning a citation link into the *submission itself*
+(arguably the single most important case, per the spec's own "attach
+challenges to immutable submission spans") would have forced a file
+download instead of opening in-browser at the right page. Fixed with the
+identical one-line pattern the document routes already used; added a
+real regression test (`tests/test_task_and_workproduct_endpoints.py`)
+asserting `Content-Disposition: inline` now appears with `?inline=1`.
+
+**Live browser verification** (per this repo's own standing instruction:
+UI changes must be checked in a real browser): built a throwaway,
+zero-cost seeding script (mirroring `tests/test_integrity_review_
+endpoints.py`'s own `patch("mandates.integrity_review.run_integrity_
+review", ...)` technique exactly, run against the real local Postgres
+database on its own temporary HTTP server) that created a real scratch
+project, a real mandate, and a real Integrity Review candidate with
+citations on the submission, a source document, and a peer submission.
+Opened the real mandate page in a real Vite dev server, confirmed via
+`read_page` that all three citation chips render with exactly the
+correct, version-pinned hrefs, and via direct `fetch()` from the browser
+console confirmed the actual HTTP response headers - which is exactly
+how the work-product `inline` bug above was caught live, before the fix.
+**The already-running real `server.py` process had to be stopped and
+restarted** for the code fix to take effect (Python doesn't hot-reload) -
+a routine, reversible operation this effort has performed before (Task
+11.2), done here with zero data loss. Re-verified via the same `fetch()`
+calls after the restart: all three URLs now correctly return
+`Content-Disposition: inline`.
+
+**Deliberately not built**: a CRDT/live collaborative editor - the
+spec's own second half, explicitly conditional on "user evidence [that]
+submission-time review is too late." No such evidence exists anywhere in
+this effort's history, so per the spec's own structure, not building it
+is the compliant outcome here, not a scope cut requiring further
+authorization.
+
+**Test/type evidence**:
+```
+cd frontend && npx tsc -b
+```
+→ clean.
+```
+cd frontend && npm run lint
+```
+→ only pre-existing warnings in untouched files; zero new warnings.
+```
+./venv/bin/python -m unittest tests.test_task_and_workproduct_endpoints -v
+```
+→ 33 tests, all `ok`.
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 855 tests ... OK` (unchanged count - extended an existing test
+method, added no new test file).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ `Success: no issues found in 98 source files` (unchanged - `server.py`
+was modified, not added).
+
+**Files changed**: `frontend/src/lib/api.ts`, `frontend/src/routes/
+MandateDetail.tsx`, `server.py` (one-line `inline` fix), `tests/
+test_task_and_workproduct_endpoints.py` (extended one existing test).
+Nothing else - `integrity_review.py`/`integrity_reviews.py` completely
+untouched. Real data created (left in place, matching every prior
+live-verification task's convention): one scratch project, task, three
+work products, one document, one mandate/plan/run/attempt, one real
+IntegrityReview + candidate with real citations, on the real local
+Postgres database - Universal Logic untouched.
+
+**Decisions**: none added to `docs/10-decisions.md` - implements an
+already-specified spec section (16.6), and the CRDT non-decision follows
+directly from the spec's own stated condition not being met, not a new
+architectural choice requiring sign-off.
+
+**Blockers**: none. **This closes out all six of M16's roadmap
+sub-tasks** - every one of 16.1 through 16.6 has now been attempted, each
+at its own disclosed bounded/detection-only/first-step scope. This is
+explicitly NOT the same as M16 itself being "done": gate 4 (recurring
+reusable assertions) remains completely unaddressed by any of them, and
+gate 5 (measured failure modes) rests on Task 16.4's single n=3 data
+point. No task file in 16.1-16.6 claims otherwise.
+
+**Next task**: none within M16's own numbered list remains untouched.
+Candidates: a real reassessment flow for stale ledger entries (16.5's own
+gap), an analogous dependency wire-up for `reconciler.py`, the other two
+16.4 legs, the `CLASSIFICATIONS`/`DefectType` taxonomy gap, a second
+reconciler rule, deeper work on any of 16.1-16.6's own disclosed
+limitations, or a different priority entirely. Not started; awaiting
+founder direction.
+
+**Permissions needed**: founder direction on what to work on next.
+
+## 2026-09-18 — Workspace frontend unified (out of task-number sequence, founder-directed)
+
+**Authorization**: founder directed this in-session, outside the M16 task
+sequence, after being shown (1) an old design-comparison artifact ("the
+Mandate Workspace Prototype," a 6-tab Overview/Deals/Mandates/Documents/
+Findings/Activity mockup built during the 2026-09-16 Meridian retheme
+work) and (2) the real app's own actual two-stack split - a React app
+(Overview, Deals, Mandates only) that hard-links out to the older static
+pages for Documents and Findings, rather than a single consistent
+frontend. The founder's own words: "no separate frontends working in
+parallel... do me the same as the artifact since we were building from
+the beginning based on that design and logic." One earlier misstep in
+this same conversation is recorded here rather than omitted: a copy of
+the prototype's HTML was briefly saved into the real `static/` directory
+to let the founder "use" it locally - correctly called out as
+inappropriate ("dont mess up my project") and removed immediately, before
+any real work began. This entry covers only the real, kept changes below.
+
+**App commit at start**: `58ea362`, unchanged - Tasks 16.1-16.6's own
+files were implemented and tested but not committed at the start of this
+work.
+
+**What changed**: per D13 ("adopt the React/shadcn scaffold for new
+screens going forward... two stacks coexist deliberately"), the direction
+already established for this app is React for new work - so this task
+completed that direction for the deal-scoped navigation the prototype
+covers, rather than picking a different stack. New `DealShell.tsx`
+component: a persistent, in-app tab strip (Overview / Documents /
+Findings / Mandates / Activity) wrapping every `/projects/:projectId/*`
+route (`App.tsx` now nests all five under it), replacing `AppSidebar.tsx`'s
+former hard links to `project.html`/out to a different codebase for
+Documents and Mandates. Two of the five tabs (Overview, Mandates) already
+existed as real React routes; three did not and were built for real, wired
+to the same backend endpoints the static pages have always used - no
+mockup content, no invented data:
+- **Documents** (`Documents.tsx`): the real per-project document register
+  (`GET .../documents`, already existing), with filename search plus
+  folder/type filters derived from the real data. Upload is deliberately
+  not built here yet - `project.html`'s own upload form stays the place
+  to add documents for now; this is a read/browse screen first.
+- **Findings** (`Findings.tsx`): required one small, real backend
+  addition - `workspaces.list_workspaces` existed and was already used
+  internally (`_deal_overview`'s own staleness check) but had no exposed
+  route. Added `GET /api/projects/<id>/workspaces` (new `_WORKSPACES_
+  COLLECTION_RE`), reusing that existing function verbatim - a plain,
+  authorized, project-scoped list, no new domain logic. `Findings.tsx`
+  lists a project's workspaces (a project can have several - one per
+  completed reconciliation, or per Integrity Review), defaults to the
+  most recent, and renders its real findings (severity badges, review
+  status, search/severity filter) via the existing `GET .../workspaces/
+  <id>` bundle endpoint. Disclosed, inherited backend boundary, not
+  papered over: that bundle endpoint only serves cross-format-analysis-
+  backed workspaces (`server.py`'s own `_get_workspace_analysis`,
+  unchanged) - an Integrity-Review-backed workspace shows a plain
+  explanatory message instead of a broken fetch.
+- **Activity** (`Activity.tsx`): its own tab, not just a card at the
+  bottom of Overview - reuses the exact same `GET .../overview` payload
+  Overview fetches (no separate activity endpoint exists yet) and only
+  renders its `activity` slice. `formatDateTime`/`activitySummary` were
+  extracted out of `DealOverview.tsx` into a new `lib/activity.ts` so
+  both routes share one implementation without either file mixing
+  component and plain-function exports (avoids a real oxlint warning
+  category, not just cosmetic).
+`DealOverview.tsx` itself was trimmed: the "Recent activity" card (moved
+to its own tab) and the header's redundant in-page links ("Mandates →",
+"Full project page...") were removed, since the tab strip now owns that
+navigation.
+
+**Test/type evidence**:
+```
+cd frontend && npx tsc -b
+```
+→ clean.
+```
+cd frontend && npm run lint
+```
+→ only pre-existing warnings in files this work did not touch; zero new
+warnings introduced (the `lib/activity.ts` extraction specifically
+avoided adding two new instances of the pre-existing "only-export-
+components" warning category).
+```
+./venv/bin/python -m unittest tests.test_workspace_endpoints -v
+```
+→ 30 tests, all `ok` (27 prior + 3 new: `list_workspaces` returns real
+workspaces for a project, is correctly project-scoped, and 404s for an
+unknown project).
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 858 tests ... OK` (855 prior + 3 new).
+```
+./venv/bin/python -m mypy $(ls *.py) tests
+```
+→ clean (no new files - one route added to the existing `server.py`,
+one test method added to an existing test file).
+
+**Live browser verification** (real backend restart required for the new
+route to take effect - Python doesn't hot-reload, the same routine step
+this effort has done before): navigated the real, running app to the real
+Universal Logic deal (`e32167f6062f45d999259a360c1f04f9`), read-only the
+entire way - confirmed all five tabs render real data under one
+consistent shell: Overview (real brief/tasks/mandates summary), Documents
+(63 real files, real folders/sizes, matching the static page's own
+count exactly), Findings (24 real findings, real severity counts,
+workspace picker defaulting to the most recent 17 Sept reconciliation),
+Mandates (the real mandate list, unchanged), and Activity (the real audit
+trail, now its own destination). Zero console errors.
+
+**Files changed**: new `frontend/src/components/DealShell.tsx`, new
+`frontend/src/routes/Documents.tsx`, new `frontend/src/routes/Findings.tsx`,
+new `frontend/src/routes/Activity.tsx`, new `frontend/src/lib/activity.ts`;
+modified `frontend/src/App.tsx`, `frontend/src/components/AppSidebar.tsx`,
+`frontend/src/routes/DealOverview.tsx`, `frontend/src/lib/api.ts`
+(new `Workspace`/`Finding`/`FindingsSummary`/`WorkspaceBundle` types,
+`listWorkspaces`/`getWorkspaceBundle`); `server.py` (one new route, reusing
+an existing function); `tests/test_workspace_endpoints.py` (3 new tests).
+Nothing else - `workspaces.py` itself untouched (its function was already
+correct; it just had no route).
+
+**Decisions**: none newly proposed to `docs/10-decisions.md` - this
+executes D13's own already-decided direction (React for new work) rather
+than opening a new one. The "Validation" tab remains a disclosed,
+deliberate exception (an external link to `validation.html`, not one of
+the prototype's 6 tabs) - migrating it is a separate, larger task, not
+attempted here.
+
+**Blockers**: none. **Disclosed, not glossed over**: Documents has no
+upload UI yet (read/browse only); Findings does not yet support
+Integrity-Review-backed workspaces (a real, pre-existing backend
+boundary, not newly introduced); the prototype's exact single-page tab-
+switching interaction (client-state only, no URL change) was
+deliberately not replicated - real routes (`/projects/:id/documents`,
+etc.) were used instead, which is more correct for a real app (deep-
+linkable, browser back/forward work correctly) even though it departs
+slightly from the mockup's own mechanism.
+
+**Next task**: build Documents' upload UI in React (closing the last
+static-page dependency for that tab); extend the Findings bundle endpoint
+to support Integrity-Review-backed workspaces; or migrate Validation to
+React, closing the prototype's 6th tab. Not started; awaiting founder
+direction.
+
+**Permissions needed**: founder direction on what to work on next.
+
+## 2026-09-18 — React app now served from the real backend (single origin)
+
+**Authorization**: founder-directed in session, immediately after the
+previous entry's own live demo made the two-port split confusing in
+practice: "can u just move whats in 5173 to 8765 and we can start
+polishing afterwards?" Before doing this, one real gap from the earlier
+unification work was found and disclosed: removing `AppSidebar.tsx`'s
+old hard link to `project.html` had left upload/task-creation/brief-
+editing completely unreachable from within the React app - fixed as part
+of this same change, not left for later.
+
+**What changed**: the React app is now genuinely served by the same
+process and origin as the real API and the remaining static pages - not
+a second app, not a proxy trick, an actual `npm run build` output copied
+into `static/` and served by `server.py`'s own existing static-file
+mechanics. `static/index.html` (previously the old plain project list)
+was overwritten with the React build's own `index.html`; the original
+content was preserved, not deleted, at the new `/index-legacy.html`
+route. `server.py` gained one new routing rule: `"/"`, `"/projects"`, and
+any `"/projects/..."` path all serve that same `index.html` - the
+standard single-page-app fallback, needed so a hard refresh or a typed
+URL on a deep route (`/projects/<id>/documents`, etc.) loads correctly
+instead of 404ing before React ever runs. The built JS/CSS bundle
+(`static/assets/...`) and `favicon.svg`/`icons.svg` needed no new
+server code at all - they're served by the exact same generic static-
+file fallback every other asset in `static/` already used.
+
+New `scripts/build-frontend-into-static.sh`: runs `npm run build` and
+copies `dist/index.html`, `dist/assets/`, `dist/favicon.svg`,
+`dist/icons.svg` into `static/`. This has to be re-run (and the server
+restarted, for any `server.py` changes) after every future frontend
+source change that should show up at `:8765` - there is no watch/hot-
+reload into this path. `npm run dev` (port 5173) remains the right tool
+for active frontend development; this script is for "make the real app
+reflect the latest code," not for iterating on it.
+
+**Real gap found and fixed in the same pass**: `DealOverview.tsx` gained
+back a link to `project.html` ("Upload documents, manage tasks, edit
+brief (legacy page) →") - upload, task creation, and brief editing still
+only exist there, and the earlier unification work had removed the only
+way to reach it from inside the React app. Disclosed rather than left as
+a silent regression.
+
+**Test/type evidence**:
+```
+cd frontend && npx tsc -b
+```
+→ clean.
+```
+./venv/bin/python -m unittest discover -s tests
+```
+→ `Ran 858 tests ... OK` (unchanged - this is a build/serving change, no
+new backend logic beyond the one routing rule, which has no dedicated
+test yet - see Blockers).
+
+**Live browser verification**: restarted the real server, then navigated
+directly to `http://localhost:8765/` (no 5173 involved at all) and
+confirmed: the real React project list renders; a **cold, direct URL
+load** (not a client-side navigation) of `http://localhost:8765/projects/
+e32167f6062f45d999259a360c1f04f9/documents` against the real Universal
+Logic deal renders the Documents tab correctly - proving the SPA fallback
+actually works on a hard load, not just when navigating client-side from
+an already-loaded page; the new "legacy page" link opens the real,
+unchanged `project.html`; `validation.html` still works unchanged;
+`/index-legacy.html` correctly serves the preserved old project list.
+Zero console errors throughout. The now-unused port-5173 dev server was
+stopped (restartable anytime via `npm run dev` for active development).
+
+**Files changed**: `server.py` (one new routing block), new `scripts/
+build-frontend-into-static.sh`, `static/index.html` (overwritten with the
+real build output), new `static/index-legacy.html` (preserved original),
+new `static/assets/` (built JS/CSS bundle), new `static/favicon.svg`,
+new `static/icons.svg`, `frontend/src/routes/DealOverview.tsx` (the
+restored legacy-page link). No backend business logic changed.
+
+**Decisions**: none added to `docs/10-decisions.md` - this is a serving/
+deployment mechanism change (moving where already-built frontend code is
+served from), not a new architectural direction; D13's own "React for
+new work" stands unchanged.
+
+**Blockers**: none for what was built. **Disclosed, not glossed over**:
+- The new SPA-fallback routing rule in `server.py` has no dedicated
+  automated test yet (verified live/manually only, per above) - a real
+  gap if this rule is ever changed carelessly.
+- React's `Home.tsx` (now living at `/`) does not have the old
+  `index.html`'s "Test AI connection" button - a small, disclosed
+  feature gap, not silently dropped (the old page with that button is
+  still reachable at `/index-legacy.html`).
+- This is a manual build-and-copy step, not a real build pipeline
+  (no cache-busting verification beyond Vite's own content-hashed
+  filenames, no CI, no automatic rebuild-on-change) - fine for this
+  stage, a real gap before any actual deployment.
+
+**Next task**: add a real test for the new SPA-fallback routing rule;
+restore (or intentionally drop) the AI-connection-test feature; continue
+closing the remaining static-page dependencies (Documents upload,
+Findings' Integrity-Review support, Validation) now that there is
+genuinely one place to experience the whole app. Not started; awaiting
+founder direction.
+
+**Permissions needed**: founder direction on what to work on next.

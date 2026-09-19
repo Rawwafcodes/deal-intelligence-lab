@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deal Intelligence Lab</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="app-brand" href="/">Deal Intelligence Lab</a>
+      <nav class="app-breadcrumb" aria-label="Breadcrumb"></nav>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <h1>Projects</h1>
+        <p class="page-subtitle">Your M&amp;A transaction projects, stored locally on this computer.</p>
+      </div>
+      <button type="button" id="new-project-button">+ New project</button>
+    </div>
+
+    <section class="card">
+      <ul class="project-list" id="project-list"></ul>
+      <div class="empty-state" id="empty-state" hidden>
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4.379a1.5 1.5 0 0 1 1.06.44l1.122 1.12a1.5 1.5 0 0 0 1.06.44H19a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 17.5v-10Z" />
+        </svg>
+        <p>No projects yet.</p>
+        <button type="button" id="empty-state-new-project">+ New project</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>AI connection</h2>
+      <p class="section-hint">Checks that this app can reach the Claude API with the configured key and model. No deal documents are sent.</p>
+      <button type="button" id="test-connection-button">Test AI connection</button>
+      <div id="connection-result"></div>
+    </section>
+  </div>
+
+  <dialog id="new-project-dialog" class="modal">
+    <form id="create-form">
+      <h2>New project</h2>
+      <div class="field">
+        <label for="name">Project name</label>
+        <input type="text" id="name" name="name" maxlength="200" required />
+      </div>
+      <div class="field">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" maxlength="5000"></textarea>
+      </div>
+      <div class="error" id="form-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="button-secondary" id="cancel-create">Cancel</button>
+        <button type="submit">Create project</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

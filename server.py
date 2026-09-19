@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 import ai_client
 import answer_keys
+import assertion_ledger
 import cross_analyses
 import cross_document_analysis
 import cross_format_analyses
@@ -29,6 +30,7 @@ import deal_briefs
 import deliverables
 import documents
 import evaluations
+import golden_set
 import identity
 import inspections
 import integrity_review
@@ -39,6 +41,7 @@ import overview
 import pdf_inspection
 import readiness_assessments
 import reassessments
+import reconciler
 import reviews
 import store
 import tasks
@@ -117,6 +120,7 @@ _VALIDATION_EVALUATION_RE = re.compile(
 _VALIDATION_REPORT_RE = re.compile(r"^/api/projects/([^/]+)/validation-cases/([^/]+)/runs/([^/]+)/report$")
 
 _WORKSPACE_OPEN_RE = re.compile(r"^/api/projects/([^/]+)/cross-format-analyses/([^/]+)/workspace$")
+_WORKSPACES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces$")
 _WORKSPACE_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)$")
 _WORKSPACE_FINDINGS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/findings$")
 _WORKSPACE_FINDING_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/workspaces/([^/]+)/findings/([^/]+)$")
@@ -741,8 +745,24 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_list_dev_identities()
             return
 
-        if path == "/":
+        # Unifying the workspace frontend, continued: "/" now serves the
+        # built React app (static/index.html was overwritten with the
+        # real `npm run build` output - the old static project list lives
+        # on unchanged at /index-legacy.html, see below), and every
+        # /projects/... path gets the same index.html so React Router's
+        # own client-side matching can take it from there - the standard
+        # SPA-fallback pattern, needed so a hard refresh or a typed URL on
+        # a deep route like /projects/<id>/documents doesn't 404 before
+        # React ever loads. The built JS/CSS bundle itself
+        # (static/assets/...) and /favicon.svg /icons.svg are served by
+        # the existing generic static-file fallback lower down - nothing
+        # new needed for those.
+        if path == "/" or path == "/projects" or path.startswith("/projects/"):
             self._send_static_file("index.html")
+            return
+
+        if path == "/index-legacy.html":
+            self._send_static_file("index-legacy.html")
             return
 
         if path == "/project.html":
@@ -956,6 +976,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, [r.to_dict() for r in requests])
             return
 
+        workspaces_collection_match = _WORKSPACES_COLLECTION_RE.match(path)
+        if workspaces_collection_match:
+            (project_id,) = workspaces_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            self._send_json(200, [w.to_dict() for w in workspaces.list_workspaces(project_id)])
+            return
+
         workspace_item_match = _WORKSPACE_ITEM_RE.match(path)
         if workspace_item_match:
             project_id, workspace_id = workspace_item_match.groups()
@@ -1110,8 +1138,11 @@ class Handler(BaseHTTPRequestHandler):
             if submission_version is None:
                 self._send_json(404, {"error": "work product version not found"})
                 return
+            inline = parse_qs(parsed.query).get("inline", ["0"])[0] == "1"
             version_path = work_products.version_file_path(work_product, submission_version)
-            self._send_stored_file(version_path, work_product.original_filename, work_product.extension)
+            self._send_stored_file(
+                version_path, work_product.original_filename, work_product.extension, inline=inline
+            )
             return
 
         work_product_versions_match = _WORK_PRODUCT_VERSIONS_RE.match(path)
@@ -3483,6 +3514,9 @@ def main() -> None:
     reassessments.init_reassessments_db()
     triggers.init_triggers_db()
     mandates.init_mandates_db()
+    golden_set.init_golden_set_db()
+    assertion_ledger.init_assertion_ledger_db()
+    reconciler.init_reconciler_db()
     # Task 12.2: the durable local worker - a real background thread,
     # independent of any HTTP request, that executes queued/resumed
     # mandate runs (see mandates.py's own module docstring and Worker

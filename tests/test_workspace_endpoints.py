@@ -216,6 +216,26 @@ class WorkspaceEndpointTests(unittest.TestCase):
         self.assertEqual(status2, 200)
         self.assertEqual(json.loads(body2)["id"], workspace["id"])
 
+    def test_list_workspaces_for_project(self):
+        # Task: unify workspace navigation - a Findings screen in the
+        # frontend needs to discover which workspace(s) exist for a
+        # project before it can list any findings; there was previously
+        # no route for this at all (only get-one-by-id).
+        _, workspace = self._open_workspace()
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertIn(workspace["id"], [w["id"] for w in payload])
+
+    def test_list_workspaces_scoped_to_project(self):
+        status, body, _ = self._get(f"/api/projects/{self.other_project.id}/workspaces")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), [])
+
+    def test_list_workspaces_on_unknown_project_is_not_found(self):
+        status, _, _ = self._get("/api/projects/not-a-real-project/workspaces")
+        self.assertEqual(status, 404)
+
     def test_cannot_open_workspace_from_failed_analysis(self):
         analysis = self._make_analysis(status="error")
         status, _ = self._post_json(f"/api/projects/{self.project.id}/cross-format-analyses/{analysis.id}/workspace")

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   approvePlan,
+  buildPdfCitationHref,
   cancelRun,
   decideIntegrityCandidate,
   getCurrentBriefVersion,
@@ -179,6 +180,51 @@ function IntegrityReviewPanel({ projectId, reviewId }: { projectId: string; revi
             <p className="text-muted-foreground"><span className="font-medium">Uncertainty:</span> {candidate.uncertainty}</p>
             <p className="text-muted-foreground"><span className="font-medium">Recommended resolution:</span> {candidate.recommended_resolution}</p>
           </div>
+
+          {(candidate.pdf_citations.length > 0 || candidate.excel_citations.length > 0) && (
+            <div className="mt-2 space-y-1 border-t border-border pt-2">
+              <p className="text-xs font-medium text-foreground">Cited passages</p>
+              <div className="flex flex-wrap gap-1.5">
+                {candidate.pdf_citations.map((citation, index) => {
+                  const href = buildPdfCitationHref(projectId, review, citation)
+                  const pageLabel =
+                    citation.end_page > citation.start_page
+                      ? `pp. ${citation.start_page}–${citation.end_page}`
+                      : `p. ${citation.start_page}`
+                  return href ? (
+                    <a
+                      key={`pdf-${index}`}
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={citation.cited_text}
+                      className="rounded-full border border-border px-2 py-0.5 text-xs text-foreground hover:bg-accent"
+                    >
+                      {citation.document_title ?? "Document"} · {pageLabel}
+                    </a>
+                  ) : (
+                    <span
+                      key={`pdf-${index}`}
+                      title={citation.cited_text}
+                      className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {citation.document_title ?? "Document"} · {pageLabel}
+                    </span>
+                  )
+                })}
+                {candidate.excel_citations.map((citation, index) => (
+                  <span
+                    key={`xlsx-${index}`}
+                    title={`${citation.kind}${citation.exists === false ? " (not found in the workbook)" : ""}`}
+                    className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {citation.document_filename ?? citation.workbook_label} · {citation.sheet}!{citation.ref}
+                    {citation.exists === false && " ⚠"}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {candidate.decision === "pending" ? (
             <div className="mt-3 space-y-2">

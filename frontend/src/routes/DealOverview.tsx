@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { Card } from "@/components/ui/card"
 import {
   BACKEND_ORIGIN, getDealOverview,
-  type ActivityEvent, type DealOverview as DealOverviewData, type RestrictedDealOverview,
+  type DealOverview as DealOverviewData, type RestrictedDealOverview,
 } from "@/lib/api"
 
 // Task 13.3: this is the "MD drill-down" landing page for a single deal -
@@ -36,12 +36,6 @@ function formatDate(isoString: string) {
   return new Date(isoString).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
 }
 
-function formatDateTime(isoString: string) {
-  return new Date(isoString).toLocaleString(undefined, {
-    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  })
-}
-
 function StatusPill({ label }: { label: string }) {
   return (
     <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{label}</span>
@@ -60,22 +54,6 @@ function CountRow({ counts, labels }: { counts: Record<string, number>; labels: 
       ))}
     </div>
   )
-}
-
-function activitySummary(event: ActivityEvent): string {
-  const actor = event.actor ? event.actor.display_name : "Someone"
-  switch (event.kind) {
-    case "comment":
-      return `${actor} commented on "${event.task_title}"`
-    case "submission":
-      return `${actor} submitted "${event.work_product_title}" (v${event.version_number}) for "${event.task_title}"`
-    case "review_decision":
-      return event.decision === "approved"
-        ? `${actor} approved "${event.work_product_title}" for "${event.task_title}"`
-        : `${actor} returned "${event.work_product_title}" for revision on "${event.task_title}"`
-    default:
-      return actor
-  }
 }
 
 function RestrictedDealOverviewView({ overview }: { overview: RestrictedDealOverview }) {
@@ -154,7 +132,7 @@ export function DealOverview() {
     return <RestrictedDealOverviewView overview={overview} />
   }
 
-  const { project, brief, workstreams, tasks, mandates, reconciliations, documents, activity } = overview
+  const { project, brief, workstreams, tasks, mandates, reconciliations, documents } = overview
   const severityEntries = SEVERITY_ORDER.filter((s) => reconciliations.findings.by_severity[s]).map((s) => [
     s, reconciliations.findings.by_severity[s],
   ] as const)
@@ -166,17 +144,12 @@ export function DealOverview() {
         <p className="mt-1 text-sm text-muted-foreground">
           {project.description || "No description"} · Created {formatDate(project.created_at)}
         </p>
-        <div className="mt-3 flex flex-wrap gap-4 text-sm">
-          <Link to={`/projects/${projectId}/mandates`} className="text-accent hover:underline">
-            Mandates →
-          </Link>
-          <a
-            href={`${BACKEND_ORIGIN}/project.html?id=${encodeURIComponent(projectId)}`}
-            className="text-accent hover:underline"
-          >
-            Full project page (documents, tasks, brief, workstreams) →
-          </a>
-        </div>
+        <a
+          href={`${BACKEND_ORIGIN}/project.html?id=${encodeURIComponent(projectId ?? "")}`}
+          className="mt-2 inline-block text-sm text-accent hover:underline"
+        >
+          Upload documents, manage tasks, edit brief (legacy page) →
+        </a>
       </div>
 
       <Card className="p-6">
@@ -265,23 +238,6 @@ export function DealOverview() {
           {workstreams.length} workstream{workstreams.length === 1 ? "" : "s"} · {documents.count} document
           {documents.count === 1 ? "" : "s"}
         </p>
-      </Card>
-
-      <Card className="p-6">
-        <h2 className="font-heading text-lg font-semibold text-foreground">Recent activity</h2>
-        {activity.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">No activity recorded yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {activity.map((event, index) => (
-              <li key={index} className="text-sm">
-                <span className="text-foreground">{activitySummary(event)}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{formatDateTime(event.at)}</span>
-                {event.summary && <p className="mt-0.5 text-xs text-muted-foreground">{event.summary}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
       </Card>
     </div>
   )

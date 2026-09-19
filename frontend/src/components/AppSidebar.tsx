@@ -1,20 +1,20 @@
-import { FileStack, FolderKanban, ShieldCheck } from "lucide-react"
+import { FolderKanban, ShieldCheck } from "lucide-react"
 import { Link, useLocation, useParams } from "react-router-dom"
 
 import { IdentityFooter } from "@/components/IdentityFooter"
 import { Sidebar, SidebarBody, SidebarLink, SidebarToggle } from "@/components/ui/sidebar"
 import { BACKEND_ORIGIN } from "@/lib/api"
 
-// The persistent navigation shell ("Direction A" from the frontend design
-// exploration). Project-scoped links only cover destinations that have a
-// real, stable per-project URL today: the static project hub
-// (documents/brief/workstreams/cross-format-analyses list) and Validation
-// both do; reconciliation/inspection/cross-analysis pages require picking
-// a specific analysis first (see static/project.js), so they stay reachable
-// only from the project hub itself, not invented as sidebar links that
-// would have nowhere real to point without an analysis id.
+// The persistent navigation shell for app-level destinations only.
+// Deal-scoped navigation (Overview/Documents/Findings/Mandates/Activity)
+// now lives entirely in DealShell's own in-app tab strip, matching the
+// design prototype this whole effort was built against - this sidebar no
+// longer hard-links out to the static project.html page for those
+// (formerly "Overview & documents"/"Mandates" here). Validation is a
+// disclosed, deliberate exception: it isn't one of the prototype's tabs,
+// and migrating it to React is a separate, larger task not attempted here.
 export function AppSidebar() {
-  const { projectId, mandateId } = useParams<{ projectId?: string; mandateId?: string }>()
+  const { projectId } = useParams<{ projectId?: string }>()
   const location = useLocation()
 
   return (
@@ -46,18 +46,6 @@ export function AppSidebar() {
               >
                 This deal
               </div>
-              <SidebarLink
-                to={`${BACKEND_ORIGIN}/project.html?id=${encodeURIComponent(projectId)}`}
-                external
-                icon={<FileStack className="h-4 w-4" />}
-                label="Overview & documents"
-              />
-              <SidebarLink
-                to={`/projects/${projectId}/mandates`}
-                icon={<FolderKanban className="h-4 w-4" />}
-                label="Mandates"
-                active={location.pathname.startsWith(`/projects/${projectId}/mandates`) || Boolean(mandateId)}
-              />
               <SidebarLink
                 to={`${BACKEND_ORIGIN}/validation.html?project=${encodeURIComponent(projectId)}`}
                 external

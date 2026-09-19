@@ -34,6 +34,88 @@ export async function listDocuments(projectId: string): Promise<ProjectDocument[
   return jsonOrThrow(res, "Could not load documents.")
 }
 
+// Unifying the workspace frontend: a Workspace is created once per
+// completed cross-format reconciliation run (or, separately, per M14.2
+// Integrity Review - see `integrity_review_id` below) - a project can
+// have several. `workspaces.py`'s own GET .../workspaces/<id> bundle
+// (findings + summary) is reconciliation-only today (server.py's
+// `_get_workspace_analysis` 400s for an integrity-review-backed
+// workspace) - `cross_format_analysis_id` tells the caller which kind
+// it is before fetching, rather than discovering it from a failed request.
+export interface Workspace {
+  id: string
+  project_id: string
+  cross_format_analysis_id: string | null
+  integrity_review_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function listWorkspaces(projectId: string): Promise<Workspace[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workspaces`)
+  return jsonOrThrow(res, "Could not load workspaces.")
+}
+
+// Matches workspaces.py's `_merged_finding` dict shape exactly (that
+// function has no fixed dataclass on the backend - findings are plain
+// dicts merging an immutable AI/integrity/human content snapshot with
+// mutable workflow-state fields).
+export interface Finding {
+  id: string
+  workspace_id: string
+  origin: "ai" | "integrity" | "human"
+  title: string
+  classification: string
+  severity: string
+  effective_severity: string | null
+  explanation: string
+  pdf_evidence: string
+  workbook_evidence: string
+  commercial_relevance: string
+  uncertainty: string
+  recommended_action: string
+  raw_text: string
+  pdf_citations: PdfCitation[]
+  excel_citations: ExcelCitation[]
+  evidence_notes: string
+  evidence_document_ids: string[]
+  review_status: string
+  adjusted_severity: string | null
+  resolution_status: string
+  assigned_owner: string
+  management_response: string
+  reviewer_notes: string
+  due_date_text: string
+  is_duplicate: boolean
+  duplicate_of: string | null
+  duplicate_marked_by: string | null
+  duplicate_marked_at: string | null
+  duplicate_finding_ids: string[]
+  created_at: string
+  updated_at: string
+  revision: number
+}
+
+export interface FindingsSummary {
+  total_findings: number
+  by_severity: Record<string, number>
+}
+
+export interface WorkspaceBundle {
+  workspace: Workspace
+  analysis: Record<string, unknown>
+  findings: Finding[]
+  summary: FindingsSummary
+  staleness: { reason: string } | null
+}
+
+export async function getWorkspaceBundle(projectId: string, workspaceId: string): Promise<WorkspaceBundle> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}`
+  )
+  return jsonOrThrow(res, "Could not load this workspace's findings.")
+}
+
 export interface IdentityUser {
   id: string
   email: string
@@ -388,6 +470,28 @@ export async function getCurrentBriefVersion(projectId: string): Promise<Current
 // an explicit human decision (see integrity_reviews.py's own module
 // docstring); this is the one and only path that publishes one.
 
+// Task 16.6: matches cross_format_analysis.py's PdfCitation.to_dict()/
+// ExcelCitation.to_dict() exactly - this data has always come back from
+// the API (IntegrityReviewCandidate.to_dict() includes it), but no
+// frontend type or rendering existed for it until this task.
+export interface PdfCitation {
+  cited_text: string
+  document_id: string | null
+  document_title: string | null
+  start_page: number
+  end_page: number
+}
+
+export interface ExcelCitation {
+  workbook_label: string
+  document_id: string | null
+  document_filename: string | null
+  sheet: string
+  ref: string
+  kind: "value" | "formula" | "label"
+  exists: boolean | null
+}
+
 export interface IntegrityCandidate {
   id: string
   integrity_review_id: string
@@ -402,6 +506,8 @@ export interface IntegrityCandidate {
   recommended_resolution: string
   deterministic_or_judgment: string
   raw_text: string
+  pdf_citations: PdfCitation[]
+  excel_citations: ExcelCitation[]
   decision: "pending" | "accepted" | "rejected" | "duplicate" | "unresolved"
   decision_notes: string
   decided_by: string | null
@@ -430,7 +536,12 @@ export interface IntegrityReview {
   target_work_product_id: string
   target_version_id: string
   source_document_ids: string[]
+  // Task 16.6: were already returned by the API (IntegrityReview.to_dict())
+  // but never typed here, since nothing previously needed to resolve a
+  // citation's document_id back to the exact version actually reviewed.
+  source_version_ids: string[]
   peer_work_product_ids: string[]
+  peer_version_ids: string[]
   brief_version_id: string | null
   workstream_id: string | null
   review_scope: string
@@ -448,6 +559,51 @@ export async function getIntegrityReview(projectId: string, reviewId: string): P
     `/api/projects/${encodeURIComponent(projectId)}/integrity-reviews/${encodeURIComponent(reviewId)}`
   )
   return jsonOrThrow(res, "Could not load the integrity review.")
+}
+
+// Task 16.6 (M16.6 "Inline assistance decision" - attach challenges to
+// immutable submission spans first, before considering a live editor):
+// resolves one candidate's PDF citation back to a real download URL,
+// pinned to the EXACT version actually reviewed (never "whatever is
+// current now" - the version that changed the underlying content is
+// exactly what Task 15.1's staleness mechanism already tracks
+// separately) with a `#page=N` fragment so a reviewer's own PDF viewer
+// opens directly on the cited page. Pure function, no fetch - easy to
+// unit-test and to reuse from anywhere a citation might be rendered.
+export function buildPdfCitationHref(
+  projectId: string, review: IntegrityReview, citation: PdfCitation
+): string | null {
+  if (!citation.document_id) return null
+  const page = citation.start_page
+  const encodedProject = encodeURIComponent(projectId)
+
+  if (citation.document_id === review.target_work_product_id) {
+    return (
+      `/api/projects/${encodedProject}/work-products/${encodeURIComponent(review.target_work_product_id)}` +
+      `/versions/${encodeURIComponent(review.target_version_id)}/download?inline=1#page=${page}`
+    )
+  }
+
+  const peerIndex = review.peer_work_product_ids.indexOf(citation.document_id)
+  if (peerIndex !== -1 && review.peer_version_ids[peerIndex]) {
+    return (
+      `/api/projects/${encodedProject}/work-products/${encodeURIComponent(citation.document_id)}` +
+      `/versions/${encodeURIComponent(review.peer_version_ids[peerIndex])}/download?inline=1#page=${page}`
+    )
+  }
+
+  const sourceIndex = review.source_document_ids.indexOf(citation.document_id)
+  if (sourceIndex !== -1 && review.source_version_ids[sourceIndex]) {
+    return (
+      `/api/projects/${encodedProject}/documents/${encodeURIComponent(citation.document_id)}` +
+      `/versions/${encodeURIComponent(review.source_version_ids[sourceIndex])}/download?inline=1#page=${page}`
+    )
+  }
+
+  // Unrecognized document_id (shouldn't happen for a real review, but a
+  // stale/edited record is possible) - fall back to the plain,
+  // current-version document download rather than producing a broken link.
+  return `/api/projects/${encodedProject}/documents/${encodeURIComponent(citation.document_id)}/download?inline=1#page=${page}`
 }
 
 export interface IntegrityCandidateDecisionPayload {

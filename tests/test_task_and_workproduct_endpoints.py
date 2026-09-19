@@ -263,10 +263,21 @@ class TaskAndWorkProductEndpointTests(unittest.TestCase):
             f"/api/projects/{self.project.id}/work-products/{wp['id']}/versions/{v1_id}/download"
         ))
         self.assertEqual(res_v1.read(), b"v1 bytes")
+        self.assertIn("attachment", res_v1.headers.get("Content-Disposition", ""))
         res_v2 = urllib.request.urlopen(self._url(
             f"/api/projects/{self.project.id}/work-products/{wp['id']}/versions/{v2_id}/download"
         ))
         self.assertEqual(res_v2.read(), b"v2 bytes")
+
+        # Task 16.6: ?inline=1 renders in-browser (Content-Disposition:
+        # inline) rather than forcing a download - needed so a citation's
+        # #page=N link actually opens a viewer instead of triggering a
+        # save-file prompt. Mirrors documents.py's own two download
+        # routes, which already supported this.
+        res_inline = urllib.request.urlopen(self._url(
+            f"/api/projects/{self.project.id}/work-products/{wp['id']}/versions/{v1_id}/download?inline=1"
+        ))
+        self.assertIn("inline", res_inline.headers.get("Content-Disposition", ""))
 
         # The task stayed "submitted" through the second version too.
         status, fetched = self._get(self._tasks_url(f"/{task['id']}"))
