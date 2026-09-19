@@ -4629,6 +4629,32 @@ founder direction.
 
 **Permissions needed**: founder direction on what to work on next.
 
+## 2026-09-19 — User-facing legacy project-page exit removed
+
+**Authorization**: founder reported that the Deal Overview link labelled
+"Upload documents, manage tasks, edit brief (legacy page)" disrupted the
+unified product experience and asked for it to be removed without relying on
+another coding agent.
+
+**What changed**: the link was replaced with React-native workflows that reuse
+the existing server APIs. Documents now has multi-file/folder upload and
+immediate register refresh; Deal Overview edits all six deal-brief fields in a
+version-preserving dialog; and `/projects/:projectId/work` manages workstreams,
+tasks, assignees, statuses, comments, work-product submissions, new submission
+versions, downloads and review decisions. The Work route is a deeper Overview
+route rather than a new primary tab. No backend business logic or database
+schema changed, and the old static pages remain available internally while
+remaining migrations continue.
+
+**Verification**: `npm run build` passed; `npm run lint` introduced no new
+warnings (the existing warnings in Home, Findings, MandateList and shared UI
+files remain); `node --test tests/frontend/*.test.mjs` passed, including two
+new regression tests pinning the absence of the legacy escape and the presence
+of React-owned upload/work workflows; `git diff --check` passed. The full
+Python suite could not run in the isolated adoption environment because its
+project-local Postgres and Python virtual environment are not present; no
+backend Python was modified.
+
 ## 2026-09-18 — Workspace frontend unified (out of task-number sequence, founder-directed)
 
 **Authorization**: founder directed this in-session, outside the M16 task

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useParams } from "react-router-dom"
+import { NavLink, Outlet, useLocation, useParams } from "react-router-dom"
 
 // Unifying the workspace frontend: a single, in-app tab strip for every
 // deal-scoped destination (Overview / Documents / Findings / Mandates /
@@ -23,6 +23,8 @@ const TABS = [
 
 export function DealShell() {
   const { projectId } = useParams<{ projectId: string }>()
+  const location = useLocation()
+  const overviewChildActive = location.pathname.endsWith("/work")
 
   return (
     <div className="flex min-h-full flex-col">
@@ -35,7 +37,7 @@ export function DealShell() {
               end={tab.end}
               className={({ isActive }) =>
                 `whitespace-nowrap rounded-t-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
+                  isActive || (tab.label === "Overview" && overviewChildActive)
                     ? "border-b-2 border-accent text-foreground"
                     : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
                 }`

@@ -2,17 +2,16 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { DocumentUploadDialog } from "@/components/DocumentUploadDialog"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { BACKEND_ORIGIN, listDocuments, type ProjectDocument } from "@/lib/api"
 
 // Unifying the workspace frontend: the real document register, in React,
 // wired to the same GET .../documents endpoint the static project.html
-// page has always used - not a mockup, not a second source of truth.
-// Upload is deliberately not built here yet (project.html's own upload
-// form stays the place to add documents for now) - this is a read/browse
-// screen first, matching what the "Documents" tab of the design prototype
-// actually needed to prove: that documents have a real, in-app home.
+// page has always used - not a mockup, not a second source of truth. Upload
+// now lives here as well, closing the former static-page dependency.
 
 function folderOf(doc: ProjectDocument): string {
   const trimmed = doc.relative_path.replace(/\/[^/]*$/, "")
@@ -37,12 +36,20 @@ export function Documents() {
   const [search, setSearch] = useState("")
   const [folder, setFolder] = useState("all")
   const [type, setType] = useState("all")
+  const [uploadOpen, setUploadOpen] = useState(false)
+
+  async function reload() {
+    if (!projectId) return
+    try {
+      setDocuments(await listDocuments(projectId))
+    } catch {
+      toast.error("Could not load documents.")
+    }
+  }
 
   useEffect(() => {
-    if (!projectId) return
-    listDocuments(projectId)
-      .then(setDocuments)
-      .catch(() => toast.error("Could not load documents."))
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   const folders = useMemo(
@@ -61,17 +68,20 @@ export function Documents() {
     return true
   })
 
-  if (!documents) {
+  if (!documents || !projectId) {
     return <div className="mx-auto max-w-4xl px-6 pt-8 pb-20 text-sm text-muted-foreground">Loading documents…</div>
   }
 
   return (
     <div className="mx-auto max-w-4xl px-6 pt-8 pb-20 space-y-4">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Documents</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {documents.length} document{documents.length === 1 ? "" : "s"} in this deal's evidence room.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Documents</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {documents.length} document{documents.length === 1 ? "" : "s"} in this deal's evidence room.
+          </p>
+        </div>
+        <Button onClick={() => setUploadOpen(true)}>Upload documents</Button>
       </div>
 
       <Card className="p-4">
@@ -143,6 +153,13 @@ export function Documents() {
           </tbody>
         </table>
       </Card>
+
+      <DocumentUploadDialog
+        projectId={projectId}
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onUploaded={reload}
+      />
     </div>
   )
 }

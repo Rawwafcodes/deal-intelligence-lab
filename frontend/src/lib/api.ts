@@ -34,6 +34,30 @@ export async function listDocuments(projectId: string): Promise<ProjectDocument[
   return jsonOrThrow(res, "Could not load documents.")
 }
 
+export interface UploadResult {
+  filename: string
+  relative_path: string
+  status: "success" | "duplicate" | "unsupported_type" | "failed"
+  document?: ProjectDocument
+  error?: string
+}
+
+export async function uploadDocuments(
+  projectId: string,
+  files: File[],
+): Promise<{ results: UploadResult[] }> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append("files", file)
+    form.append("relative_paths", file.webkitRelativePath || file.name)
+  }
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/documents`, {
+    method: "POST",
+    body: form,
+  })
+  return jsonOrThrow(res, "Could not upload documents.")
+}
+
 // Unifying the workspace frontend: a Workspace is created once per
 // completed cross-format reconciliation run (or, separately, per M14.2
 // Integrity Review - see `integrity_review_id` below) - a project can
@@ -432,6 +456,17 @@ export interface WorkProductSummary {
   version_number: number
   current_version_id: string | null
   versions: WorkProductVersionSummary[]
+  current_version_approved?: boolean
+  review_decisions?: ReviewDecision[]
+}
+
+export interface ReviewDecision {
+  id: string
+  decision: "approved" | "returned"
+  rationale: string
+  submission_version_id: string
+  created_at: string
+  reviewer: IdentityUser | null
 }
 
 export interface TaskWithWorkProducts {
@@ -455,15 +490,209 @@ export async function listWorkstreams(projectId: string): Promise<WorkstreamSumm
   return jsonOrThrow(res, "Could not load workstreams.")
 }
 
-export interface CurrentBriefVersion {
+export interface BriefVersion {
   id: string
+  project_id: string
   version_number: number
+  parties: string
   objective: string
+  perspective: string
+  scope: string
+  periods: string
+  uncertainties: string
+  created_at: string
+  created_by: string | null
 }
 
-export async function getCurrentBriefVersion(projectId: string): Promise<CurrentBriefVersion | null> {
+export type CurrentBriefVersion = BriefVersion
+
+export async function getCurrentBriefVersion(projectId: string): Promise<BriefVersion | null> {
   const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief`)
   return jsonOrThrow(res, "Could not load the deal brief.")
+}
+
+export type BriefFields = Pick<
+  BriefVersion,
+  "parties" | "objective" | "perspective" | "scope" | "periods" | "uncertainties"
+>
+
+export async function saveBriefVersion(projectId: string, fields: BriefFields): Promise<BriefVersion> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/brief`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  })
+  return jsonOrThrow(res, "Could not save the deal brief.")
+}
+
+export interface WorkstreamAssignment {
+  id: string
+  workstream_id: string
+  user_id: string
+  role_label: string
+  created_at: string
+  revoked_at: string | null
+  user: IdentityUser | null
+}
+
+export interface Workstream extends WorkstreamSummary {
+  project_id: string
+  description: string
+  created_at: string
+  assignments: WorkstreamAssignment[]
+}
+
+export async function listDetailedWorkstreams(projectId: string): Promise<Workstream[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`)
+  return jsonOrThrow(res, "Could not load workstreams.")
+}
+
+export async function createWorkstream(
+  projectId: string,
+  name: string,
+  description: string,
+): Promise<Workstream> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workstreams`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description }),
+  })
+  return jsonOrThrow(res, "Could not create the workstream.")
+}
+
+export interface TaskComment {
+  id: string
+  task_id: string
+  author_id: string | null
+  body: string
+  created_at: string
+  author: IdentityUser | null
+}
+
+export interface TaskDetail {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  workstream_id: string | null
+  assigned_to: string | null
+  created_by: string | null
+  status: string
+  created_at: string
+  updated_at: string
+  assigned_user: IdentityUser | null
+  workstream: { id: string; name: string } | null
+  comments: TaskComment[]
+  work_products: WorkProductSummary[]
+}
+
+export async function listTasks(projectId: string): Promise<TaskDetail[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`)
+  return jsonOrThrow(res, "Could not load tasks.")
+}
+
+export async function createTask(
+  projectId: string,
+  input: { title: string; description: string; workstream_id: string | null; assigned_to: string | null },
+): Promise<TaskDetail> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  return jsonOrThrow(res, "Could not create the task.")
+}
+
+export async function updateTaskStatus(
+  projectId: string,
+  taskId: string,
+  status: string,
+): Promise<TaskDetail> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/status`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) },
+  )
+  return jsonOrThrow(res, "Could not update the task.")
+}
+
+export async function assignTask(
+  projectId: string,
+  taskId: string,
+  assignedTo: string | null,
+): Promise<TaskDetail> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/assign`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assigned_to: assignedTo }) },
+  )
+  return jsonOrThrow(res, "Could not assign the task.")
+}
+
+export async function addTaskComment(
+  projectId: string,
+  taskId: string,
+  body: string,
+): Promise<TaskComment[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/comments`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) },
+  )
+  return jsonOrThrow(res, "Could not add the comment.")
+}
+
+export async function submitWorkProduct(
+  projectId: string,
+  taskId: string,
+  title: string,
+  file: File,
+): Promise<unknown> {
+  const form = new FormData()
+  form.append("title", title)
+  form.append("file", file)
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/work-products`,
+    { method: "POST", body: form },
+  )
+  return jsonOrThrow(res, "Could not submit the work product.")
+}
+
+export async function addWorkProductVersion(
+  projectId: string,
+  workProductId: string,
+  file: File,
+): Promise<unknown> {
+  const form = new FormData()
+  form.append("file", file)
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProductId)}/versions`,
+    { method: "POST", body: form },
+  )
+  return jsonOrThrow(res, "Could not add the work-product version.")
+}
+
+export async function reviewWorkProduct(
+  projectId: string,
+  workProductId: string,
+  decision: "approved" | "returned",
+  rationale: string,
+): Promise<TaskDetail> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProductId)}/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, rationale }),
+    },
+  )
+  return jsonOrThrow(res, "Could not record the review decision.")
+}
+
+export function workProductDownloadUrl(
+  projectId: string,
+  workProductId: string,
+  versionId: string,
+): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/work-products/${encodeURIComponent(workProductId)}` +
+    `/versions/${encodeURIComponent(versionId)}/download`
 }
 
 // Task 14.2: Integrity Review candidates - never a shared finding until

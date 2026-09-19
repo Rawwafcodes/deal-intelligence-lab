@@ -10,6 +10,7 @@ import { Findings } from "@/routes/Findings"
 import { Home } from "@/routes/Home"
 import { MandateDetail } from "@/routes/MandateDetail"
 import { MandateList } from "@/routes/MandateList"
+import { Work } from "@/routes/Work"
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="findings" element={<Findings />} />
             <Route path="mandates" element={<MandateList />} />
             <Route path="mandates/:mandateId" element={<MandateDetail />} />
+            <Route path="work" element={<Work />} />
             <Route path="activity" element={<Activity />} />
           </Route>
         </Route>

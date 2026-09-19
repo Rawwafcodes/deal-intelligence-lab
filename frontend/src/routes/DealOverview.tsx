@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react"
+import { FileUpIcon, ListTodoIcon, PencilIcon } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { BriefEditorDialog } from "@/components/BriefEditorDialog"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
-  BACKEND_ORIGIN, getDealOverview,
+  getDealOverview,
   type DealOverview as DealOverviewData, type RestrictedDealOverview,
 } from "@/lib/api"
 
 // Task 13.3: this is the "MD drill-down" landing page for a single deal -
-// a real-data summary with links out to the existing surfaces that
-// already own each kind of detail (the static project page for documents/
-// tasks/brief/workstream editing, per D13; the React Mandates list for
-// mandate detail). It reads and summarizes; it does not duplicate editing
-// UI that already exists elsewhere.
+// a real-data summary with links to the React-native deal surfaces. Brief
+// editing is intentionally local to this page; documents and human work
+// have their own deep-linkable routes under the same DealShell.
 
 const TASK_STATUS_LABELS: Record<string, string> = {
   open: "Open", in_progress: "In progress", submitted: "Submitted",
@@ -109,6 +110,7 @@ function RestrictedDealOverviewView({ overview }: { overview: RestrictedDealOver
 export function DealOverview() {
   const { projectId } = useParams<{ projectId: string }>()
   const [overview, setOverview] = useState<DealOverviewData | RestrictedDealOverview | null>(null)
+  const [briefEditorOpen, setBriefEditorOpen] = useState(false)
 
   async function reload() {
     if (!projectId) return
@@ -139,21 +141,29 @@ export function DealOverview() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">{project.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {project.description || "No description"} · Created {formatDate(project.created_at)}
-        </p>
-        <a
-          href={`${BACKEND_ORIGIN}/project.html?id=${encodeURIComponent(projectId ?? "")}`}
-          className="mt-2 inline-block text-sm text-accent hover:underline"
-        >
-          Upload documents, manage tasks, edit brief (legacy page) →
-        </a>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">{project.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {project.description || "No description"} · Created {formatDate(project.created_at)}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" render={<Link to={`/projects/${projectId}/documents`} />}>
+            <FileUpIcon /> Documents
+          </Button>
+          <Button variant="secondary" render={<Link to={`/projects/${projectId}/work`} />}>
+            <ListTodoIcon /> Manage work
+          </Button>
+          <Button onClick={() => setBriefEditorOpen(true)}><PencilIcon /> Edit brief</Button>
+        </div>
       </div>
 
       <Card className="p-6">
-        <h2 className="font-heading text-lg font-semibold text-foreground">Deal brief</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-heading text-lg font-semibold text-foreground">Deal brief</h2>
+          <Button size="sm" variant="ghost" onClick={() => setBriefEditorOpen(true)}>Edit</Button>
+        </div>
         {brief ? (
           <div className="mt-2 space-y-1 text-sm">
             <p className="text-muted-foreground">Version {String(brief.version_number)} · {formatDate(String(brief.created_at))}</p>
@@ -165,7 +175,10 @@ export function DealOverview() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="font-heading text-lg font-semibold text-foreground">Tasks</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-heading text-lg font-semibold text-foreground">Tasks</h2>
+          <Button size="sm" variant="ghost" render={<Link to={`/projects/${projectId}/work`} />}>Manage</Button>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">Real counts across every task on this deal.</p>
         <div className="mt-3">
           <CountRow counts={tasks.counts} labels={TASK_STATUS_LABELS} />
@@ -239,6 +252,13 @@ export function DealOverview() {
           {documents.count === 1 ? "" : "s"}
         </p>
       </Card>
+
+      <BriefEditorDialog
+        projectId={projectId}
+        open={briefEditorOpen}
+        onOpenChange={setBriefEditorOpen}
+        onSaved={reload}
+      />
     </div>
   )
 }
