@@ -1,4 +1,10 @@
 # Continuation state
+Current repository entry point: root `AGENTS.md` and
+`docs/product/README.md`. Task 000 is complete and must not be rerun. The
+original package-version paragraph below is retained as historical provenance;
+use the newest dated entry and the actual checkout for current implementation
+state.
+
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
 dated entry below and docs/10-decisions.md's I01-I08)

@@ -1,5 +1,10 @@
 # Deal Intelligence Lab
 
+Read `AGENTS.md` before acting. It contains the repository-wide product,
+architecture, safety and verification rules. This file adds Claude-specific
+design guidance and does not replace the canonical product context under
+`docs/product/`.
+
 ## Design decision-making
 
 This is an M&A intelligence product. Avoid decorative motion or consumer-style

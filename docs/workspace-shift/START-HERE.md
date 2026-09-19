@@ -1,5 +1,9 @@
 # First instruction to a coding agent
 
+> Historical adoption instruction. Task 000 has already been completed and this
+> package now lives inside the application repository. New agents must start at
+> the repository's root `AGENTS.md` and must not execute Task 000 again.
+
 Open the existing Deal Intelligence Lab application repository. Read its standing
 instructions and then read `docs/workspace-shift/AGENTS.md`,
 `docs/workspace-shift/README.md` and `docs/workspace-shift/STATUS.md`.

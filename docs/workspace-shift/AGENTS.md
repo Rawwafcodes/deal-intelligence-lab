@@ -1,5 +1,10 @@
 # Instructions for implementing agents
 
+This package has been adopted into the application repository. Root
+`AGENTS.md` is now the entry point and supersedes the historical Task 000
+startup instructions below. Use this file for the workspace-shift architecture
+discipline; do not rerun Task 000.
+
 ## Mission
 Build the collaborative workspace described here by extending the existing lab.
 Read README.md, STATUS.md, docs/00-direction-change.md, docs/02-existing-baseline.md,
@@ -7,9 +12,10 @@ docs/04-mandate-engine.md and the selected task completely before acting.
 Read other specs referenced by that task.
 
 ## Authorization and evidence
-- Task 000 is the current starting task. It authorizes inspection and documentation,
-  not feature implementation, deployment, data mutation, paid API calls or pushing.
-- Locate the actual application repository with the user. This spec folder is not it.
+- Task 000 is complete and historical. Work only on the current bounded task
+  explicitly authorized by the founder.
+- This folder now lives inside the actual application repository. Root
+  `AGENTS.md` supplies the current repository-wide rules.
 - Read the host repository's AGENTS.md/CLAUDE.md. Report substantive conflicts.
 - Treat milestone reports as historical claims until verified against code.
 - Never claim tests pass without running them and recording command, revision and scope.

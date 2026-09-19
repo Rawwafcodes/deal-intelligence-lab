@@ -1,12 +1,22 @@
 # Deal Intelligence Lab
 
-A local app for keeping track of your M&A deal projects. Create a project,
-upload the original deal documents, and come back to them any time —
-everything is saved on your own computer.
+A local-first collaborative AI-native workspace for deal, diligence and
+advisory work. Teams organize engagements and evidence, assign human work,
+commission governed AI mandates, review findings and submissions, resolve
+outstanding matters and maintain an auditable decision-ready position.
 
-This is an early milestone: it handles projects, original-document
-storage, and a basic AI connection check. Document analysis by AI comes
-in a later step.
+The repository has grown well beyond its original document-upload prototype.
+Its working foundations include organizations and deal permissions, versioned
+briefs/documents/submissions, workstreams and tasks, PDF/Excel/cross-format
+analysis, findings and requests, mandate planning/execution, Integrity Review,
+decision packages, validation, dependency/staleness tracking and reassessment.
+Not every capability has been consolidated into the final React experience,
+and the application is not yet certified for production internet use.
+
+For the authoritative product definition and agent read order, start with
+[`docs/product/README.md`](docs/product/README.md). Detailed implementation
+history, decisions and task specifications live under
+[`docs/workspace-shift/`](docs/workspace-shift/README.md).
 
 ## Requirements
 

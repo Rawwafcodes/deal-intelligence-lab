@@ -1,6 +1,11 @@
 # Workspace Shift — portable build specification
 Version 1.1.0 · 17 September 2026 · Product direction baseline, extended with the Integrity Review integration (docs-only)
 
+> Adoption status: this package is now part of the application repository.
+> Root `AGENTS.md` and `docs/product/README.md` are the current entry points.
+> The copy/install/Task 000 instructions below are preserved as historical
+> provenance and must not be rerun.
+
 ## Start here
 This is a specification and agent-handoff repository, **not the application source**.
 It formalizes Rawwaf's shift from the Deal Intelligence Lab into a collaborative
