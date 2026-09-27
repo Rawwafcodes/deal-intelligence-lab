@@ -120,6 +120,7 @@ function RequestRow({
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}</span>
           <select
+            aria-label="Request status"
             value={request.status}
             onChange={(event) => changeStatus(event.target.value as RequestStatus)}
             className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
@@ -249,6 +250,7 @@ export function Findings() {
         </div>
         {workspaces.length > 1 && (
           <select
+            aria-label="Findings workspace"
             value={selectedId ?? ""}
             onChange={(event) => setSelectedId(event.target.value)}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
@@ -333,6 +335,7 @@ export function Findings() {
                 className="max-w-xs"
               />
               <select
+                aria-label="Filter by severity"
                 value={severityFilter}
                 onChange={(event) => setSeverityFilter(event.target.value)}
                 className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"

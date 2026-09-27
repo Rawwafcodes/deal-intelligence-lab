@@ -111,6 +111,7 @@ export function Documents() {
             className="max-w-xs"
           />
           <select
+            aria-label="Filter by folder"
             value={folder}
             onChange={(event) => setFolder(event.target.value)}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
@@ -121,6 +122,7 @@ export function Documents() {
             ))}
           </select>
           <select
+            aria-label="Filter by type"
             value={type}
             onChange={(event) => setType(event.target.value)}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"

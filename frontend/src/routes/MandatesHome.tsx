@@ -50,6 +50,7 @@ export function MandatesHome() {
 
       {presentStatuses.length > 1 && (
         <select
+          aria-label="Filter by status"
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
           className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
