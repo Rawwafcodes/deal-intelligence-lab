@@ -268,10 +268,10 @@ class MandateEndpointTests(unittest.TestCase):
         # test_cancel_run_while_queued_is_never_dispatched, which uses
         # poll_once() precisely because a real background thread's poll
         # tick and a real HTTP round trip race each other in wall-clock
-        # time. Left racing, this test was intermittently flaky: a cancel
-        # landing between the worker reading the run as "queued" and
-        # writing "running" is overwritten (the race Worker's docstring
-        # discloses), so the cancel response itself could read "running".
+        # time: left racing, the near-instant echo stage can legitimately
+        # finish before the cancel lands (the cancel/worker interleavings
+        # themselves are proven deterministically in test_mandates.py's
+        # *_racing_* and *_just_after_the_claim_* tests).
         # The worker is therefore held across start + cancel so the run is
         # genuinely still queued, then restarted so the real background
         # thread is what finalizes the cancel.

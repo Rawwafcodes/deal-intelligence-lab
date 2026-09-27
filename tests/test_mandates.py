@@ -304,6 +304,76 @@ class MandateLifecycleTests(unittest.TestCase):
         self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "cancelled")
         self.assertEqual(mandates.list_attempts(run.id), [])  # the echo stage never ran
 
+    def test_cancel_racing_a_run_that_finishes_never_relabels_it_cancelled(self):
+        # The worker claims and finishes the run between cancel_run reading
+        # it as "queued" and writing its cancel request. The success must
+        # stand; the cancel is refused like any other finished run's.
+        mandate = mandates.create_mandate(self.project.id, "Assess the deal", created_by="u1")
+        plan = mandates.propose_plan(self.project.id, mandate.id, "fixture-echo")
+        mandates.approve_plan(self.project.id, mandate.id, plan.id, approved_by="lead")
+        run = mandates.execute_run(self.project.id, mandate.id)
+
+        real_get_run = mandates.get_run
+        raced: list[bool] = []
+
+        def get_run_then_worker_finishes(mandate_id, run_id):
+            read = real_get_run(mandate_id, run_id)
+            if not raced:
+                raced.append(True)
+                self.worker.poll_once()
+            return read
+
+        with patch("mandates.get_run", side_effect=get_run_then_worker_finishes):
+            with self.assertRaises(mandates.MandateValidationError):
+                mandates.cancel_run(self.project.id, mandate.id, run.id)
+
+        self.worker.poll_once()
+        self.assertEqual(mandates.get_run(mandate.id, run.id).status, "succeeded")
+        self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "completed")
+
+    def test_cancel_landing_just_after_the_claim_stops_the_run_before_its_first_stage(self):
+        mandate = mandates.create_mandate(self.project.id, "Assess the deal", created_by="u1")
+        plan = mandates.propose_plan(self.project.id, mandate.id, "fixture-echo")
+        mandates.approve_plan(self.project.id, mandate.id, plan.id, approved_by="lead")
+        run = mandates.execute_run(self.project.id, mandate.id)
+
+        real_claim = mandates._claim_next_queued_run
+
+        def claim_then_cancel_lands(worker_id):
+            claimed = real_claim(worker_id)
+            if claimed is not None:
+                requested = mandates.cancel_run(self.project.id, mandate.id, claimed.id)
+                self.assertEqual(requested.status, "cancel_requested")
+            return claimed
+
+        with patch("mandates._claim_next_queued_run", side_effect=claim_then_cancel_lands):
+            self.worker.poll_once()
+
+        self.assertEqual(mandates.get_run(mandate.id, run.id).status, "cancelled")
+        self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "cancelled")
+        self.assertEqual(mandates.list_attempts(run.id), [])  # the accepted cancel was not lost
+
+    def test_resume_racing_a_cancel_never_requeues_the_cancelled_run(self):
+        mandate = mandates.create_mandate(self.project.id, "Assess the deal", created_by="u1")
+        plan = mandates.propose_plan(self.project.id, mandate.id, "fixture-echo-with-review")
+        mandates.approve_plan(self.project.id, mandate.id, plan.id, approved_by="lead")
+        run = mandates.execute_run(self.project.id, mandate.id)
+        self.worker.poll_once()  # parks at the review checkpoint
+
+        real_get_plan = mandates.get_plan
+
+        def cancel_lands_mid_resume(mandate_id, plan_revision_id):
+            mandates.cancel_run(self.project.id, mandate.id, run.id)
+            return real_get_plan(mandate_id, plan_revision_id)
+
+        with patch("mandates.get_plan", side_effect=cancel_lands_mid_resume):
+            with self.assertRaises(mandates.MandateValidationError):
+                mandates.resume_run(self.project.id, mandate.id, run.id, "review", decision="approve")
+
+        self.worker.poll_once()
+        self.assertEqual(mandates.get_run(mandate.id, run.id).status, "cancelled")
+        self.assertEqual(mandates.get_mandate(self.project.id, mandate.id).status, "cancelled")
+
     def test_cancel_run_mid_flight_stops_the_next_stage(self):
         # Proves "cancellation actually stops future stages of an
         # in-flight run" for a run the worker is *actively* executing

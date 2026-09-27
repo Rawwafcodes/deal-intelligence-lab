@@ -146,7 +146,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -2268,6 +2268,23 @@ def _set_run(run_id: str, **fields: Any) -> None:
         conn.close()
 
 
+def _set_run_if_status(run_id: str, expected_status: str, **fields: Any) -> bool:
+    """_set_run, but only while the run is still `expected_status`. Returns
+    whether the row was updated."""
+    set_clause = ", ".join(f"{k} = %s" for k in fields)
+    conn = store.get_connection()
+    try:
+        cursor = conn.execute(
+            f"UPDATE mandate_runs SET {set_clause} WHERE id = %s AND status = %s",
+            (*fields.values(), run_id, expected_status),
+        )
+        updated = cursor.rowcount == 1
+        conn.commit()
+    finally:
+        conn.close()
+    return updated
+
+
 def _record_attempt(run_id: str, stage_id: str, capability: str | None, status: str,
                      output: dict | None, error: str | None) -> str:
     """Returns the new attempt's id. Task 12.2: "running" and
@@ -2455,9 +2472,10 @@ def _run_stages(project_id: str, mandate: Mandate, plan: PlanRevision, run_id: s
 
 
 def _execute(run: Run) -> None:
-    """Worker entry point for one run: resolves its mandate/plan, marks it
-    "running" (setting started_at only the first time), and walks its
-    stages from wherever it left off (current_stage_index - 0 for a fresh
+    """Worker entry point for one run already claimed by
+    _claim_next_queued_run (which set it "running" and stamped started_at
+    the first time): resolves its mandate/plan and walks its stages from
+    wherever it left off (current_stage_index - 0 for a fresh
     run, just past a checkpoint for a resumed one, or wherever
     Worker.recover() left it for an interrupted one)."""
     mandate = _get_mandate_by_id(run.mandate_id)
@@ -2470,10 +2488,8 @@ def _execute(run: Run) -> None:
         _set_mandate(mandate.id, status="failed")
         return
 
-    fields: dict[str, Any] = {"status": "running"}
-    if run.started_at is None:
-        fields["started_at"] = _now()
-    _set_run(run.id, **fields)
+    # No status write here: the claim already made it "running", and
+    # rewriting it would overwrite a cancel_run that landed since the claim.
     _run_stages(mandate.project_id, mandate, plan, run.id, start_index=run.current_stage_index)
 
 
@@ -2498,7 +2514,10 @@ def resume_run(project_id: str, mandate_id: str, run_id: str, stage_id: str, dec
     plan = get_plan(mandate_id, run.plan_revision_id)
     assert plan is not None
     resume_index = next(i for i, s in enumerate(plan.stages) if s["id"] == stage_id) + 1
-    _set_run(run_id, status="queued", current_stage_index=resume_index)
+    # Conditional, so a cancel_run that lands after the check above is not
+    # overwritten back to "queued" (which would execute a cancelled run).
+    if not _set_run_if_status(run_id, "waiting_for_input", status="queued", current_stage_index=resume_index):
+        raise MandateValidationError("run is not waiting for human input")
     updated = get_run(mandate_id, run_id)
     assert updated is not None
     return updated
@@ -2518,7 +2537,29 @@ def cancel_run(project_id: str, mandate_id: str, run_id: str) -> Run:
     if mandate is None or run is None:
         raise ValueError("mandate or run not found")
 
+    # Each write below is conditional on the status just read: a Worker
+    # can claim, run and finish this run between that read and the write,
+    # and an unconditional write would then relabel a "succeeded" run (and
+    # its "completed" mandate) as cancelled. Losing the race re-reads and
+    # decides again, so a run that finished first gets the same error as
+    # any other finished run. Like execute_run, this returns the state it
+    # wrote - what this request did - not a later re-read that the Worker
+    # may already have moved on from.
+    cancelled = _cancel_run_from(run)
+    while cancelled is None:
+        run = get_run(mandate_id, run_id)
+        assert run is not None
+        cancelled = _cancel_run_from(run)
+    return cancelled
+
+
+def _cancel_run_from(run: Run) -> Run | None:
+    """One compare-and-set attempt of cancel_run from `run.status`. None
+    means the run's status changed since it was read."""
     if run.status == "waiting_for_input":
+        finished_at = _now()
+        if not _set_run_if_status(run.id, "waiting_for_input", status="cancelled", finished_at=finished_at):
+            return None
         # Found during this task's own live browser verification: the
         # checkpoint's attempt was left "awaiting_human" forever once its
         # run was cancelled - not a status resume_run itself ever checks
@@ -2526,19 +2567,16 @@ def cancel_run(project_id: str, mandate_id: str, run_id: str) -> Run:
         # check keys off exactly this attempt status, so the decision
         # form and Resume/Cancel controls kept rendering on an already-
         # cancelled run. Finalizing it here closes that gap.
-        pending = next((a for a in list_attempts(run_id) if a.status == "awaiting_human"), None)
+        pending = next((a for a in list_attempts(run.id) if a.status == "awaiting_human"), None)
         if pending is not None:
             _update_attempt(pending.id, status="failed", output=None, error="run cancelled")
-        _set_run(run_id, status="cancelled", finished_at=_now())
-        _set_mandate(mandate_id, status="cancelled")
-    elif run.status in ("queued", "running"):
-        _set_run(run_id, status="cancel_requested")
-    else:
-        raise MandateValidationError(f"cannot cancel a run with status {run.status!r}")
-
-    updated = get_run(mandate_id, run_id)
-    assert updated is not None
-    return updated
+        _set_mandate(run.mandate_id, status="cancelled")
+        return replace(run, status="cancelled", finished_at=finished_at)
+    if run.status in ("queued", "running"):
+        if not _set_run_if_status(run.id, run.status, status="cancel_requested"):
+            return None
+        return replace(run, status="cancel_requested")
+    raise MandateValidationError(f"cannot cancel a run with status {run.status!r}")
 
 
 # -- opt-in trigger firing (Task 15.3) -----------------------------------
@@ -2608,12 +2646,10 @@ class Worker:
     separate thread (a capability call can block the executing thread for
     many minutes); recovery - at start and then periodically - only
     touches running runs whose heartbeat is older than the lease, and
-    claims each one conditionally first. The one known, disclosed race this leaves: a cancel_run call
-    landing in the exact instant between poll_once() reading a run as
-    "queued" and _execute() writing it to "running" can be silently
-    overwritten back to "running" - a repeat cancel immediately afterward
-    always succeeds, since _run_stages' own per-stage check will then see
-    the run genuinely "running" and honor it before the next stage."""
+    claims each one conditionally first. A cancel_run landing just after
+    a claim is honored: _execute() never rewrites the claimed status, so
+    _run_stages' per-stage check sees "cancel_requested" before the first
+    stage."""
 
     def __init__(
         self, poll_interval: float = 0.5, heartbeat_interval: float = 20.0,
