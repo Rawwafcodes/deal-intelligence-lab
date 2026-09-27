@@ -9,6 +9,7 @@ existing validation-lab tests.
 
 import sys
 import tempfile
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -280,6 +281,50 @@ class HumanReviewWorkflowTests(WorkspaceTestBase):
         # ...and nothing was overwritten by the losing, stale-revision call.
         after = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
         self.assertEqual(after["assigned_owner"], "J. Rivera")
+
+    def test_overlapping_writers_on_same_revision_exactly_one_wins(self):
+        # Task 18.1 follow-up: both writers read revision 1 before either
+        # writes (forced by the barrier) - the window in which the Python
+        # pre-check alone let both succeed and silently lose one write.
+        barrier = threading.Barrier(2, timeout=10)
+        original_read = workspaces._get_finding_state_row
+        local = threading.local()
+
+        def read_then_wait(workspace_id, finding_id):
+            row = original_read(workspace_id, finding_id)
+            if not getattr(local, "waited", False):
+                local.waited = True
+                barrier.wait()
+            return row
+
+        outcomes: dict[str, object] = {}
+
+        def write(owner: str) -> None:
+            try:
+                outcomes[owner] = workspaces.update_finding_workflow(
+                    self.workspace.id, self.finding_id, {"assigned_owner": owner}, expected_revision=1
+                )
+            except workspaces.FindingRevisionConflictError as exc:
+                outcomes[owner] = exc
+
+        workspaces._get_finding_state_row = read_then_wait
+        try:
+            threads = [threading.Thread(target=write, args=(owner,)) for owner in ("J. Rivera", "M. Chen")]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=20)
+        finally:
+            workspaces._get_finding_state_row = original_read
+
+        conflicts = [o for o in outcomes.values() if isinstance(o, workspaces.FindingRevisionConflictError)]
+        winners = [owner for owner, o in outcomes.items() if not isinstance(o, Exception)]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].current["assigned_owner"], winners[0])
+        after = workspaces.get_finding(self.workspace, self.analysis, self.finding_id)
+        self.assertEqual(after["assigned_owner"], winners[0])
+        self.assertEqual(after["revision"], 2)
 
     def test_no_expected_revision_supplied_never_conflicts(self):
         workspaces.update_finding_workflow(self.workspace.id, self.finding_id, {"assigned_owner": "J. Rivera"})

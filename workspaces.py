@@ -936,12 +936,27 @@ def update_finding_workflow(
 
     now = datetime.now(timezone.utc).isoformat()
     set_clause = ", ".join(f"{k} = %s" for k in changed) + ", updated_at = %s, revision = revision + 1"
+    # The revision check above is only a fast path: two requests can both
+    # pass it before either writes. The UPDATE itself is conditional on the
+    # expected revision, so exactly one of two overlapping writers matches a
+    # row - the other gets 0 rows and a conflict, never a silent overwrite.
+    where_clause = "workspace_id = %s AND id = %s"
+    where_params: tuple = (workspace_id, finding_id)
+    if expected_revision is not None:
+        where_clause += " AND revision = %s"
+        where_params += (expected_revision,)
     conn = store.get_connection()
     try:
-        conn.execute(
-            f"UPDATE workspace_findings SET {set_clause} WHERE workspace_id = %s AND id = %s",
-            (*changed.values(), now, workspace_id, finding_id),
+        cursor = conn.execute(
+            f"UPDATE workspace_findings SET {set_clause} WHERE {where_clause}",
+            (*changed.values(), now, *where_params),
         )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            current = _get_finding_state_row(workspace_id, finding_id)
+            if current is None:
+                raise ValueError("finding not found")
+            raise FindingRevisionConflictError(current=_merged_finding(current))
         event_type = (
             "severity_changed"
             if "adjusted_severity" in changed
