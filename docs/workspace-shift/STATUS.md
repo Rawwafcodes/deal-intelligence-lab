@@ -7019,3 +7019,36 @@ suite OK; mypy clean on changed files. Live, on the disposable database: web
 with `DEAL_LAB_RUN_WORKER=0` left a fixture run queued; two `worker.py`
 processes then completed it exactly once (one owner, one attempt); SIGTERM
 stopped both cleanly. No paid calls.
+
+## 2026-09-27 — M19 code change 2: document storage behind blob_store (Task 19.3)
+
+`blob_store.py` with two backends (report § 3.2):
+- **local** (default; behaviour unchanged): files under `DEAL_LAB_DATA_DIR`.
+- **object** (`DEAL_LAB_STORAGE=object`): a private S3-compatible bucket (R2 per
+  D25) via `boto3` (new pinned dependency, imported only in object mode), keys
+  mirroring the historical layout with an optional per-environment prefix, and
+  a bounded local read cache (LRU, default 2 GB) so every existing reader
+  keeps receiving a local `Path` - no change to analysis modules, downloads or
+  workbook parsing. Writes go to the bucket first; storage errors surface as
+  `OSError`, which existing callers already handle as a failed upload.
+  Downloads still pass through the app's authorization on every request; the
+  bucket is never public; encryption at rest is the provider's (R2 encrypts
+  all objects).
+- `documents.py` / `work_products.py`: the 4 write sites and 1 delete site now
+  go through the store; path functions resolve through it.
+
+**Verification**: 7 new tests (`tests/test_blob_store.py`) with an in-memory
+fake bucket through the real `documents` module - upload lands in the bucket
+and not on local disk; a second process with an empty cache reads identical
+bytes; new versions and deletion reach the bucket; a missing object behaves
+like a missing file; a bucket failure is a failed upload, not a crash; LRU
+eviction keeps the newest and re-fetches on demand; default backend is local.
+Object mode builds from environment variables (checked offline). Full suite
+OK in 3 consecutive runs; mypy clean. Live regression check in local mode on
+the real database: a document download returned HTTP 200 with the exact
+recorded byte count. Not yet exercised against a real bucket - that needs the
+founder's R2 account (provisioning).
+
+**Known intermittent test**: across this session two full-suite runs (of
+≈ 12) reported one failure that did not reproduce; the test name was not
+captured either time. Logged for follow-up rather than dismissed.

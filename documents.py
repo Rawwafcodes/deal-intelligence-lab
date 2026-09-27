@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import blob_store
 import store
 import version_dependencies
 
@@ -231,6 +232,11 @@ def originals_dir_for(project_id: str) -> Path:
     return directory
 
 
+def _version_key(project_id: str, version_id: str, extension: str) -> str:
+    # Task 19.3: storage key, mirroring the historical on-disk layout.
+    return f"projects/{project_id}/originals/{version_id}{extension}"
+
+
 def stored_file_path(document: Document) -> Path:
     """Resolves to the document's *current* version's bytes. Every
     existing caller (pdf_inspection, xlsx_inspection, workspace_exports,
@@ -243,7 +249,9 @@ def stored_file_path(document: Document) -> Path:
 
 
 def _version_file_path(project_id: str, version_id: str, extension: str) -> Path:
-    return DATA_DIR / "projects" / project_id / "originals" / f"{version_id}{extension}"
+    """A local path to read this version from - the file itself locally, or
+    a local cached copy in object-storage mode (blob_store)."""
+    return blob_store.get_store().path_for(_version_key(project_id, version_id, extension), DATA_DIR)
 
 
 def version_file_path(document: Document, version: DocumentVersion) -> Path:
@@ -320,9 +328,10 @@ def save_uploaded_file(project_id: str, raw_filename: str, raw_relative_path: st
     )
     document.current_version_id = document.id  # version 1 always reuses the document's own id
 
-    originals_dir_for(project_id)
     try:
-        stored_file_path(document).write_bytes(data)
+        blob_store.get_store().put(
+            _version_key(project_id, document.current_version_id, document.extension), data, DATA_DIR
+        )
     except OSError as exc:
         return UploadResult(filename=filename, relative_path=relative_path, status="failed", error=str(exc))
 
@@ -376,9 +385,8 @@ def add_version(project_id: str, document_id: str, data: bytes) -> UploadResult:
     version_number = document.version_number + 1
     uploaded_at = datetime.now(timezone.utc).isoformat()
 
-    originals_dir_for(project_id)
     try:
-        _version_file_path(project_id, new_version_id, document.extension).write_bytes(data)
+        blob_store.get_store().put(_version_key(project_id, new_version_id, document.extension), data, DATA_DIR)
     except OSError as exc:
         return UploadResult(
             filename=document.original_filename, relative_path=document.relative_path,
@@ -495,5 +503,5 @@ def delete_document(project_id: str, document_id: str) -> bool:
         conn.close()
 
     for version in versions:
-        _version_file_path(project_id, version.id, document.extension).unlink(missing_ok=True)
+        blob_store.get_store().delete(_version_key(project_id, version.id, document.extension), DATA_DIR)
     return True

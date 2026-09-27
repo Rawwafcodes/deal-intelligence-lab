@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import blob_store
 import documents
 import store
 import version_dependencies
@@ -170,10 +171,15 @@ def _row_to_version(row) -> SubmissionVersion:
     )
 
 
+def _version_key(project_id: str, version_id: str, extension: str) -> str:
+    # Task 19.3: storage key, mirroring the historical on-disk layout.
+    return f"projects/{project_id}/work_products/{version_id}{extension}"
+
+
 def _version_file_path(project_id: str, version_id: str, extension: str) -> Path:
-    directory = DATA_DIR / "projects" / project_id / "work_products"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{version_id}{extension}"
+    """A local path to read this version from - the file itself locally, or
+    a local cached copy in object-storage mode (blob_store)."""
+    return blob_store.get_store().path_for(_version_key(project_id, version_id, extension), DATA_DIR)
 
 
 def stored_file_path(work_product: WorkProduct) -> Path:
@@ -211,7 +217,7 @@ def create_work_product(
     work_product.current_version_id = work_product.id  # version 1 reuses the parent's own id
 
     try:
-        _version_file_path(project_id, work_product.id, extension).write_bytes(data)
+        blob_store.get_store().put(_version_key(project_id, work_product.id, extension), data, DATA_DIR)
     except OSError as exc:
         return SubmissionResult(title=title, status="failed", error=str(exc))
 
@@ -265,7 +271,7 @@ def add_version(project_id: str, work_product_id: str, data: bytes, uploaded_by:
     uploaded_at = datetime.now(timezone.utc).isoformat()
 
     try:
-        _version_file_path(project_id, new_version_id, work_product.extension).write_bytes(data)
+        blob_store.get_store().put(_version_key(project_id, new_version_id, work_product.extension), data, DATA_DIR)
     except OSError as exc:
         return SubmissionResult(title=work_product.title, status="failed", error=str(exc))
 
