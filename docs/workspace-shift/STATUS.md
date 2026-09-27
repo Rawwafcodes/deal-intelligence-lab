@@ -6969,3 +6969,18 @@ the model workbook through the real UI - run succeeded in 81 s
 mismatch; cleanup record shows both uploads deleted, and a Files API listing
 afterwards showed **0** files remaining. الكعكية itself was deliberately not
 run - it stays reserved as the next genuinely blind case (key before any run).
+
+## 2026-09-27 — M19 started: architecture decision report (Task 19.1)
+
+`tasks/19.1-architecture-decision-report.md`, written per the roadmap's
+required report, from an inspection of the actual system and provider
+research dated 2026-09-27 (sources listed in the report). Recommends the
+D20 working hypothesis, refined (Railway web + worker, Neon, R2, Clerk,
+GitHub Actions, Sentry; EU regions), with Render as the close single-vendor
+alternative; infrastructure ≈ $20-45/month for staging and ≈ $110-190/month
+with one pilot, with AI cost (Track B: $15-24 per full Opus analysis) the
+dominant variable. Finds that no platform offers Claude inference inside
+Saudi Arabia today and that Bedrock/Vertex lack the Files API and code
+execution this product uses. Lists four provider-independent code changes
+that come first. **Nothing provisioned, deployed or paid for**; awaiting
+founder approval per D20.
