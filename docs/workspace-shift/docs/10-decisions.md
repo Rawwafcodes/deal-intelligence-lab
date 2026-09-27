@@ -530,6 +530,47 @@ requires a new, dated decision that says so and keeps these on record.
 Status at approval: no Track B run had been human-scored (the one
 evaluation record, for run `417bb2df`, was incomplete).
 
+D24 (added 2026-09-27) **M18 closed - proceed, with independent quality
+scoring explicitly deferred.** Founder: "record it and start M19 + the
+large-PDF fix", after stating they have neither the time nor the
+case knowledge to score the Track B runs, and that they trust the
+findings.
+
+Against the M18 exit gate (`13-post-m17-roadmap.md`):
+
+| Gate item | Status |
+|---|---|
+| Integrated workflow completed end to end (Track A) | Met - accepted (D22) |
+| No unresolved critical product defect | Met - all critical defects found in Track A fixed |
+| Independent scoring exists (Track B) | **Not met - explicitly deferred** |
+| Outstanding M16 gates satisfied or explicitly failed | Gate 2 (independent scoring) **explicitly unmet**; gates 4 (recurring reusable assertions) and 5 (measured failure modes) **partly evidenced** - see below |
+| Performance and cost measured | Met - `tasks/18.2`, `tasks/18.3` |
+| Material failure modes documented | Met for what was observed - `tasks/18.3` |
+| Every canonical surface classified | Met - 29 surfaces (D21, D22) |
+| Explicit founder proceed/remediate/stop decision | **This decision: proceed** |
+
+What Track B did establish (mechanical, no human judgment): on three blind
+Universal Logic runs every PDF citation landed on its cited page, every
+parseable quoted workbook value matched, two critical issues recurred in
+all three runs, and cost per run was ≈ $15-24 on claude-opus-5 with 60%
+variation on identical inputs; and one real failure mode - scanned PDF
+packages above 23.5 MB cannot be analysed at all (الكعكية technical
+offer).
+
+What it did not establish: whether findings are correct, and what the
+product misses. The Universal Logic answer key holds a single expected
+issue with no critical/high severity, so recall is not measurable on it;
+the three saved evaluations contain no ratings. The founder's trust in the
+findings is recorded as the founder's position, **not** as validation
+evidence, and must not be cited to customers or investors as such.
+
+Carried forward: independent scoring moves to the pilot milestones (a
+design-partner customer scoring a run on their own deal is the intended
+route), using D23's thresholds unless a later dated decision changes them.
+A retrospective key written now for Universal Logic would not count as
+blind. الكعكية remains the candidate for the next genuinely blind case
+(key written before any run).
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

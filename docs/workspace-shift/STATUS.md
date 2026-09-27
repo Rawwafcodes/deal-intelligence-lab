@@ -6916,3 +6916,20 @@ Validation Lab support for Integrity Review cases and a large-PDF path.
 Founder approved the provisional thresholds in `tasks/18.3-track-b-plan.md`
 unchanged; recorded as D23 before any Track B run was human-scored. Next:
 founder scores the three Universal Logic blind runs in the Validation Lab.
+
+## 2026-09-27 — M18 closed (D24); M19 and the large-PDF fix started
+
+Founder: "record it and start M19 + the large-PDF fix". The three saved
+Universal Logic evaluations were checked (rating labels only, no key text):
+all were saved in their blank state - 0 of 99 findings rated, the key's one
+expected issue unrated, no final status. The locked key holds a single
+expected issue with no critical/high severity, so recall is not measurable
+on it. The founder does not have the time or case knowledge to score and
+stated they trust the findings.
+
+Recorded as D24: M18 closes with Track A accepted, Track B's mechanical
+evidence complete, independent quality scoring **explicitly unmet and
+deferred to the pilots** (the founder's trust recorded as their position,
+not as evidence). Next: M19's architecture decision report (no provisioning
+or spend until approved, per D20) and the large-PDF limitation found in
+Track B.

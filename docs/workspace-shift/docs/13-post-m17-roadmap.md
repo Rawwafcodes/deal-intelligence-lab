@@ -275,6 +275,8 @@ Cloud deployment; production authentication; live customer onboarding;
 feature expansion unrelated to observed validation defects; claims of
 commercial demand.
 
+*M18 closed 2026-09-27 by D24 (proceed; independent quality scoring explicitly deferred to the pilots).*
+
 ## M19 — Secure Online Foundation
 
 **Purpose**: create a private production-like environment that can safely
