@@ -18,6 +18,7 @@ import httpx2
 import openpyxl
 
 import cross_format_analysis
+import pdf_transport
 import documents
 import store
 
@@ -241,13 +242,57 @@ class CrossFormatAnalysisTests(unittest.TestCase):
         self.assertEqual(outcome.error_type, "too_many_excel_documents")
 
     def test_oversized_pdf_total_rejected_before_transmission(self):
-        with patch.object(cross_format_analysis, "MAX_TOTAL_PDF_SOURCE_BYTES", len(self.pdf_bytes) - 1):
+        # Task 18.3 follow-up: the hard ceiling is now the Files API path's,
+        # not the inline one - exceeding the inline cap alone switches
+        # transport instead of rejecting (see the tests below).
+        with patch.object(pdf_transport, "MAX_TOTAL_UPLOADED_PDF_BYTES", len(self.pdf_bytes) - 1):
             patcher, mock_client = self._mock_client()
             with patcher:
                 outcome = cross_format_analysis.run_cross_format_analysis([self.pdf_doc, self.xlsx_doc])
         self.assertFalse(outcome.success)
         self.assertFalse(outcome.transmitted)
         self.assertEqual(outcome.error_type, "oversized_pdf_total")
+        mock_client.files.upload.assert_not_called()
+
+    def _first_block_source_type(self, mock_client) -> str:
+        return mock_client.messages.stream.call_args.kwargs["messages"][0]["content"][0]["source"]["type"]
+
+    def test_pdfs_within_inline_cap_stay_inline(self):
+        response = fake_response([fake_text_block("## Executive Conclusion\nConsistent.")])
+        patcher, mock_client = self._mock_client(stream_responses=[response])
+        with patcher:
+            outcome = cross_format_analysis.run_cross_format_analysis([self.pdf_doc, self.xlsx_doc])
+        self.assertTrue(outcome.success)
+        self.assertEqual(self._first_block_source_type(mock_client), "base64")
+        self.assertEqual(mock_client.files.upload.call_count, 1)  # the workbook only
+        self.assertEqual([c.kind for c in outcome.excel_cleanup], ["excel"])
+
+    def test_pdfs_over_inline_cap_are_uploaded_referenced_and_deleted(self):
+        response = fake_response([fake_text_block("## Executive Conclusion\nConsistent.")])
+        with patch.object(pdf_transport, "MAX_INLINE_PDF_SOURCE_BYTES", len(self.pdf_bytes) - 1):
+            patcher, mock_client = self._mock_client(stream_responses=[response])
+            with patcher:
+                outcome = cross_format_analysis.run_cross_format_analysis([self.pdf_doc, self.xlsx_doc])
+        self.assertTrue(outcome.success)
+        self.assertEqual(self._first_block_source_type(mock_client), "file")
+        self.assertEqual(mock_client.files.upload.call_count, 2)  # workbook + PDF
+        pdf_upload = mock_client.files.upload.call_args_list[1].kwargs["file"]
+        self.assertEqual(pdf_upload[2], "application/pdf")
+        self.assertEqual(sorted(c.kind for c in outcome.excel_cleanup), ["excel", "pdf"])
+        self.assertTrue(all(c.succeeded for c in outcome.excel_cleanup))
+        self.assertEqual(mock_client.files.delete.call_count, 2)
+
+    def test_failed_pdf_upload_still_deletes_the_uploaded_workbook(self):
+        with patch.object(pdf_transport, "MAX_INLINE_PDF_SOURCE_BYTES", len(self.pdf_bytes) - 1):
+            patcher, mock_client = self._mock_client(
+                upload_side_effect=[types.SimpleNamespace(id="file_xlsx"), RuntimeError("boom")]
+            )
+            with patcher:
+                outcome = cross_format_analysis.run_cross_format_analysis([self.pdf_doc, self.xlsx_doc])
+        self.assertFalse(outcome.success)
+        self.assertEqual(outcome.error_type, "upload_failed")
+        mock_client.files.delete.assert_called_once_with("file_xlsx")
+        mock_client.messages.stream.assert_not_called()
 
     def test_oversized_excel_workbook_rejected_before_transmission(self):
         with patch.object(cross_format_analysis, "MAX_EXCEL_WORKBOOK_SOURCE_BYTES", len(self.xlsx_bytes) - 1):

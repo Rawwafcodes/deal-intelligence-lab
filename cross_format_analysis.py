@@ -68,7 +68,6 @@ data retention for the Files API and code execution.
 
 from __future__ import annotations
 
-import base64
 import os
 import re
 import time
@@ -85,6 +84,7 @@ from anthropic_errors import is_insufficient_credit_error
 import cross_document_analysis
 import documents
 import pdf_inspection
+import pdf_transport
 import xlsx_inspection
 
 load_dotenv(Path(__file__).parent / ".env.local")
@@ -236,8 +236,8 @@ _ERROR_MESSAGES = {
     "too_many_pdf_documents": f"Select at most {MAX_PDF_DOCUMENTS} PDF documents for one reconciliation run.",
     "too_many_excel_documents": f"Select at most {MAX_EXCEL_DOCUMENTS} Excel workbooks for one reconciliation run.",
     "oversized_pdf_total": (
-        f"The selected PDFs total more than {MAX_TOTAL_PDF_SOURCE_BYTES // (1024 * 1024)} MB, "
-        "which this app will not send in one request (Anthropic's own limit is a 32 MB request)."
+        f"The selected PDFs are too large: over {pdf_transport.MAX_TOTAL_UPLOADED_PDF_BYTES // (1024 * 1024)} MB in total, "
+        f"or one file over {pdf_transport.MAX_UPLOADED_PDF_FILE_BYTES // (1024 * 1024)} MB."
     ),
     "oversized_excel_workbook": (
         f"One of the selected workbooks is larger than the "
@@ -357,6 +357,9 @@ class ExcelCleanupResult:
     document_filename: str
     attempted: bool
     succeeded: bool | None
+    # Task 18.3 follow-up: large PDF sets are uploaded to the Files API too
+    # (pdf_transport) and deleted through this same cleanup record.
+    kind: str = "excel"
 
     def to_dict(self) -> dict:
         return {
@@ -364,6 +367,7 @@ class ExcelCleanupResult:
             "document_filename": self.document_filename,
             "attempted": self.attempted,
             "succeeded": self.succeeded,
+            "kind": self.kind,
         }
 
 
@@ -410,7 +414,7 @@ def validate_selection(selected: list[documents.Document]) -> tuple[str, str] | 
         return "too_many_pdf_documents", _ERROR_MESSAGES["too_many_pdf_documents"]
     if len(excels) > MAX_EXCEL_DOCUMENTS:
         return "too_many_excel_documents", _ERROR_MESSAGES["too_many_excel_documents"]
-    if sum(d.size_bytes for d in pdfs) > MAX_TOTAL_PDF_SOURCE_BYTES:
+    if pdf_transport.oversized(sum(d.size_bytes for d in pdfs), max((d.size_bytes for d in pdfs), default=0)):
         return "oversized_pdf_total", _ERROR_MESSAGES["oversized_pdf_total"]
     if any(d.size_bytes > MAX_EXCEL_WORKBOOK_SOURCE_BYTES for d in excels):
         return "oversized_excel_workbook", _ERROR_MESSAGES["oversized_excel_workbook"]
@@ -640,18 +644,16 @@ def run_cross_format_analysis(selected: list[documents.Document]) -> CrossFormat
 
     client = anthropic.Anthropic(api_key=api_key, timeout=ANALYSIS_CLIENT_TIMEOUT_SECONDS)
 
-    pdf_blocks: list[DocumentBlockParam] = []
-    for document in pdf_documents:
-        pdf_bytes = documents.stored_file_path(document).read_bytes()
-        pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("ascii")
-        pdf_blocks.append(
-            {
-                "type": "document",
-                "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64},
-                "title": document.original_filename,
-                "citations": {"enabled": True},
-            }
-        )
+    # Inline base64 unless the PDFs together exceed the inline cap, in which
+    # case they are uploaded below (after the Excel uploads) and deleted by
+    # the same cleanup - see pdf_transport.
+    upload_pdfs = pdf_transport.use_files_api(sum(d.size_bytes for d in pdf_documents))
+    pdf_blocks: list[DocumentBlockParam] = (
+        []
+        if upload_pdfs
+        else [pdf_transport.inline_block(documents.stored_file_path(d), d.original_filename) for d in pdf_documents]
+    )
+    pdf_uploads: list[_ExcelUpload] = []
 
     excel_labels = [f"Workbook {i + 1}" for i in range(len(excel_documents))]
     label_to_document = dict(zip(excel_labels, excel_documents))
@@ -660,7 +662,7 @@ def run_cross_format_analysis(selected: list[documents.Document]) -> CrossFormat
 
     def cleanup_excel() -> list[ExcelCleanupResult]:
         results = []
-        for upload in excel_uploads:
+        for kind, upload in [*(("excel", u) for u in excel_uploads), *(("pdf", u) for u in pdf_uploads)]:
             try:
                 client.files.delete(upload.file_id)
                 succeeded = True
@@ -672,6 +674,7 @@ def run_cross_format_analysis(selected: list[documents.Document]) -> CrossFormat
                     document_filename=upload.document.original_filename,
                     attempted=True,
                     succeeded=succeeded,
+                    kind=kind,
                 )
             )
         return results
@@ -711,6 +714,29 @@ def run_cross_format_analysis(selected: list[documents.Document]) -> CrossFormat
             return upload_fail("upload_failed", f"{_ERROR_MESSAGES['upload_failed']} ({exc})")
 
         excel_uploads.append(_ExcelUpload(document=document, file_id=uploaded.id))
+
+    if upload_pdfs:
+        for document in pdf_documents:
+            try:
+                file_id = pdf_transport.upload(client, documents.stored_file_path(document), document.original_filename)
+            except anthropic.AuthenticationError:
+                return upload_fail("invalid_api_key", _ERROR_MESSAGES["invalid_api_key"])
+            except anthropic.RateLimitError:
+                return upload_fail("rate_limit", _ERROR_MESSAGES["rate_limit"])
+            except anthropic.APIStatusError as exc:
+                if is_insufficient_credit_error(exc):
+                    return upload_fail("insufficient_credit", _ERROR_MESSAGES["insufficient_credit"])
+                if exc.status_code == 413:
+                    return upload_fail("oversized_pdf_total", _ERROR_MESSAGES["oversized_pdf_total"])
+                return upload_fail(
+                    "upload_failed", f"{_ERROR_MESSAGES['upload_failed']} API error ({exc.status_code}): {exc.message}"
+                )
+            except anthropic.APIConnectionError:
+                return upload_fail("network_error", _ERROR_MESSAGES["network_error"])
+            except Exception as exc:  # pragma: no cover - defensive catch-all
+                return upload_fail("upload_failed", f"{_ERROR_MESSAGES['upload_failed']} ({exc})")
+            pdf_uploads.append(_ExcelUpload(document=document, file_id=file_id))
+        pdf_blocks = [pdf_transport.file_block(u.file_id, u.document.original_filename) for u in pdf_uploads]
 
     container_blocks: list[ContainerUploadBlockParam] = [
         {"type": "container_upload", "file_id": upload.file_id} for upload in excel_uploads

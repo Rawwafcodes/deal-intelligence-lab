@@ -9,10 +9,11 @@ ReconciliationCapabilityTests convention exactly.
 
 import sys
 import tempfile
+import types
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -21,6 +22,7 @@ import documents
 import integrity_review
 import integrity_reviews
 import mandates
+import pdf_transport
 import store
 import tasks
 import version_dependencies
@@ -181,6 +183,47 @@ class IntegrityReviewValidateSelectionTests(unittest.TestCase):
         target = self._target(self._wp("memo.pdf"))
         error = integrity_review.validate_selection(target, [self._source(self._doc("model.xlsx", XLSX_BYTES))], [])
         self.assertIsNone(error)
+
+
+class IntegrityReviewPdfTransportTests(IntegrityReviewValidateSelectionTests):
+    """Task 18.3 follow-up: PDFs over the inline cap go through the Files API
+    (referenced by file_id) and are deleted afterwards, like Excel sources."""
+
+    def _run(self, inline_cap, upload_side_effect=None):
+        from tests.test_cross_format_analysis import _stream_cm, fake_response, fake_text_block
+        client = MagicMock()
+        client.files.upload.side_effect = upload_side_effect or [types.SimpleNamespace(id=f"file_{i}") for i in range(5)]
+        client.files.delete.return_value = types.SimpleNamespace(id="x", type="file_deleted")
+        client.messages.stream.side_effect = [_stream_cm(fake_response([fake_text_block("## Summary\nNo issues.")]))]
+        target = self._target(self._wp("memo.pdf"))
+        sources = [self._source(self._doc("im.pdf"))]
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+                patch.object(pdf_transport, "MAX_INLINE_PDF_SOURCE_BYTES", inline_cap), \
+                patch("integrity_review.anthropic.Anthropic", return_value=client):
+            outcome = integrity_review.run_integrity_review(target, sources, [], "")
+        return outcome, client
+
+    def test_small_pdfs_stay_inline(self):
+        outcome, client = self._run(inline_cap=10 * 1024 * 1024)
+        self.assertTrue(outcome.transmitted)
+        client.files.upload.assert_not_called()
+        content = client.messages.stream.call_args.kwargs["messages"][0]["content"]
+        self.assertEqual(content[0]["source"]["type"], "base64")
+
+    def test_pdfs_over_inline_cap_are_uploaded_and_deleted(self):
+        outcome, client = self._run(inline_cap=1)
+        self.assertTrue(outcome.transmitted)
+        self.assertEqual(client.files.upload.call_count, 2)  # submission + source
+        content = client.messages.stream.call_args.kwargs["messages"][0]["content"]
+        self.assertEqual([b["source"]["type"] for b in content[:2]], ["file", "file"])
+        self.assertEqual([c.kind for c in outcome.excel_cleanup], ["pdf", "pdf"])
+        self.assertEqual(client.files.delete.call_count, 2)
+
+    def test_failed_second_upload_deletes_the_first(self):
+        outcome, client = self._run(inline_cap=1, upload_side_effect=[types.SimpleNamespace(id="file_a"), RuntimeError("x")])
+        self.assertFalse(outcome.success)
+        client.files.delete.assert_called_once_with("file_a")
+        client.messages.stream.assert_not_called()
 
 
 class IntegrityReviewCapabilityTests(unittest.TestCase):

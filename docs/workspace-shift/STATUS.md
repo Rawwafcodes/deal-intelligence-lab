@@ -6933,3 +6933,39 @@ deferred to the pilots** (the founder's trust recorded as their position,
 not as evidence). Next: M19's architecture decision report (no provisioning
 or spend until approved, per D20) and the large-PDF limitation found in
 Track B.
+
+## 2026-09-27 — Large-PDF limitation fixed (Track B failure mode)
+
+**Authorization**: founder "record it and start M19 + the large-PDF fix".
+
+**Problem** (found in Track B): every PDF was sent inline as base64, and the
+combined inline payload is capped at 23.5 MB to stay under Anthropic's 32 MB
+request limit - so any package above that (the 54 MB scanned الكعكية
+technical offer) could not be analysed at all.
+
+**Fix**: new `pdf_transport.py`. Inline base64 stays the default (it leaves
+no persistent copy at Anthropic, per `pdf_inspection`'s design note). When a
+request's PDFs together exceed the inline cap, they are uploaded to the Files
+API, referenced by `file_id`, and deleted on every exit path by the existing
+cleanup - the same pattern already used for Excel workbooks; cleanup records
+now carry `kind: "pdf" | "excel"`. New hard ceiling: 500 MB per file and in
+total (API page/context limits beyond that are reported by the API). Applied
+to `cross_format_analysis` (reconciliation) and `integrity_review` - the two
+capabilities mandates run. Not changed: `pdf_inspection` and
+`cross_document_analysis` (single-purpose legacy paths, still inline-only).
+
+**Data-handling change, disclosed**: for oversized packages only, a temporary
+copy of each PDF exists in Anthropic's Files API storage for the duration of
+the run, then is deleted.
+
+**Verification**: 7 new tests (inline stays inline; over-cap uploads,
+references by file id and deletes; a failed upload still deletes earlier
+uploads; too-large rejected before transmission) in
+`test_cross_format_analysis` and `test_integrity_review`; full backend
+suite OK; mypy clean on the changed modules. Live, on the synthetic deal in
+the disposable database: a 26 MB PDF (previously rejected) reconciled against
+the model workbook through the real UI - run succeeded in 81 s
+(claude-sonnet-5, 41,251 / 5,426 tokens), still found the planted EBITDA
+mismatch; cleanup record shows both uploads deleted, and a Files API listing
+afterwards showed **0** files remaining. الكعكية itself was deliberately not
+run - it stays reserved as the next genuinely blind case (key before any run).
