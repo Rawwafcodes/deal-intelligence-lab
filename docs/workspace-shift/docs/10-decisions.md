@@ -484,6 +484,31 @@ now all exercised end to end with real content, which is new evidence for
 that decision but not a decision; Track B, which needs founder-supplied
 authorized historical deals and locked answer keys before it can start.
 
+D22 (added 2026-09-27, Task 18.2) Founder decisions: **"accepted,
+canonical, all is authorised. you can do it for الكعكية deal + universal
+logic"**:
+
+1. **M18 Track A accepted.** The founder-acceptance output Track A
+   requires, on the evidence in `tasks/18.2-track-a-acceptance-pack.md`
+   (every S01-S20 scenario passing except the S01/S03 organization and
+   team gaps already assigned to M19/M20). Accepted terminology and
+   navigation are those listed in the pack's section 6.
+2. **Readiness, Reassessments, Assertions and Triggers are canonical**
+   surfaces #26-29 (option (a) of `07-surface-reconciliation.md`'s
+   non-canonical question), added to
+   `02-experience-and-information-architecture.md`'s table.
+3. **Track B authorized** on two real deals the founder named - الكعكية
+   (the Al-Kaakiyah land-investment competition bid material) and
+   Universal Logic - including sending their documents to Anthropic and
+   the paid calls needed. This authorizes the work; it does not waive
+   Track B's own methodology in `13-post-m17-roadmap.md` (answer keys
+   created and locked before running, answer-key content kept out of
+   model requests, no LLM grading of qualitative correctness, provisional
+   thresholds recorded and approved before scoring). An AI agent cannot
+   author or read the answer keys without breaking that methodology and
+   `answer_keys.py`'s own blindness guarantee; the implications are set
+   out in `tasks/18.3-track-b-plan.md`.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

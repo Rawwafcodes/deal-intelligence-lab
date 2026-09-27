@@ -161,6 +161,9 @@ file**.
 | Monitoring / Triggers | Deal | `/projects/:id/triggers` (`Triggers.tsx`) | `triggers.py` (Task 15.3) | complete (Task 17.5) |
 | Assertions | Deal | `/projects/:id/assertions` (`Assertions.tsx`) | `assertion_ledger.py` (Task 16.2, wired per D15) | complete (Task 17.10) |
 
+*Resolved 2026-09-27 by D22 (option a below): these are now canonical
+surfaces #26-29 in `02-experience-and-information-architecture.md`.*
+
 All four are deal-scoped deep pages, the same tier as Document Detail or
 Decision Package - not primary navigation, and not proposed as new
 top-level tabs. Two ways to resolve this, presented rather than chosen:
@@ -270,8 +273,10 @@ milestone, the founder must decide on:
    (upload documents and document versions), not a cosmetic one - but
    building it is implementation, which this reconciliation (a
    documentation/planning task) does not do.
-2. **The four non-canonical surfaces above** - amend the canonical table
-   (option a) or declare them a disclosed exception (option b)?
+2. **The four non-canonical surfaces above** - *resolved 2026-09-27 by
+   D22: option (a), added to the canonical table as #26-29.* Original
+   question: amend the canonical table (option a) or declare them a
+   disclosed exception (option b)?
 3. **Team and Access / Organization Settings / Usage and Billing
    (#23-25)** - confirmed genuinely absent, not merely unlinked. M18
    Track A's S01 (create/enter an organization) and S03 (establish users

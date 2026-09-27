@@ -63,7 +63,7 @@ and deliverables. An AI draft must never impersonate an approved human position.
 
 ## Target route/page inventory
 
-This is a target information architecture, not a claim that 25 independent
+This is a target information architecture, not a claim that 29 independent
 screens are implemented or that all should appear in navigation.
 
 | # | Surface | Scope | Intended form |
@@ -93,6 +93,15 @@ screens are implemented or that all should appear in navigation.
 | 23 | Team and Access | Organization/deal | Administration page |
 | 24 | Organization Settings | Organization | Administration page |
 | 25 | Usage and Billing | Organization | Administration page |
+| 26 | Readiness | Deal/workspace | Deep page (contextual link from Findings) |
+| 27 | Reassessments | Deal | Deep page (contextual link from Findings) |
+| 28 | Assertions | Deal | Deep page (contextual link from Findings) |
+| 29 | Triggers | Deal | Deep page (reached from the Monitoring mandate structure) |
+
+Surfaces 26-29 were added 2026-09-27 by founder decision D22: they were
+built and routed before this table knew about them (see
+`07-surface-reconciliation.md`'s non-canonical section) and are now part of
+the canonical inventory rather than a disclosed exception.
 
 Create/edit/upload/select-evidence actions should usually use a focused drawer
 or dialog rather than spawning another full page.

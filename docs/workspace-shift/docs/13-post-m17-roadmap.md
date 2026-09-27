@@ -266,7 +266,7 @@ M18 closes only when:
   the four non-canonical surfaces remain open founder decisions per the
   section above, and must be closed (either direction) before this gate
   is satisfied (*2026-09-27: Document Detail closed by D21 - built in M18;
-  the four non-canonical surfaces remain open*);
+  the four non-canonical surfaces closed by D22 - made canonical #26-29*);
 - the founders make an explicit proceed/remediate/stop decision.
 
 ### M18 exclusions
@@ -729,7 +729,7 @@ not close it.
   architecture.md`'s canonical 25-surface table to add the four
   non-canonical destinations `07-surface-reconciliation.md` found
   (Readiness, Reassessments, Triggers, Assertions), or declare them a
-  disclosed exception instead.
+  disclosed exception instead. *Resolved 2026-09-27 by D22: added as canonical #26-29.*
 - Whether Document Detail's current raw-file-link form (canonical
   surface #13) is sufficient for M18 founder acceptance, or must gain
   in-app version-history/citation-backlink context before M18 closes. *Resolved 2026-09-27 by D21: built in M18.*
