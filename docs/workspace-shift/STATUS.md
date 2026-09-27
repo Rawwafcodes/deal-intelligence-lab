@@ -6,17 +6,20 @@ use the newest dated entry and the actual checkout for current implementation
 state.
 
 **2026-09-27 update**: a founder-directed product-integration program (M17)
-is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
-entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phases A, B, C, D and E (17.1-17.12) are complete**;
-the founder decided D15 (`docs/10-decisions.md`) on the assertion-
-ledger/reconciler question; Task 17.11 closed the last Phase D gap
-(Findings display unified across workspace origins); Task 17.12's live
-screenshot audit found and fixed a real accessibility bug (near-invisible
-link text). **Phase F (local collaborative proof) is next and final**. This
-supersedes the "Current task"/"Next recommended" lines below as the
-up-to-date pointer; see this file's own newest dated entries (bottom)
-for full detail.
+is now **complete - all six phases (A-F, Tasks 17.1-17.13)** - see
+`docs/workspace-shift/docs/08-roadmap.md`'s own M17 entry and
+`docs/workspace-shift/tasks/17.0-product-integration-program.md` for the
+full plan and closing state. The founder decided D15 (`docs/10-
+decisions.md`) on the assertion-ledger/reconciler question. Task 17.13's
+live two-identity verification (Phase F, final) found and disclosed two
+real gaps requiring a founder decision before any further work touches
+them: an expanded restricted-view boundary gap and a permission-unaware
+Approve/Return button in `Work.tsx` - see this file's own 2026-09-27
+Task 17.13 entry (bottom) for full detail. **This program's own final
+completion report follows this file's newest entries.** This supersedes
+the "Current task"/"Next recommended" lines below as the up-to-date
+pointer; see this file's own newest dated entries (bottom) for full
+detail.
 
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
@@ -5732,3 +5735,91 @@ directive's sequencing. This is the program's final phase. Continuing
 automatically.
 
 **Permissions needed**: none identified yet for Phase F.
+
+## 2026-09-27 — Task 17.13 executed (local collaborative proof) - closes Phase F, closes the M17 program
+
+Scoped Phase F down to the scenarios in `docs/09-acceptance.md`'s
+T01-T20 that a frontend swap could actually break, rather than
+re-deriving all twenty: fourteen (T01, T02, T07-T12, T14-T17, T19-T20)
+are backend-enforced properties unaffected by which frontend calls the
+same API and already covered by the 870-test backend suite; T06
+(concurrent edit conflict) has confirmed existing backend test coverage
+(`test_document_versions.py`/`test_validation_endpoints.py`/
+`test_workspace_endpoints.py`/`test_workspaces.py`); T04's core
+guarantee was already proven live in Task 13.4 and nothing since has
+touched the enforcement code. That left T03, T13, and T18 as the
+genuinely applicable subset, plus whatever T04-adjacent gap a fresh
+look at the React `Work.tsx` (not the old static page 13.4 verified)
+might surface.
+
+Granted `reviewer`/`external_executive` real membership on the
+"Baseline Smoke Test Deal" project through the real `POST .../
+memberships` endpoint (same method as Task 13.4, not a direct DB
+write) - `lead`/`analyst` already held it. Ran real Playwright scripts
+against the actually-running app using independent browser contexts
+each carrying its own real `dl_session` cookie (genuinely concurrent,
+independently authenticated sessions, not one session switched in
+place):
+
+- **T03 PASS**: two separate contexts (reviewer, external_executive)
+  navigated to the same project's Findings destination each show their
+  own correct, distinct identity in the sidebar switcher - no bleed.
+- **T13 PASS**: confirmed via this program's own already-captured live
+  screenshots - real actor names tied to real comments/submissions in
+  Overview's Material changes and the Activity destination;
+  `Assertions.tsx` (Task 17.10) cross-references real work-
+  product/document identity rather than raw ids.
+- **T18 PASS (spot check)**: three keyboard `Tab` presses from page
+  load land on a real interactive element with a real, visible 2px
+  focus ring rendered in the Meridian `--ring` token color
+  (confirmed via computed style, not source inspection).
+
+**Two real gaps found and disclosed, not fixed** (both are policy/
+permission-model decisions outside a verification task's authority per
+this program's own stop-and-ask conditions):
+1. Direct `curl` against the real running server confirmed `GET /api/
+   projects/<id>/workspaces` returns `200` with full data for the
+   `external_executive` identity - `server.py`'s workspace routes gate
+   on `_authorized_project` (deal membership only), not role. Task
+   13.4 (2026-09-17) already disclosed this for the old static page;
+   it now covers seven more real destinations this program itself
+   built (Findings, Documents, Decision Package, Readiness,
+   Reassessments, Assertions, Triggers) - only `Activity.tsx`
+   (Task 17.6) was written to re-check `overview.restricted`
+   client-side. The gap has grown, not shrunk.
+2. `Work.tsx`'s Approve/Return buttons render for every role and rely
+   entirely on the backend's real 403 to stop an unauthorized click -
+   a UX-clarity gap, not a security one (the backend guarantee is
+   intact and already proven). Fixing it needs a "what is my own role
+   here" primitive that doesn't yet exist on the frontend.
+
+**Files changed**: none to application code - this task is pure
+verification. New `docs/workspace-shift/tasks/17.13-collaborative-
+proof.md`. Real data changed and left in place, intentionally (matching
+Task 13.4's own precedent): the "Baseline Smoke Test Deal" project's
+real `reviewer`/`external_executive` memberships.
+
+**Decisions**: none added to `docs/10-decisions.md` - both findings are
+recorded as open questions for the founder, not resolved here.
+
+**Blockers**: none for this task's own scope. **The two disclosed gaps
+are real blockers for any future task that touches deal-scoped
+destination access or `Work.tsx`'s review UI**, until the founder
+decides the intended permission model.
+
+**Phases A through F (17.1-17.13) are now complete - the M17 product-
+integration program itself is complete.** See this file's own final
+completion report, immediately following this entry, for the full
+closing state (route map, test/build results, remaining gaps, and the
+founder decisions this program is now waiting on).
+
+**Permissions needed**: a founder decision on the two disclosed gaps
+above (destination-level role gating; `Work.tsx` button visibility) -
+both are the program's own recommended next task, not authorized to
+implement unilaterally. Separately: the remote has no
+`claude/practical-planck-bh7kr2` branch at all yet (confirmed via
+`git fetch`) - all 13 commits of this entire program (`149c4a0` through
+this task's own commit) are held locally, per this program's own
+standing instruction not to push without separate explicit approval.
+Pushing them is itself a decision for the founder, not this task's to
+make.
