@@ -131,6 +131,11 @@ class HostedAuthTests(unittest.TestCase):
         status, _, _ = self._get("/api/session", token=_token(sub="user_imposter", email="owner@example.com"))
         self.assertEqual(status, 403)
 
+    def test_seeded_dev_identities_can_never_be_signed_into(self):
+        # lead@local.dev is a seeded org admin in every database.
+        status, _, _ = self._get("/api/session", token=_token(sub="user_devlead", email="lead@local.dev"))
+        self.assertEqual(status, 403)
+
     def test_rejected_tokens(self):
         cases = {
             "expired": _token(exp_in=-60),

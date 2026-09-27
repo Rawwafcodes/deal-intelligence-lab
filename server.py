@@ -38,6 +38,7 @@ import inspections
 import integrity_review
 import integrity_reviews
 import mandates
+import observability
 import multipart
 import overview
 import pdf_inspection
@@ -4177,6 +4178,7 @@ def worker_from_env() -> "mandates.Worker":
 
 
 def main() -> None:
+    observability.init("web")
     init_databases()
     # Task 19.2 (M19): locally the worker runs in this process, as it always
     # has. In a hosted deployment the worker runs as its own service
@@ -4186,6 +4188,13 @@ def main() -> None:
     if mandate_worker is not None:
         mandate_worker.start()
     host = os.environ.get("DEAL_LAB_HOST", "127.0.0.1")
+    # Task 19.6: the dev identity mode silently signs every caller in as the
+    # default admin - only ever acceptable on the loopback interface.
+    if AUTH_MODE == "dev" and host not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit(
+            "Refusing to start: DEAL_LAB_AUTH_MODE=dev only runs on localhost. "
+            "Set DEAL_LAB_AUTH_MODE=clerk for any other address."
+        )
     port = int(os.environ.get("PORT", PORT))
     httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"Deal Intelligence Lab running at http://localhost:{port}")

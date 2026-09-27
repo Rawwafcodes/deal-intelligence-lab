@@ -113,6 +113,8 @@ class Session:
 
 
 DEAL_ROLES = ("analyst", "reviewer", "deal_lead", "external_executive")
+# Domain of the seeded development identities; never linkable by hosted sign-in.
+DEV_SEED_EMAIL_DOMAIN = "local.dev"
 ORG_ROLES = ("admin", "member")
 
 
@@ -293,6 +295,11 @@ def resolve_signed_in_user(external_auth_id: str, email: str | None) -> User | N
     if linked is not None:
         return linked
     if not email:
+        return None
+    # The seeded development identities (lead@local.dev - an org admin - and
+    # friends) exist in every database. `.dev` is a real top-level domain, so
+    # whoever controlled local.dev could otherwise sign in as them.
+    if email.strip().lower().endswith("@" + DEV_SEED_EMAIL_DOMAIN):
         return None
     conn = store.get_connection()
     try:

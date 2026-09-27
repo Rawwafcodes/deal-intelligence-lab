@@ -1,0 +1,96 @@
+# Task 19.6 (M19): tests, type checks, lint and an image build on every push
+# and pull request. Deploys nothing - deploying to staging is a separate,
+# founder-approved step (D25).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deal_lab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      # Same connection path a hosted database uses.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/deal_lab
+      DEAL_LAB_DATA_DIR: ${{ runner.temp }}/deal-lab-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements.txt mypy==2.3.1 types-openpyxl
+      - name: Type-check application modules
+        run: mypy $(git ls-files '*.py' | grep -v -e '^tests/' -e '^docs/')
+      - name: Backend tests
+        run: python -m unittest discover -s tests -t .
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm run lint
+      - run: npm run build
+
+  image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deal_lab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the deployable image (not pushed anywhere)
+        run: docker build -t deal-intelligence-lab:ci .
+      - name: The web image starts, sets up its database and answers its health check
+        run: |
+          docker run -d --name web --network host -e PORT=8080 -e DEAL_LAB_RUN_WORKER=0 \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/deal_lab deal-intelligence-lab:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health; then echo; break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/api/health
+          # Secure by default: without a sign-in token every API route refuses.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/session)" = "401"
+      - name: The worker starts against the same database
+        run: |
+          docker run -d --name worker --network host \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/deal_lab deal-intelligence-lab:ci python worker.py
+          sleep 5
+          test "$(docker inspect -f '{{.State.Running}}' worker)" = "true"
+      - name: Container logs
+        if: always()
+        run: |
+          docker logs web || true
+          docker logs worker || true

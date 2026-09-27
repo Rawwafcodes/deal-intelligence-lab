@@ -22,7 +22,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import psycopg2
 import psycopg2.extras
@@ -31,6 +31,16 @@ PG_HOST = os.environ.get("DEAL_LAB_PG_HOST", str(Path(__file__).parent / "pgsock
 PG_PORT = int(os.environ.get("DEAL_LAB_PG_PORT", "5544"))
 PG_DBNAME = os.environ.get("DEAL_LAB_PG_DBNAME", "deal_lab")
 PG_USER = os.environ.get("DEAL_LAB_PG_USER", os.environ.get("USER", "postgres"))
+# Task 19.6 (M19): a hosted database (Neon, per D25) is given as one
+# connection URL carrying the password and `sslmode=require`. When set it
+# is used as-is and the DEAL_LAB_PG_* settings above are ignored.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+
+def _connect(**kwargs: Any) -> "psycopg2.extensions.connection":
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL, **kwargs)
+    return psycopg2.connect(host=PG_HOST, port=PG_PORT, dbname=PG_DBNAME, user=PG_USER, **kwargs)
 
 # The active schema. get_connection() re-reads this on every call, exactly
 # like the pre-11.3a DB_PATH global did for the SQLite file path - tests
@@ -83,13 +93,7 @@ class Project:
 
 
 def get_connection() -> _ConnectionWrapper:
-    conn = psycopg2.connect(
-        host=PG_HOST,
-        port=PG_PORT,
-        dbname=PG_DBNAME,
-        user=PG_USER,
-        cursor_factory=psycopg2.extras.RealDictCursor,
-    )
+    conn = _connect(cursor_factory=psycopg2.extras.RealDictCursor)
     with conn.cursor() as cur:
         cur.execute(f'SET search_path TO "{SCHEMA}", public')
     return _ConnectionWrapper(conn)
@@ -98,7 +102,7 @@ def get_connection() -> _ConnectionWrapper:
 def _admin_connection() -> "psycopg2.extensions.connection":
     """A plain (non-wrapped, no search_path set) connection for schema-level
     admin operations - creating/dropping the schema itself, not tables."""
-    return psycopg2.connect(host=PG_HOST, port=PG_PORT, dbname=PG_DBNAME, user=PG_USER)
+    return _connect()
 
 
 def ensure_schema(schema: str) -> None:

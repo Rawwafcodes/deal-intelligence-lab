@@ -130,6 +130,10 @@ class AuthorizationMatrixTests(unittest.TestCase):
         triggers.init_triggers_db()
         mandates.init_mandates_db()
         assertion_ledger.init_assertion_ledger_db()
+        # Task 19.6: the list above had drifted (no deal-brief table), which
+        # only surfaced on a fresh database - the search_path fallback to
+        # `public` hid it locally. The server's own full setup can't drift.
+        server.init_databases()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]

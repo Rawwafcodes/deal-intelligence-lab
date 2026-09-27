@@ -17,10 +17,12 @@ from __future__ import annotations
 import signal
 import threading
 
+import observability
 import server
 
 
 def main() -> None:
+    observability.init("worker")
     server.init_databases()
     worker = server.worker_from_env()
     stop = threading.Event()

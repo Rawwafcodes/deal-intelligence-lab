@@ -6,3 +6,4 @@ psycopg2-binary==2.9.13
 boto3==1.43.103
 PyJWT[crypto]==2.15.0
 cryptography==50.0.1
+sentry-sdk==2.70.0

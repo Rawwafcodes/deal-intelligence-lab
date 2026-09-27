@@ -7131,3 +7131,47 @@ Reviewer, removed them; an analyst saw neither admin control; axe WCAG 2.1
 A/AA: no violations on Team or the deal overview. A server SPA-route gap
 (`/team` returned the API 404) was found live and fixed, with the SPA-route
 test extended.
+
+## 2026-09-27 — M19 code change 4: environment-only configuration, deploy and CI files (Task 19.6)
+
+Completes the report's § 3 provider-independent changes.
+
+- **`DATABASE_URL`** (`store.py`): a hosted database's single connection URL
+  (password, `sslmode=require`) is used as-is when set; local `DEAL_LAB_PG_*`
+  unchanged otherwise. Verified connecting through it; the full suite passes
+  through it against a fresh empty database.
+- **Sentry** (`observability.py`, `sentry-sdk` pinned): on only when
+  `SENTRY_DSN` is set; no local variables in stack traces, no request bodies,
+  no personal data (confirmed from the live client options).
+- **`Dockerfile`** (one image; web by default, worker via `python worker.py`),
+  `.dockerignore` (no data, secrets, venv, tests or docs in the image). The
+  image **defaults to hosted sign-in** (`DEAL_LAB_AUTH_MODE=clerk`), runs as a
+  non-root user, and serves a fresh React build with the Clerk key baked in.
+- **Start-up guard**: `server.py` refuses to start in dev identity mode on any
+  non-loopback address (dev mode signs every caller in as the default admin).
+- **Seeded dev identities can never be signed into** in hosted mode:
+  `lead@local.dev` (an org admin) exists in every database and `.dev` is a
+  real TLD, so `@local.dev` emails are never linked by sign-in.
+- **CI** (`.github/workflows/ci.yml`): backend (Postgres 16 via
+  `DATABASE_URL`, mypy on application modules, full unittest suite), frontend
+  (`tsc -b`, lint, build), and image (build, start against Postgres, assert
+  `/api/health` 200 and `/api/session` 401 without a token, worker container
+  stays up). Deploys nothing.
+- **`.env.example`** documents every setting; **`docs/deployment/staging-setup.md`**
+  is the founder's account and configuration checklist (Neon *direct*
+  connection string - a pooler breaks per-connection settings; R2 EU endpoint;
+  Clerk `email` session claim; Railway web/worker services; first-admin
+  bootstrap).
+
+**Found and fixed while verifying**: `tests/test_authorization_matrix.py` had
+drifted from the real schema (no deal-brief table) and only passed locally
+because `search_path` falls back to `public`, where the real tables live; it
+failed on a fresh database. It now runs the server's own `init_databases()`.
+The same fallback is the most likely cause of the intermittent single-test
+failure seen this session; a follow-up task to make test isolation strict has
+been offered to the founder.
+
+**Verification**: full backend suite OK locally and against a fresh empty
+database via `DATABASE_URL` (959 tests); mypy clean on changed modules; the
+Dockerfile could not be built locally (no Docker installed) - the CI image job
+builds and starts it on every push.

@@ -1,0 +1,19 @@
+# Never in the image: local data, databases, secrets, dependencies built
+# elsewhere, and development-only material.
+.git
+.env
+.env.*
+!.env.example
+venv/
+**/node_modules/
+frontend/dist/
+pgdata/
+pgsocket/
+pgdata.log
+data/
+__pycache__/
+**/__pycache__/
+tests/
+docs/
+scripts/
+*.md
