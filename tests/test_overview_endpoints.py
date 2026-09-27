@@ -22,6 +22,7 @@ from tests.test_identity_endpoints import _Client
 
 import cross_format_analyses
 import deal_briefs
+import deliverables
 import documents
 import identity
 import mandates
@@ -80,6 +81,7 @@ class OverviewEndpointTests(unittest.TestCase):
         workspaces.init_workspaces_db()
         version_dependencies.init_version_dependencies_db()
         mandates.init_mandates_db()
+        deliverables.init_deliverables_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
@@ -243,6 +245,50 @@ class OverviewEndpointTests(unittest.TestCase):
         self.assertEqual(len(body["approved_deliverables"]), 1)
         self.assertEqual(body["approved_deliverables"][0]["task_title"], "Approved memo")
         self.assertEqual(body["approved_deliverables"][0]["work_product"]["id"], approved_wp.id)
+
+    def test_external_executive_is_told_when_approved_package_sources_change(self):
+        # Founder decision (2026-09-27): a yes/no flag only - never the
+        # internal staleness reason, which names documents and versions.
+        pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", b"%PDF-1.4\n%test\n%%EOF").document
+        xlsx_doc = documents.save_uploaded_file(self.project.id, "model.xlsx", "", b"PK\x03\x04fake-xlsx").document
+        analysis = cross_format_analyses.create_cross_format_analysis(
+            project_id=self.project.id,
+            pdf_document_ids=[pdf_doc.id], pdf_document_filenames=["im.pdf"], pdf_document_checksums=[pdf_doc.sha256],
+            excel_document_ids=[xlsx_doc.id], excel_document_filenames=["model.xlsx"],
+            excel_document_checksums=[xlsx_doc.sha256],
+            status="success", transmitted=True, analysis_seconds=1.0, model="claude-opus-5",
+            mandate_version="1", stop_reason="end_turn", input_tokens=100, output_tokens=50,
+            code_execution_requests=0, error_type=None, error_message=None,
+            segments=[_text_segment(FINDINGS_TEXT)], tool_trace=None, excel_cleanup=None, excel_verification=None,
+        )
+        _, ws = self._post(f"/api/projects/{self.project.id}/cross-format-analyses/{analysis.id}/workspace")
+        package = deliverables.create_deliverable_version(
+            project_id=self.project.id, workspace_id=ws["id"], mandate_id=None, run_id=None, attempt_id=None,
+            title="Decision package", executive_summary="Proceed.", recommendation="Draft: proceed.",
+            key_evidence_and_findings="", outstanding_and_unresolved_matters="", risks_and_limitations="",
+            emphasis="", source_finding_ids=[], source_request_ids=[], model="claude-opus-5",
+            draft_template_version="2", input_tokens=None, output_tokens=None,
+        )
+        deliverables.approve_deliverable_version(ws["id"], package.id, "lead-1")
+        version_dependencies.record_dependencies(
+            "deliverable_version", package.id, [("document", pdf_doc.id, pdf_doc.current_version_id)]
+        )
+        external = next(u for u in identity.list_users() if u.email == "external@local.dev")
+        identity.add_deal_membership(self.project.id, external.id, "external_executive")
+        client = _Client(self.port)
+        client.post("/api/dev/session", {"user_id": external.id})
+
+        _, body = client.get(f"/api/projects/{self.project.id}/overview")
+        [shared] = body["approved_decision_packages"]
+        self.assertIs(shared["sources_changed_since_approval"], False)
+
+        new_version = documents.add_version(self.project.id, pdf_doc.id, b"%PDF-1.4\n%revised\n%%EOF")
+        version_dependencies.mark_superseded("document", pdf_doc.id, new_version.document.current_version_id)
+        _, body = client.get(f"/api/projects/{self.project.id}/overview")
+        [shared] = body["approved_decision_packages"]
+        self.assertIs(shared["sources_changed_since_approval"], True)
+        self.assertNotIn("reason", shared)
+        self.assertNotIn(pdf_doc.id, json.dumps(shared))
 
     # -- workspace overview -----------------------------------------------
 

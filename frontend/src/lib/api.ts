@@ -91,6 +91,8 @@ export interface Workspace {
   integrity_review_id: string | null
   created_at: string
   updated_at: string
+  // Readable name from the analysis that produced it (list route only).
+  label?: string
 }
 
 export async function listWorkspaces(projectId: string): Promise<Workspace[]> {
@@ -1395,6 +1397,9 @@ export interface ApprovedDecisionPackage {
   key_evidence_and_findings: string
   outstanding_and_unresolved_matters: string
   risks_and_limitations: string
+  // The package's sources changed after approval; the team hasn't yet
+  // approved an updated position. No internal detail is exposed.
+  sources_changed_since_approval: boolean
 }
 
 export interface RestrictedDealOverview {

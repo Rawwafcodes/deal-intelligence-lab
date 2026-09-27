@@ -20,6 +20,7 @@ import {
   type WorkspaceBundle,
   type WorkspaceRequest,
 } from "@/lib/api"
+import { initialWorkspaceId, useWorkspaceSelection, withWorkspace, workspaceLabel } from "@/lib/workspaceSelection"
 import { useCapability } from "@/lib/dealAccess"
 import { labelFor, pinnedVersionsFromAnalysis } from "@/lib/findingDisplay"
 
@@ -156,6 +157,8 @@ export function Findings() {
   const { projectId } = useParams<{ projectId: string }>()
   const [workspaces, setWorkspacesList] = useState<Workspace[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const workspaceSelection = useWorkspaceSelection()
+  const requestedWorkspaceId = workspaceSelection.requestedId
   const [bundle, setBundle] = useState<WorkspaceBundle | null>(null)
   const [bundleError, setBundleError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -178,10 +181,10 @@ export function Findings() {
       .then((list) => {
         const sorted = [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
         setWorkspacesList(sorted)
-        setSelectedId(sorted[0]?.id ?? null)
+        setSelectedId(initialWorkspaceId(sorted, requestedWorkspaceId))
       })
       .catch(() => toast.error("Could not load this deal's workspaces."))
-  }, [projectId])
+  }, [projectId, requestedWorkspaceId])
 
   useEffect(() => {
     if (!projectId || !selectedId) return
@@ -239,9 +242,9 @@ export function Findings() {
           <p className="mt-1 text-sm text-muted-foreground">
             {bundle ? `${bundle.summary.total_findings} finding${bundle.summary.total_findings === 1 ? "" : "s"}` : " "}
             {" · "}
-            <Link to={`/projects/${projectId}/decision-package`} className="underline">Decision package</Link>
+            <Link to={withWorkspace(`/projects/${projectId}/decision-package`, selectedId)} className="underline">Decision package</Link>
             {" · "}
-            <Link to={`/projects/${projectId}/readiness`} className="underline">Readiness</Link>
+            <Link to={withWorkspace(`/projects/${projectId}/readiness`, selectedId)} className="underline">Readiness</Link>
             {" · "}
             <Link to={`/projects/${projectId}/reassessments`} className="underline">Reassessments</Link>
             {" · "}
@@ -252,12 +255,15 @@ export function Findings() {
           <select
             aria-label="Findings workspace"
             value={selectedId ?? ""}
-            onChange={(event) => setSelectedId(event.target.value)}
+            onChange={(event) => {
+              setSelectedId(event.target.value)
+              workspaceSelection.remember(event.target.value)
+            }}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
           >
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.cross_format_analysis_id ? "Reconciliation" : "Integrity review"} — {new Date(w.created_at).toLocaleDateString()}
+                {workspaceLabel(w)}
               </option>
             ))}
           </select>

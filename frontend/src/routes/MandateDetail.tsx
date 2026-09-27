@@ -36,6 +36,7 @@ import {
   type TaskWithWorkProducts,
   type WorkstreamSummary,
 } from "@/lib/api"
+import { workspaceLabel } from "@/lib/workspaceSelection"
 import { MANDATE_STATUS_LABELS as STATUS_LABELS } from "@/lib/mandateStatus"
 
 // Mirrors mandates.py's own _CAPABILITIES_NEEDING_DOCUMENT_SELECTION: the
@@ -309,6 +310,10 @@ export function MandateDetail() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set())
   const [aiOutcome, setAiOutcome] = useState<PlanProposalOutcome | null>(null)
   const [aiFeedback, setAiFeedback] = useState("")
+  // Task 18.1 follow-up: a failed planner call (bad key, provider error)
+  // stays on the page - it used to be a toast that vanished, which after a
+  // Flexible commission left a blank draft with no sign anything failed.
+  const [aiError, setAiError] = useState<string | null>(null)
   const [tasksWithWorkProducts, setTasksWithWorkProducts] = useState<TaskWithWorkProducts[]>([])
   const [workstreams, setWorkstreams] = useState<WorkstreamSummary[]>([])
   const [currentBrief, setCurrentBrief] = useState<CurrentBriefVersion | null>(null)
@@ -413,13 +418,14 @@ export function MandateDetail() {
   async function handleProposeWithAi(feedback?: string) {
     if (!projectId || !mandateId) return
     setBusy(true)
+    setAiError(null)
     try {
       const outcome = await proposePlanWithAi(projectId, mandateId, feedback)
       setAiOutcome(outcome.status === "unsupported" ? outcome : null)
       if (outcome.status === "proposed") setAiFeedback("")
       await reload()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "The planner could not be reached.")
+      setAiError(err instanceof Error ? err.message : "The planner could not be reached.")
     } finally {
       setBusy(false)
     }
@@ -540,9 +546,18 @@ export function MandateDetail() {
             </p>
             <div className="mt-4">
               <Button disabled={busy} onClick={() => handleProposeWithAi()}>
-                Propose with AI
+                {busy ? "Proposing…" : aiError ? "Try again" : "Propose with AI"}
               </Button>
             </div>
+            {aiError && (
+              <div role="alert" className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+                <p className="font-medium text-foreground">The AI planner could not propose a plan.</p>
+                <p className="mt-1 text-muted-foreground">{aiError}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Nothing was planned or run. Try again, or propose a plan manually below.
+                </p>
+              </div>
+            )}
             {aiOutcome && aiOutcome.status === "unsupported" && (
               <div className="mt-4 space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-4">
                 <p className="text-sm font-medium text-foreground">
@@ -627,7 +642,7 @@ export function MandateDetail() {
                     {workspaceList.length === 0 && <option value="">No workspaces yet</option>}
                     {workspaceList.map((w) => (
                       <option key={w.id} value={w.id}>
-                        {w.cross_format_analysis_id ? "Reconciliation" : "Integrity review"} — {new Date(w.created_at).toLocaleString()}
+                        {workspaceLabel(w, true)}
                       </option>
                     ))}
                   </select>

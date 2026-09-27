@@ -272,6 +272,17 @@ class WorkspaceEndpointTests(unittest.TestCase):
         self.assertEqual(status, 200)
         payload = json.loads(body)
         self.assertIn(workspace["id"], [w["id"] for w in payload])
+        # Task 18.1 follow-up: each workspace carries a readable label
+        # naming what produced it, not just its kind and date.
+        listed = next(w for w in payload if w["id"] == workspace["id"])
+        self.assertEqual(listed["label"], "Reconciliation: im.pdf vs model.xlsx")
+
+    def test_list_workspaces_labels_integrity_review_workspace(self):
+        workspace = self._open_integrity_review_workspace()
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces")
+        self.assertEqual(status, 200)
+        listed = next(w for w in json.loads(body) if w["id"] == workspace.id)
+        self.assertTrue(listed["label"].startswith("Integrity review"))
 
     def test_list_workspaces_scoped_to_project(self):
         status, body, _ = self._get(f"/api/projects/{self.other_project.id}/workspaces")

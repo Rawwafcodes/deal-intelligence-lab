@@ -523,6 +523,27 @@ class Handler(BaseHTTPRequestHandler):
             "stale_items": stale_items,
         }
 
+    def _workspace_label(self, project_id: str, workspace: "workspaces.Workspace") -> str:
+        """Task 18.1 follow-up: a human-readable name for a findings
+        workspace, derived from the analysis that produced it (the sources
+        reconciled, or the submission reviewed) - the pickers previously
+        showed only "Reconciliation - <date>", so with two workspaces a user
+        could not tell which one they were looking at."""
+        if workspace.cross_format_analysis_id:
+            analysis = cross_format_analyses.get_cross_format_analysis(project_id, workspace.cross_format_analysis_id)
+            if analysis is not None:
+                names = list(analysis.pdf_document_filenames) + list(analysis.excel_document_filenames)
+                if names:
+                    return "Reconciliation: " + " vs ".join(names)
+            return "Reconciliation"
+        if workspace.integrity_review_id:
+            review = integrity_reviews.get_integrity_review(project_id, workspace.integrity_review_id)
+            work_product = (
+                work_products.get_work_product(project_id, review.target_work_product_id) if review is not None else None
+            )
+            return f"Integrity review: {work_product.title}" if work_product is not None else "Integrity review"
+        return "Workspace"
+
     def _deal_overview_restricted(
         self, project: "store.Project", brief: "deal_briefs.BriefVersion | None", role: str | None
     ) -> dict:
@@ -585,6 +606,13 @@ class Handler(BaseHTTPRequestHandler):
                     "key_evidence_and_findings": version.key_evidence_and_findings,
                     "outstanding_and_unresolved_matters": version.outstanding_and_unresolved_matters,
                     "risks_and_limitations": version.risks_and_limitations,
+                    # Founder decision (2026-09-27): an external executive is
+                    # told when an approved position's sources have changed
+                    # since approval - a yes/no only, never the internal
+                    # reason (which names documents and versions).
+                    "sources_changed_since_approval": (
+                        version_dependencies.get_staleness("deliverable_version", version.id) is not None
+                    ),
                 })
         return {
             "project": project.to_dict(),
@@ -1153,7 +1181,10 @@ class Handler(BaseHTTPRequestHandler):
             (project_id,) = workspaces_collection_match.groups()
             if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
-            self._send_json(200, [w.to_dict() for w in workspaces.list_workspaces(project_id)])
+            self._send_json(
+                200,
+                [{**w.to_dict(), "label": self._workspace_label(project_id, w)} for w in workspaces.list_workspaces(project_id)],
+            )
             return
 
         workspace_item_match = _WORKSPACE_ITEM_RE.match(path)

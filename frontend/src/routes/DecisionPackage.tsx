@@ -15,6 +15,7 @@ import {
   type StalenessFlag,
   type Workspace,
 } from "@/lib/api"
+import { initialWorkspaceId, useWorkspaceSelection, withWorkspace, workspaceLabel } from "@/lib/workspaceSelection"
 import { useDealAccess } from "@/lib/dealAccess"
 
 // Deep page (not a sixth primary tab, per docs/product/02's own target
@@ -135,6 +136,8 @@ export function DecisionPackage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [workspacesList, setWorkspacesList] = useState<Workspace[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const workspaceSelection = useWorkspaceSelection()
+  const requestedWorkspaceId = workspaceSelection.requestedId
   const [deliverables, setDeliverablesList] = useState<Deliverable[] | null>(null)
   const [canApprove, setCanApprove] = useState(false)
   // An external executive may view the approved package but not list
@@ -149,10 +152,10 @@ export function DecisionPackage() {
       .then((list) => {
         const sorted = [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
         setWorkspacesList(sorted)
-        setSelectedId(sorted[0]?.id ?? null)
+        setSelectedId(initialWorkspaceId(sorted, requestedWorkspaceId))
       })
       .catch(() => toast.error("Could not load this deal's workspaces."))
-  }, [projectId, role, isExternal])
+  }, [projectId, role, isExternal, requestedWorkspaceId])
 
   useEffect(() => {
     if (!projectId) return
@@ -195,19 +198,22 @@ export function DecisionPackage() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Decision package</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Drafted, reviewable positions for this deal.{" "}
-            <Link to={`/projects/${projectId}/findings`} className="underline">Back to findings</Link>
+            <Link to={withWorkspace(`/projects/${projectId}/findings`, selectedId)} className="underline">Back to findings</Link>
           </p>
         </div>
         {workspacesList.length > 1 && (
           <select
             aria-label="Findings workspace"
             value={selectedId ?? ""}
-            onChange={(event) => setSelectedId(event.target.value)}
+            onChange={(event) => {
+              setSelectedId(event.target.value)
+              workspaceSelection.remember(event.target.value)
+            }}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
           >
             {workspacesList.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.cross_format_analysis_id ? "Reconciliation" : "Integrity review"} — {new Date(w.created_at).toLocaleDateString()}
+                {workspaceLabel(w)}
               </option>
             ))}
           </select>

@@ -160,6 +160,12 @@ function RestrictedDealOverviewView({
                   Version {pkg.version_number}
                   {pkg.approved_at ? ` · approved ${formatDate(pkg.approved_at)}` : ""}
                 </p>
+                {pkg.sources_changed_since_approval && (
+                  <p role="status" className="rounded-md border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-300">
+                    Some source documents have changed since this package was approved. The deal team is reviewing
+                    whether the position needs updating.
+                  </p>
+                )}
                 {[
                   ["Executive summary", pkg.executive_summary],
                   ["Recommendation", pkg.recommendation],
