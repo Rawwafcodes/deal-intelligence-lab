@@ -3953,53 +3953,88 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": f"unknown export: {export_name}"})
 
 
-def main() -> None:
-    store.init_db()
-    documents.init_documents_db()
-    inspections.init_inspections_db()
-    cross_analyses.init_cross_analyses_db()
-    xlsx_inspections.init_xlsx_inspections_db()
-    cross_format_analyses.init_cross_format_analyses_db()
-    validation_cases.init_validation_cases_db()
-    answer_keys.init_answer_keys_db()
-    validation_runs.init_validation_runs_db()
-    evaluations.init_evaluations_db()
-    workspaces.init_workspaces_db()
-    identity.init_identity_db()
-    deal_briefs.init_deal_briefs_db()
-    workstreams.init_workstreams_db()
-    tasks.init_tasks_db()
-    work_products.init_work_products_db()
-    reviews.init_reviews_db()
-    integrity_reviews.init_integrity_reviews_db()
-    deliverables.init_deliverables_db()
-    readiness_assessments.init_readiness_assessments_db()
-    version_dependencies.init_version_dependencies_db()
-    reassessments.init_reassessments_db()
-    triggers.init_triggers_db()
-    mandates.init_mandates_db()
-    golden_set.init_golden_set_db()
-    assertion_ledger.init_assertion_ledger_db()
-    reconciler.init_reconciler_db()
-    # Task 12.2: the durable local worker - a real background thread,
-    # independent of any HTTP request, that executes queued/resumed
-    # mandate runs (see mandates.py's own module docstring and Worker
-    # class). Poll interval is configurable so a real, observable "kill
-    # the server after a run is accepted but before the worker has polled"
-    # window can be demonstrated live without touching production defaults.
-    mandate_worker = mandates.Worker(
-        poll_interval=float(os.environ.get("DEAL_LAB_MANDATE_WORKER_POLL_SECONDS", "0.5"))
+# Arbitrary, fixed key for pg_advisory_lock around schema setup.
+SCHEMA_INIT_LOCK_KEY = 1_918_019_002
+
+
+def init_databases() -> None:
+    """Every module's idempotent schema setup, in dependency order. Shared
+    by the web server and the standalone worker process (worker.py).
+
+    Task 19.2: serialized across processes with a Postgres advisory lock -
+    a web and a worker process starting together (every deploy) otherwise
+    deadlock on concurrent ALTER TABLE ... ADD COLUMN IF NOT EXISTS."""
+    lock_conn = store._admin_connection()
+    try:
+        with lock_conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s)", (SCHEMA_INIT_LOCK_KEY,))
+        store.init_db()
+        documents.init_documents_db()
+        inspections.init_inspections_db()
+        cross_analyses.init_cross_analyses_db()
+        xlsx_inspections.init_xlsx_inspections_db()
+        cross_format_analyses.init_cross_format_analyses_db()
+        validation_cases.init_validation_cases_db()
+        answer_keys.init_answer_keys_db()
+        validation_runs.init_validation_runs_db()
+        evaluations.init_evaluations_db()
+        workspaces.init_workspaces_db()
+        identity.init_identity_db()
+        deal_briefs.init_deal_briefs_db()
+        workstreams.init_workstreams_db()
+        tasks.init_tasks_db()
+        work_products.init_work_products_db()
+        reviews.init_reviews_db()
+        integrity_reviews.init_integrity_reviews_db()
+        deliverables.init_deliverables_db()
+        readiness_assessments.init_readiness_assessments_db()
+        version_dependencies.init_version_dependencies_db()
+        reassessments.init_reassessments_db()
+        triggers.init_triggers_db()
+        mandates.init_mandates_db()
+        golden_set.init_golden_set_db()
+        assertion_ledger.init_assertion_ledger_db()
+        reconciler.init_reconciler_db()
+        # Task 12.2: the durable local worker - a real background thread,
+        # independent of any HTTP request, that executes queued/resumed
+        # mandate runs (see mandates.py's own module docstring and Worker
+        # class). Poll interval is configurable so a real, observable "kill
+        # the server after a run is accepted but before the worker has polled"
+        # window can be demonstrated live without touching production defaults.
+    finally:
+        with lock_conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_unlock(%s)", (SCHEMA_INIT_LOCK_KEY,))
+        lock_conn.close()
+
+def worker_from_env() -> "mandates.Worker":
+    return mandates.Worker(
+        poll_interval=float(os.environ.get("DEAL_LAB_MANDATE_WORKER_POLL_SECONDS", "0.5")),
+        heartbeat_interval=float(os.environ.get("DEAL_LAB_WORKER_HEARTBEAT_SECONDS", "20")),
+        lease_seconds=float(os.environ.get("DEAL_LAB_WORKER_LEASE_SECONDS", "120")),
     )
-    mandate_worker.start()
-    httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Deal Intelligence Lab running at http://localhost:{PORT}")
+
+
+def main() -> None:
+    init_databases()
+    # Task 19.2 (M19): locally the worker runs in this process, as it always
+    # has. In a hosted deployment the worker runs as its own service
+    # (worker.py) and the web service sets DEAL_LAB_RUN_WORKER=0.
+    run_worker = os.environ.get("DEAL_LAB_RUN_WORKER", "1") != "0"
+    mandate_worker = worker_from_env() if run_worker else None
+    if mandate_worker is not None:
+        mandate_worker.start()
+    host = os.environ.get("DEAL_LAB_HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", PORT))
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    print(f"Deal Intelligence Lab running at http://localhost:{port}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        mandate_worker.stop()
+        if mandate_worker is not None:
+            mandate_worker.stop()
         httpd.server_close()
 
 

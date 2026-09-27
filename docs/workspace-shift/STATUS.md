@@ -6984,3 +6984,38 @@ Saudi Arabia today and that Bedrock/Vertex lack the Files API and code
 execution this product uses. Lists four provider-independent code changes
 that come first. **Nothing provisioned, deployed or paid for**; awaiting
 founder approval per D20.
+
+## 2026-09-27 — D25 recorded; M19 code change 1: standalone worker (Task 19.2)
+
+D25: founder approved the stack (D20 hypothesis as refined in Task 19.1),
+staging costs, EU regions for now; Saudi in-Kingdom residency is not a current
+constraint (the product is framed as international); the four
+provider-independent code changes authorized locally. Account creation and
+provisioning remain the founder's.
+
+**Change 1 - worker as its own process** (report § 3.1):
+- `mandates.Worker` is safe with several processes: runs are claimed
+  atomically (`UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED LIMIT 1)
+  RETURNING *`), stamped with the worker's id; a separate heartbeat thread
+  refreshes `heartbeat_at` on the worker's own running runs (default 20 s);
+  recovery runs at start and every 60 s and only takes over running runs
+  whose heartbeat is older than the lease (default 120 s) or absent (legacy),
+  claiming each conditionally first. Additive columns `worker_id`,
+  `heartbeat_at` on `mandate_runs`.
+- `worker.py`: standalone entry point; stops cleanly on SIGTERM/SIGINT.
+- `server.py`: `DEAL_LAB_RUN_WORKER=0` turns off the in-process worker
+  (default unchanged: on); `DEAL_LAB_HOST` and `PORT` from the environment
+  (defaults unchanged: 127.0.0.1:8765); schema setup extracted to
+  `init_databases()` and serialized with a Postgres advisory lock.
+- **Bug found live and fixed**: starting a web and a worker process at the
+  same moment (every deploy) deadlocked in concurrent `ALTER TABLE … ADD
+  COLUMN IF NOT EXISTS`; the advisory lock fixed it (5/5 simultaneous
+  web + 2-worker starts clean afterwards).
+
+**Verification**: 4 new tests (only one of two concurrent claims wins; recovery
+leaves a live worker's run alone; recovery takes over a run whose worker
+stopped heartbeating; heartbeat touches only its own runs); full backend
+suite OK; mypy clean on changed files. Live, on the disposable database: web
+with `DEAL_LAB_RUN_WORKER=0` left a fixture run queued; two `worker.py`
+processes then completed it exactly once (one owner, one attempt); SIGTERM
+stopped both cleanly. No paid calls.

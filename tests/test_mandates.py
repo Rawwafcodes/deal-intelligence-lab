@@ -29,6 +29,7 @@ once, live, outside the automated suite - see the task file.
 import sys
 import tempfile
 import time
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -556,6 +557,63 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.worker.poll_once()
         finished = mandates.get_run(mandate.id, run.id)
         self.assertEqual(finished.status, "waiting_for_input")  # resumed and ran to its natural pause
+
+    # -- Task 19.2: more than one worker process ---------------------------
+
+    def test_only_one_of_two_concurrent_claims_wins_a_queued_run(self):
+        mandate, _ = self._prepare_approved_two_stage_mandate()
+        run = mandates.execute_run(self.project.id, mandate.id)
+        barrier = threading.Barrier(2, timeout=10)
+        claimed: list = []
+
+        def claim(worker_id):
+            barrier.wait()
+            claimed.append(mandates._claim_next_queued_run(worker_id))
+
+        threads = [threading.Thread(target=claim, args=(w,)) for w in ("worker-a", "worker-b")]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=20)
+        winners = [c for c in claimed if c is not None]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(winners[0].id, run.id)
+        self.assertEqual(winners[0].status, "running")
+
+    def test_recover_leaves_another_live_workers_run_alone(self):
+        mandate, _ = self._prepare_approved_two_stage_mandate()
+        run = mandates.execute_run(self.project.id, mandate.id)
+        mandates._claim_next_queued_run("other-live-worker")  # fresh heartbeat
+        self.worker.recover()
+        self.assertEqual(mandates.get_run(mandate.id, run.id).status, "running")
+
+    def test_recover_takes_over_a_run_whose_worker_stopped_heartbeating(self):
+        mandate, _ = self._prepare_approved_two_stage_mandate()
+        run = mandates.execute_run(self.project.id, mandate.id)
+        mandates._claim_next_queued_run("dead-worker")
+        mandates._set_run(run.id, heartbeat_at="2000-01-01T00:00:00+00:00")
+        self.worker.recover()
+        self.assertEqual(mandates.get_run(mandate.id, run.id).status, "queued")  # nothing was in flight
+
+    def test_heartbeat_refreshes_only_this_workers_running_runs(self):
+        mandate, _ = self._prepare_approved_two_stage_mandate()
+        run = mandates.execute_run(self.project.id, mandate.id)
+        mandates._claim_next_queued_run(self.worker.worker_id)
+        mandates._set_run(run.id, heartbeat_at="2000-01-01T00:00:00+00:00")
+        mandates._heartbeat("someone-else")
+        conn = store.get_connection()
+        try:
+            before = conn.execute("SELECT heartbeat_at FROM mandate_runs WHERE id=%s", (run.id,)).fetchone()["heartbeat_at"]
+        finally:
+            conn.close()
+        self.assertTrue(before.startswith("2000-"))
+        mandates._heartbeat(self.worker.worker_id)
+        conn = store.get_connection()
+        try:
+            after = conn.execute("SELECT heartbeat_at FROM mandate_runs WHERE id=%s", (run.id,)).fetchone()["heartbeat_at"]
+        finally:
+            conn.close()
+        self.assertFalse(after.startswith("2000-"))
 
     def test_recover_reports_outcome_unknown_for_a_genuinely_in_flight_attempt(self):
         mandate, plan = self._prepare_approved_two_stage_mandate()

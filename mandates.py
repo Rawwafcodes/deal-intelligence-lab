@@ -1683,6 +1683,12 @@ def init_mandates_db() -> None:
         conn.execute("ALTER TABLE mandate_runs ADD COLUMN IF NOT EXISTS current_stage_index INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE mandate_runs ADD COLUMN IF NOT EXISTS budget_limit REAL")
         conn.execute("ALTER TABLE mandate_runs ADD COLUMN IF NOT EXISTS budget_consumed REAL NOT NULL DEFAULT 0")
+        # Task 19.2 (M19): which worker process owns a running run, and when
+        # it last proved it was alive - so more than one worker process can
+        # run safely, and recovery only touches runs whose owner has gone
+        # silent. Additive; NULL on every pre-19.2 row.
+        conn.execute("ALTER TABLE mandate_runs ADD COLUMN IF NOT EXISTS worker_id TEXT")
+        conn.execute("ALTER TABLE mandate_runs ADD COLUMN IF NOT EXISTS heartbeat_at TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_mandate_runs_mandate ON mandate_runs(mandate_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_mandate_runs_status ON mandate_runs(status)")
         conn.execute(
@@ -2192,6 +2198,66 @@ def list_attempts(run_id: str) -> list[Attempt]:
     return [_row_to_attempt(r) for r in rows]
 
 
+def _claim_next_queued_run(worker_id: str) -> Run | None:
+    """Atomically moves the oldest queued run to "running" and stamps it
+    with this worker's id. FOR UPDATE SKIP LOCKED means two worker
+    processes polling at the same instant can never claim the same run -
+    each skips a row another transaction has already locked."""
+    now = _now()
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            UPDATE mandate_runs
+               SET status = 'running', worker_id = %s, heartbeat_at = %s,
+                   started_at = COALESCE(started_at, %s)
+             WHERE id = (
+                   SELECT id FROM mandate_runs WHERE status = 'queued'
+                    ORDER BY queued_at ASC NULLS FIRST
+                    FOR UPDATE SKIP LOCKED LIMIT 1)
+            RETURNING *
+            """,
+            (worker_id, now, now),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return _row_to_run(row) if row else None
+
+
+def _heartbeat(worker_id: str) -> None:
+    conn = store.get_connection()
+    try:
+        conn.execute(
+            "UPDATE mandate_runs SET heartbeat_at = %s WHERE worker_id = %s AND status = 'running'",
+            (_now(), worker_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _take_over_stale_run(run_id: str, worker_id: str, stale_before: str) -> bool:
+    """Claims recovery of one running run whose owner stopped
+    heartbeating (or that predates heartbeats). Conditional, so of two
+    workers recovering at once only one gets True."""
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            UPDATE mandate_runs SET worker_id = %s, heartbeat_at = %s
+             WHERE id = %s AND status = 'running'
+               AND (heartbeat_at IS NULL OR heartbeat_at < %s)
+            RETURNING id
+            """,
+            (worker_id, _now(), run_id, stale_before),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return row is not None
+
+
 def _set_run(run_id: str, **fields: Any) -> None:
     set_clause = ", ".join(f"{k} = %s" for k in fields)
     conn = store.get_connection()
@@ -2536,37 +2602,63 @@ class Worker:
     This is what actually executes it, on its own background thread,
     independent of any HTTP request.
 
-    Single-process, single-worker by construction (this app runs one
-    local server process at a time - see docs/07-architecture.md) - there
-    is deliberately no cross-process locking (e.g. `SELECT ... FOR UPDATE
-    SKIP LOCKED`) because there is never more than one worker to contend
-    with. The one known, disclosed race this leaves: a cancel_run call
+    Task 19.2 (M19): safe with more than one worker process (the hosted
+    web + worker split). Runs are claimed atomically (`_claim_next_queued_run`,
+    FOR UPDATE SKIP LOCKED); each worker heartbeats the runs it owns from a
+    separate thread (a capability call can block the executing thread for
+    many minutes); recovery - at start and then periodically - only
+    touches running runs whose heartbeat is older than the lease, and
+    claims each one conditionally first. The one known, disclosed race this leaves: a cancel_run call
     landing in the exact instant between poll_once() reading a run as
     "queued" and _execute() writing it to "running" can be silently
     overwritten back to "running" - a repeat cancel immediately afterward
     always succeeds, since _run_stages' own per-stage check will then see
     the run genuinely "running" and honor it before the next stage."""
 
-    def __init__(self, poll_interval: float = 0.5):
+    def __init__(
+        self, poll_interval: float = 0.5, heartbeat_interval: float = 20.0,
+        lease_seconds: float = 120.0, recover_interval: float = 60.0,
+    ):
         self.poll_interval = poll_interval
+        self.heartbeat_interval = heartbeat_interval
+        self.lease_seconds = lease_seconds
+        self.recover_interval = recover_interval
+        self.worker_id = uuid.uuid4().hex
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._heartbeat_thread: threading.Thread | None = None
 
     def start(self) -> None:
         self.recover()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, name="mandate-worker", daemon=True)
         self._thread.start()
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="mandate-worker-heartbeat", daemon=True)
+        self._heartbeat_thread.start()
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
         thread, self._thread = self._thread, None
         if thread is not None:
             thread.join(timeout)
+        heartbeat, self._heartbeat_thread = self._heartbeat_thread, None
+        if heartbeat is not None:
+            heartbeat.join(timeout)
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop_event.wait(self.heartbeat_interval):
+            try:
+                _heartbeat(self.worker_id)
+            except Exception:
+                pass
 
     def _loop(self) -> None:
+        last_recover = datetime.now(timezone.utc)
         while not self._stop_event.is_set():
             try:
+                if (datetime.now(timezone.utc) - last_recover).total_seconds() >= self.recover_interval:
+                    last_recover = datetime.now(timezone.utc)
+                    self.recover()
                 self.poll_once()
             except Exception:
                 # A bug surfaced while processing one run must not kill
@@ -2600,7 +2692,15 @@ class Worker:
            ordinary poll loop finish it from current_stage_index, exactly
            as it would for any other queued run.
         """
+        stale_before = datetime.fromtimestamp(
+            datetime.now(timezone.utc).timestamp() - self.lease_seconds, timezone.utc
+        ).isoformat()
         for run in _list_runs_by_status("running"):
+            # Task 19.2: another live worker's run is not stale - only take
+            # over runs whose owner stopped heartbeating (or legacy rows
+            # with no heartbeat at all), and only if we win the claim.
+            if not _take_over_stale_run(run.id, self.worker_id, stale_before):
+                continue
             attempts = list_attempts(run.id)
             last = attempts[-1] if attempts else None
             if last is not None and last.status == "running":
@@ -2625,12 +2725,15 @@ class Worker:
                 self._finalize_cancel(run)
             except Exception:
                 continue
-        for run in _list_runs_by_status("queued"):
+        while not self._stop_event.is_set():
+            claimed = _claim_next_queued_run(self.worker_id)
+            if claimed is None:
+                break
             try:
-                _execute(run)
+                _execute(claimed)
             except Exception:
-                _set_run(run.id, status="failed", finished_at=_now())
-                mandate = _get_mandate_by_id(run.mandate_id)
+                _set_run(claimed.id, status="failed", finished_at=_now())
+                mandate = _get_mandate_by_id(claimed.mandate_id)
                 if mandate is not None:
                     _set_mandate(mandate.id, status="failed")
 
