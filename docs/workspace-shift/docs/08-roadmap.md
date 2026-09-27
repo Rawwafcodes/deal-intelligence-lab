@@ -198,6 +198,14 @@ recurring reusable assertions, measured failure modes) with genuinely
 blind cases and locked answer keys - not the retrospective self-scoring
 already disclosed as a limitation. Provisional pass thresholds require
 founder approval before scoring starts; none are set in advance.
+A 25-surface information-architecture reconciliation against
+`docs/product/02-experience-and-information-architecture.md`'s canonical
+target inventory - `docs/product/07-surface-reconciliation.md` - is
+required before this milestone closes: it classifies every canonical
+surface, discloses one real conflict (four shipped destinations outside
+the canonical 25) and confirms three administrative surfaces (Team and
+Access, Organization Settings, Usage and Billing) are genuinely absent,
+not merely unlinked.
 Outcome: an explicit founder proceed/remediate/stop decision on whether
 the local product justifies secure online pilot investment. Local
 completion does not certify production safety and is not itself
@@ -209,8 +217,13 @@ provider selection is deliberately open until this milestone's own
 architecture-decision task - no earlier document's provider mention is a
 decision. Preserves the existing mandate runtime, findings register,
 assertion ledger and `authz.py` policy through the migration; this is a
-hosting/security migration, not a rewrite. Full required implementation
-areas and exit gate: `docs/13-post-m17-roadmap.md`.
+hosting/security migration, not a rewrite. Covers canonical surface #5
+(Sign in - a real production sign-in replacing the dev-only identity
+switcher) and the private-staging minimum of #23-24 (Team and Access,
+Organization Settings - confirmed to have no frontend and, in places, no
+API route at all); its own share of #25 (Usage and Billing) is rate/
+budget limits only. Full required implementation areas and exit gate:
+`docs/13-post-m17-roadmap.md`.
 Outcome: a privately-accessible staging environment with tenant
 isolation, authenticated multi-user access, durable background jobs,
 backup/restore, logging/alerting and an independent security review -
@@ -220,15 +233,19 @@ this gate.
 ## M20 — Commercial Pilot Readiness
 Entry: M19 exit gate satisfied. Defines segment, buyer, one bounded paid
 pilot offer, pricing hypothesis, legal/privacy/DPA/pilot-agreement
-material and support/onboarding process. Full required work and exit
-gate: `docs/13-post-m17-roadmap.md`.
+material and support/onboarding process. Covers canonical surface #6
+(Invitation/onboarding - confirmed to have no invite/token flow at all)
+and the customer-facing half of #25 (usage/cost reporting). Full
+required work and exit gate: `docs/13-post-m17-roadmap.md`.
 Outcome: a founder go/no-go decision for customer outreach.
 
 ## M21 — Live Design-Partner Pilot
 Entry: M20 exit gate satisfied (go decision). Runs one controlled real
 engagement under signed pilot terms and measures customer value, not
-mere usage. Full required evidence and exit gate: `docs/13-post-m17-
-roadmap.md`.
+mere usage. Uses existing surfaces as they stand at M20's close; adds a
+new one only in response to a specific blocking incident the pilot
+itself surfaces, never for completeness. Full required evidence and exit
+gate: `docs/13-post-m17-roadmap.md`.
 Outcome: one explicit conclusion - proceed, remediate and repeat,
 reposition, or stop - supported by customer and usage evidence.
 
@@ -236,10 +253,42 @@ reposition, or stop - supported by customer and usage evidence.
 Entry: M21 concludes proceed (or remediate-and-repeat after
 remediation). Turns one successful pilot into repeatable delivery:
 standardized onboarding, validated pricing, further paying customers,
-retention and margin tracking. Full required work and exit gate:
-`docs/13-post-m17-roadmap.md`.
+retention and margin tracking. Refines, removes or adds a surface only
+from measured M21 pilot evidence, not speculation about a second
+customer. Full required work and exit gate: `docs/13-post-m17-
+roadmap.md`.
 Outcome: evidence the product can be sold and delivered repeatedly, not
 merely once.
+
+## M23 — Repeatable Commercial and Customer-Administration Experience
+Entry: M22 exit gate satisfied. Completes the self-serve form of
+canonical surfaces #23-25 (Team and Access, Organization Settings, Usage
+and Billing) beyond M19/M20's staging/pilot minimums, and canonical
+surfaces #1-4/#6 (public marketing pages, generalized onboarding) if a
+repeatable commercial motion now justifies them - not before, per this
+roadmap's own "do not add features merely to make a milestone look
+substantial." Also where the M18 25-surface reconciliation's still-open
+founder decisions (the four non-canonical destinations; Document Detail)
+must be closed if not already resolved earlier. Full required work and
+exit gate: `docs/13-post-m17-roadmap.md`.
+Outcome: a new customer can be onboarded, self-administer their
+organization, and be billed, without a founder performing a manual step
+on their behalf - demonstrated with a real customer.
+
+## M24 — Enterprise Identity, Audit, Compliance and Isolated Deployment
+Entry: M23 exit gate satisfied, and a real named customer requirement
+triggers it - never built speculatively against no named requirement.
+Full required work and exit gate: `docs/13-post-m17-roadmap.md`.
+Outcome: the specific named requirement that triggered this milestone is
+satisfied and verified against that requirement, not a generic checklist.
+
+## M25 — Scalable Operational Capabilities
+Entry: M22/M23 evidence shows customer/usage volume M19's staging-scale
+architecture cannot comfortably continue to serve - measured, not
+assumed. Deliberately unspecified in detail until that evidence exists.
+Full framing and exit gate: `docs/13-post-m17-roadmap.md`.
+Outcome: a specific, measured scale problem is resolved with a stated
+before/after metric.
 
 ## Global acceptance/rollback
 Each task: preserve baseline tests; add unit/integration/UI tests appropriate to changes;

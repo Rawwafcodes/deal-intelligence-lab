@@ -24,10 +24,25 @@ M21 Live Design-Partner Pilot, M22 Repeatability and Early Scale) was
 then adopted as documentation/planning only (D17; full detail
 `docs/workspace-shift/docs/13-post-m17-roadmap.md`; short pointers
 `08-roadmap.md`'s own M18-M22 entries) - see this file's matching
-2026-09-27 "Post-M17 roadmap adopted" entry (bottom) for the full record.
-**M18 is next; no M18 implementation has begun.** This supersedes the
-"Current task"/"Next recommended" lines below as the up-to-date pointer;
-see this file's own newest dated entries (bottom) for full detail.
+2026-09-27 "Post-M17 roadmap adopted" entry for that record.
+
+The same day, that roadmap was extended through M23-M25 and reconciled
+against `docs/product/02-experience-and-information-architecture.md`'s
+canonical 25-surface target inventory (D18; full surface-by-surface
+detail `docs/product/07-surface-reconciliation.md`). 13 of 25 canonical
+surfaces are complete, 2 are correctly static-only (Validation Lab,
+preserved internal), 1 is partial (Document Detail - a raw file link,
+no in-app version history), and 9 are genuinely absent (public marketing
+pages, real sign-in, onboarding, Team and Access, Organization Settings,
+Usage and Billing) - each assigned to M19, M20 or M23, not left
+unattributed. A real conflict was disclosed, not resolved: four shipped
+destinations (Readiness, Reassessments, Triggers, Assertions) exist with
+no row in the canonical 25-surface table. See this file's matching
+2026-09-27 "25-surface reconciliation adopted" entry (bottom) for the
+full record. **M18 is next; no M18 implementation has begun.** This
+supersedes the "Current task"/"Next recommended" lines below as the
+up-to-date pointer; see this file's own newest dated entries (bottom)
+for full detail.
 
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
@@ -6084,3 +6099,122 @@ application, and none of the application was touched by this task.
 this repository's standing rule and this task's own explicit
 instruction, the resulting commit is not pushed without separate
 authorization.
+
+## 2026-09-27 — 25-surface information-architecture reconciliation adopted (M18-M25 roadmap, D18)
+
+**Scope**: documentation and planning only, per explicit founder
+instruction. No route, schema, dependency, or application code changed.
+Reconciled every one of the 25 canonical surfaces in `docs/product/
+02-experience-and-information-architecture.md`'s target route/page
+inventory against the actual implementation, and extended the post-M17
+roadmap through M23 (Repeatable Commercial and Customer-Administration
+Experience), M24 (Enterprise Identity, Audit, Compliance and Isolated
+Deployment) and M25 (Scalable Operational Capabilities).
+
+**Method**: read `frontend/src/App.tsx`'s real route table and every
+route component under `frontend/src/routes/`; grepped `server.py`,
+`identity.py` and the relevant domain modules for a real HTTP capability
+per surface; grepped `frontend/src` for any remaining link to a legacy
+static page. No claim in the reconciliation is inferred from a milestone
+title or an earlier STATUS.md narrative alone.
+
+**Findings** (full detail and per-surface table:
+`docs/product/07-surface-reconciliation.md`):
+- 13 of 25 canonical surfaces are complete: Overview, Deals, Deal
+  Overview, Mandates (both contextual instances), Mandate Detail,
+  Documents, Findings, Finding Detail (inline component), Workstreams
+  and Tasks, Submission Review (component within Work), Information
+  Requests (panel within Findings), Decision Package, Activity.
+- 2 are correctly static-only and deliberately preserved: Validation
+  Cases and Validation Case/Report (`static/validation.html` and its two
+  case/report pages) - the sole disclosed exception, per existing D13
+  and the Review-vs-Validation-Lab boundary; not the customer-facing
+  Review workflow.
+- 1 is partial: Document Detail resolves to a raw inline file `href`
+  (`.../documents/<id>/download?inline=1`), not an in-app version-
+  history/citation-backlink view. Flagged as an open M18 founder
+  decision (build before acceptance, or explicitly defer) rather than
+  silently accepted or silently deferred.
+- 9 are genuinely absent, confirmed at the code level rather than merely
+  unlinked: Public homepage, Product/how it works, Security and trust,
+  Request pilot/contact (no public marketing surface exists at all);
+  Sign in (only a dev-only identity switcher, `IdentityFooter`'s
+  `<select>` via `_handle_dev_session_login`, not a real sign-in page);
+  Invitation/onboarding (`add_organization_membership`/
+  `add_deal_membership` exist as internal functions, no invite/token
+  flow, no route); Team and Access (deal-level grant/revoke exists via
+  `_handle_grant_membership`/`_handle_revoke_membership`, exercised only
+  by tests/curl, never a UI; org-level membership has no HTTP route at
+  all); Organization Settings (`create_organization`/`get_organization`
+  exist as internal functions only - confirmed zero callers in
+  `server.py` - organizations exist only via seed data); Usage and
+  Billing (only a per-mandate-run budget ledger, no org-level usage/cost
+  aggregation, no billing anything). Each is assigned to a specific
+  milestone (M19: Sign in, private-staging-minimum Team/Access/Org
+  Settings, rate/budget limits; M20: Invitation/onboarding, usage/cost
+  reporting; M23: full self-serve Team/Access/Org Settings, real
+  billing, public marketing pages if a repeatable commercial motion
+  justifies them) rather than left as an unattributed gap.
+- A real conflict, disclosed rather than resolved: four shipped,
+  backend-complete deal-level destinations - Readiness
+  (`readiness.py`), Targeted Reassessment (`reassessments.py`),
+  Monitoring/Triggers (`triggers.py`), Assertions (`assertion_ledger.py`,
+  wired per D15) - exist in the real product with no row in the
+  canonical 25-surface table. `docs/product/02-experience-and-
+  information-architecture.md`'s table itself was **not edited** - two
+  options (amend it; or declare a disclosed exception) are presented in
+  `07-surface-reconciliation.md` and left for the founder.
+- `static/index-legacy.html`, `project.html`, `workspace.html`,
+  `cross-analysis.html`, `inspect.html`, `reconcile.html` and
+  `workbook-inspect.html` are confirmed orphaned (grepped `frontend/src`
+  directly - no link to any of them remains) and are not counted as
+  completed implementations of any canonical surface.
+- No canonical surface was found no-longer-justified, so none was
+  removed - this reconciliation's own "record removal as an explicit
+  founder decision, never delete silently" rule was not triggered.
+
+**Files changed**: new `docs/product/07-surface-reconciliation.md` (the
+full 25-surface table plus the four-surface conflict, the superseded-
+static-pages list, and the page/panel/drawer/component form analysis);
+`docs/product/02-experience-and-information-architecture.md` (a
+reconciliation-note pointer added after the canonical table - the table
+itself unchanged); `docs/product/05-current-product-map.md` (staleness
+notice pointing to the new file as authoritative, historical content
+preserved unchanged); `docs/product/06-truth-register.md` (pointers from
+its existing open product/production decisions to the new file and to
+M19/M23's surface assignments); `docs/product/README.md` (read-order
+entry); `docs/workspace-shift/docs/13-post-m17-roadmap.md` (new
+"25-surface information-architecture reconciliation" section; M18's
+exit gate made explicit about surface classification; M19/M20 required-
+work cross-referenced to specific surfaces; M21/M22 given explicit
+surface-change policies; new M23-M25 sections; open-decisions register
+extended); `docs/workspace-shift/docs/08-roadmap.md` (M18's entry
+extended; M19/M20 entries cross-referenced; new M23-M25 short entries;
+M21/M22 given explicit surface-change policies); `docs/10-decisions.md`
+(new D18); this file (this entry and the "Continuation state" header).
+
+**Decisions**: D18 (`docs/10-decisions.md`) - the reconciliation itself,
+the roadmap extension through M25, and the explicit disposition of every
+finding above (assigned to a milestone, or left as a named open
+decision - never silently accepted or silently deleted).
+
+**Founder decisions left open** (see `13-post-m17-roadmap.md`'s open-
+decisions register, extended by this task): whether to amend the
+canonical 25-surface table for the four non-canonical destinations, or
+declare them a disclosed exception; whether Document Detail's current
+form is sufficient for M18 founder acceptance; M24's actual triggering
+customer requirement, if any. None are decided by this task.
+
+**Verification**: ran `python3 docs/workspace-shift/scripts/
+check_spec.py` - passed. This validates the documentation package's
+internal links only; it does not test the application, and no
+application code was touched by this task. Every specific claim above
+(route existence, absence of an HTTP route, absence of a frontend link)
+was checked directly against the current checkout via `grep`/`Read`, not
+assumed from an earlier document.
+
+**Blockers**: none for this task's own scope.
+
+**Permissions needed**: none for the documentation change itself. Not
+pushed without separate authorization, per this repository's standing
+rule.

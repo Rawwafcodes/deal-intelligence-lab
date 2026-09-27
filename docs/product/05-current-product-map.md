@@ -2,8 +2,13 @@
 
 Status: implemented facts verified against repository revision `692676f` before
 the React legacy-exit closure; commit `a7e3fbe` subsequently adds React-native
-document upload, brief editing and work/task management. Re-verify against the
-current checkout before relying on this map.
+document upload, brief editing and work/task management. **This map predates
+M17's completion and is stale; `07-surface-reconciliation.md` is the current,
+code-verified, per-surface status as of `70f03ca` (2026-09-27) and is the
+authoritative source for "what's implemented" going forward.** The route list
+and gaps below are retained as historical provenance, not current fact -
+re-verify against the current checkout, or read `07-surface-reconciliation.md`
+directly, before relying on either.
 
 ## Existing engine and domain assets
 

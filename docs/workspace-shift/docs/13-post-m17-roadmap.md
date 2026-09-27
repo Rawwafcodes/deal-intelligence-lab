@@ -1,4 +1,4 @@
-# Post-M17 roadmap: validation, secure hosting and commercial pilot (M18-M22)
+# Post-M17 roadmap: validation, secure hosting and commercial pilot (M18-M25)
 
 Adopted 2026-09-27, as a founder-directed documentation and planning task
 performed immediately after the M17 product-integration program (Phases
@@ -8,6 +8,51 @@ planning only. No M18 implementation, infrastructure provisioning,
 Anthropic API call, deployment, data migration or new dependency was
 introduced to produce it. See `STATUS.md`'s matching dated entry and
 `docs/10-decisions.md`'s D17 for the decision record.
+
+Extended the same day (still documentation/planning only) with a
+25-surface information-architecture reconciliation against
+`docs/product/02-experience-and-information-architecture.md`'s canonical
+target route/page inventory, and with three further milestones (M23-M25)
+covering the repeatable commercial/customer-administration experience,
+enterprise identity/audit/compliance, and volume-justified scale. See
+`docs/10-decisions.md`'s D18 and the "25-surface reconciliation" section
+immediately below.
+
+## 25-surface information-architecture reconciliation
+
+`docs/product/07-surface-reconciliation.md` is the code-verified status
+of every one of the 25 canonical surfaces in `docs/product/
+02-experience-and-information-architecture.md`'s target route/page
+inventory - current route (if any), backend capability, frontend
+capability, page/panel/drawer/component form, and classification
+(complete/partial/missing/static-only). It does not rename, replace or
+expand that canonical table itself. Two things it found are load-bearing
+for this roadmap and are not restated in full here:
+
+- **A real conflict**: four shipped, backend-complete deal-level
+  destinations (Readiness, Targeted Reassessment, Monitoring/Triggers,
+  Assertions) exist with no corresponding row in the canonical 25.
+  Presented as an open founder decision (amend the table, or declare
+  them a disclosed exception), not resolved by either document.
+- **Three confirmed-absent administrative surfaces**: Team and Access,
+  Organization Settings, and Usage and Billing have no frontend at all,
+  and in two of the three cases (Organization Settings; org-level Team
+  membership) no HTTP route either - not merely unlinked, genuinely not
+  built. These are exactly the surfaces M19 and M23 below now name
+  explicitly, rather than leaving "production authentication" and
+  "organization and tenant isolation" as the only description of what
+  is missing.
+- **One partial, product-facing gap inside the local product itself**:
+  Document Detail is a raw inline file link, not an in-app version-
+  history/citation-backlink view - flagged for an M18 founder decision
+  on whether it is essential before local-product acceptance.
+
+M18's exit gate below is unchanged in spirit but now explicit: it cannot
+close until every one of the 25 canonical surfaces has been classified
+(done, in `07-surface-reconciliation.md`) and every essential
+local-product surface has either passed founder acceptance or received
+an explicitly approved later milestone (the assignments in this
+document's M18-M25 sections, and the open decisions above).
 
 This extends `08-roadmap.md` (which retains the short M18-M22 pointer
 entries in its own dependency-ordered style) with the entry/exit-criteria
@@ -33,6 +78,12 @@ retroactively edit any M10-M17 entry, any decision D01-D16, or any
 - `docs/product/06-truth-register.md` — "Open production decisions" there
   is the same list M19's required architecture decision covers; this file
   does not duplicate it with different content, only points to it.
+- `docs/product/02-experience-and-information-architecture.md` — the
+  canonical 25-surface target route/page inventory. `docs/product/
+  07-surface-reconciliation.md` is this roadmap's own code-verified
+  reconciliation of that table against the actual implementation; see
+  this file's "25-surface information-architecture reconciliation"
+  section below.
 - M16 (`08-roadmap.md`'s own M16 entry) — its outstanding validation gates
   (independent scoring, recurring reusable assertions, measured failure
   modes; see `STATUS.md`'s M16 gate-check entry and `06-truth-register.md`'s
@@ -164,6 +215,17 @@ M18 closes only when:
   not silently left unaddressed;
 - performance and cost are measured;
 - material failure modes are documented;
+- **every one of the canonical 25 surfaces in `docs/product/
+  02-experience-and-information-architecture.md` has been classified**
+  (route, backend, frontend, form, status) per
+  `docs/product/07-surface-reconciliation.md`, and every surface that
+  reconciliation marks essential to the local product has either passed
+  founder acceptance or received an explicit, founder-approved later
+  milestone (not a silent gap) - satisfied for 22 of 25 by this
+  reconciliation's own milestone assignment; the Document Detail gap and
+  the four non-canonical surfaces remain open founder decisions per the
+  section above, and must be closed (either direction) before this gate
+  is satisfied;
 - the founders make an explicit proceed/remediate/stop decision.
 
 ### M18 exclusions
@@ -197,9 +259,17 @@ choosing the hosted equivalent.
 
 ### Required implementation areas
 
-Production authentication; organization and tenant isolation; server-side
-authorization (extending, not replacing, the existing `authz.py`
-capability policy from Task 17.14/D16); managed PostgreSQL and migrations;
+Production authentication (canonical surface #5, Sign in - currently a
+dev-only identity switcher, not a real sign-in page); organization and
+tenant isolation, including the minimum Team and Access and Organization
+Settings surfaces (#23-24 - currently no frontend and, for org-level
+membership and organization creation/update, no HTTP route at all) needed
+to actually run a private multi-user staging pilot, not their full
+self-serve form (deferred to M23); server-side authorization (extending,
+not replacing, the existing `authz.py` capability policy from Task
+17.14/D16); rate and budget limits, which is this milestone's own share
+of Usage and Billing (#25) - usage/cost *reporting* is M20's, real
+billing is M23's; managed PostgreSQL and migrations;
 private document storage; document encryption in transit and at rest;
 signed/scoped document access; background-job queue and worker; retries,
 idempotency and cancellation; secret management; environment separation;
@@ -246,12 +316,18 @@ conduct customer discovery interviews; define one bounded paid pilot
 offer; define scope, exclusions and deliverables; establish pricing
 hypothesis; establish included AI usage and overage policy; prepare a
 safe demonstration environment; create a synthetic demonstration deal;
-prepare onboarding materials; prepare administrator guidance; prepare
-support and incident procedures; prepare usage and cost reporting;
-prepare data-retention/deletion process; obtain suitable legal advice;
-prepare privacy, terms and data-processing documents; prepare pilot
-agreement; prepare security questionnaire responses; prepare sales
-demonstration and follow-up process; define pilot-success metrics.
+prepare onboarding materials (canonical surface #6, Invitation/
+onboarding - confirmed to have no invite/token flow at all, only direct
+membership-creation functions with no route); prepare administrator
+guidance; prepare support and incident procedures; prepare usage and cost
+reporting (the customer-facing half of surface #25 - M19 already covers
+rate/budget limits, M23 covers real billing); prepare data-retention/
+deletion process; obtain suitable legal advice; prepare privacy, terms
+and data-processing documents; prepare pilot agreement; prepare security
+questionnaire responses; prepare sales demonstration and follow-up
+process (may pull surfaces #1-4 forward from M23 if the founder judges a
+minimal pilot landing/contact page necessary for outreach - not required
+by default); define pilot-success metrics.
 
 This resolves several of `docs/product/06-truth-register.md`'s "Open
 product decisions" (segment, buyer title, first paid offer, pricing) with
@@ -286,6 +362,14 @@ product creates customer value.
 
 **Entry criteria**: M20 exit gate satisfied (go decision).
 
+**Surface policy**: use the existing surfaces (the 25 canonical plus the
+four disclosed above, whichever the founder decision resolved) as they
+stand at M20's close. Add a new surface during the pilot only in
+response to a specific blocking incident the pilot itself surfaces, never
+merely for completeness or to look more finished - the same discipline
+`docs/product/06-truth-register.md` already applies to commercial
+claims, applied here to product surfaces.
+
 ### Required evidence
 
 Authorized customer and users; signed pilot terms; approved data
@@ -312,6 +396,11 @@ business.
 **Entry criteria**: M21 concludes "proceed" (or "remediate and repeat"
 after remediation).
 
+**Surface policy**: refine, remove or add a surface only from measured
+M21 pilot evidence (a real usability finding, a real support incident, a
+real customer request) - not from this document's own unexercised
+predictions about what a second customer might want.
+
 ### Required work
 
 Fix recurring pilot issues; standardize onboarding; reduce
@@ -330,6 +419,96 @@ revenue; retention; average revenue per customer/deal; AI and
 infrastructure cost; support hours; gross margin; sales-cycle length;
 implementation effort; customer references; security/procurement
 blockers.
+
+## M23 — Repeatable Commercial and Customer-Administration Experience
+
+**Purpose**: complete the repeatable commercial and customer-
+administration experience - the point at which the product can be sold
+and self-administered without founder hand-holding on every deal, closing
+the surfaces `07-surface-reconciliation.md` deliberately deferred past
+M19/M20's staging/pilot minimums.
+
+**Entry criteria**: M22 exit gate satisfied (repeatability evidence
+exists).
+
+### Required work
+
+Full self-serve Organization Settings and Team and Access (surfaces
+#23-24 - M19 built only the private-staging minimum: no self-serve
+invite flow, no organization creation/rename UI); real billing beyond
+M19's rate/budget limits and M20's usage reporting (surface #25); public-
+facing marketing surfaces if the founder judges outbound/self-serve
+acquisition now justifies them (#1-4 Public homepage, Product/how it
+works, Security and trust, Request pilot/contact - correctly not built
+before a repeatable commercial motion exists to justify them); a real
+Invitation/onboarding flow with tokens/expiry rather than M20's
+founder-assisted membership creation (#6, generalized beyond the first
+pilot). Resolve the four non-canonical-surface and Document Detail
+decisions from the reconciliation above if not already resolved by M18.
+
+### M23 exit gate
+
+M23 closes only when a new customer can be onboarded, administer their
+own organization/team, and be billed, without a founder performing a
+manual database or API step on their behalf - and this has been
+demonstrated with a real customer, not only a synthetic one.
+
+## M24 — Enterprise Identity, Audit, Compliance and Isolated Deployment
+
+**Purpose**: meet the identity, audit, compliance, security and
+deployment-isolation requirements a larger or more regulated customer's
+procurement process requires, once real demand for such a customer
+exists - not preemptively.
+
+**Entry criteria**: M23 exit gate satisfied, and a real prospective
+customer or signed deal whose procurement process names a specific
+requirement below (do not build enterprise identity/compliance
+speculatively against no named requirement).
+
+### Required work
+
+Enterprise identity (SSO/SAML/SCIM as a named customer's procurement
+actually requires, not preemptively); extended audit retention and export
+beyond M19's baseline; compliance documentation/attestations a named
+deal actually requires (e.g. SOC 2, ISO 27001 - do not pursue a
+certification with no customer requirement driving it); security-review
+cadence beyond M19's one-time independent review; isolated/dedicated
+deployment administration for a customer whose data-residency or
+isolation requirement M19's shared staging architecture cannot satisfy.
+
+### M24 exit gate
+
+M24 closes only when the specific named requirement that triggered this
+milestone is satisfied and verified against that requirement, not
+against a generic enterprise checklist assembled without a real customer
+driving it.
+
+## M25 — Scalable Operational Capabilities
+
+**Purpose**: build operational capability that real customer volume
+justifies - the last milestone in this sequence, and the one most
+dependent on evidence this document cannot yet supply.
+
+**Entry criteria**: M22/M23 evidence shows customer/usage volume that
+M19's staging-scale architecture cannot comfortably continue to serve
+(measured, not assumed).
+
+### Required work
+
+To be specified from M21-M23's own measured volume, cost and reliability
+evidence at the time this milestone actually starts - deliberately not
+detailed here, per this roadmap's own "do not add features merely to
+make a milestone look substantial" principle. Likely candidates,
+none pre-committed: horizontal scaling of the background-job worker;
+multi-region or read-replica database architecture; cost-optimized
+model/provider routing at volume; dedicated observability/on-call
+capacity; formalized SLAs.
+
+### M25 exit gate
+
+M25 closes only when the specific scale problem that triggered this
+milestone is measurably resolved (a stated metric, before/after) - not
+merely when generic infrastructure work has been performed.
 
 ## Open founder decisions (register, not a decision record)
 
@@ -352,6 +531,17 @@ not close it.
   content.
 - Whether/when a pilot customer's real data clears the M19/M20 gates for
   use (must never be assumed from engineering readiness alone).
+- Whether to amend `docs/product/02-experience-and-information-
+  architecture.md`'s canonical 25-surface table to add the four
+  non-canonical destinations `07-surface-reconciliation.md` found
+  (Readiness, Reassessments, Triggers, Assertions), or declare them a
+  disclosed exception instead.
+- Whether Document Detail's current raw-file-link form (canonical
+  surface #13) is sufficient for M18 founder acceptance, or must gain
+  in-app version-history/citation-backlink context before M18 closes.
+- M24's actual trigger: which named customer requirement, if any, first
+  makes enterprise identity/compliance/isolated-deployment work
+  necessary (not decided in advance of a real requirement).
 
 ## External dependencies (register)
 
@@ -368,13 +558,17 @@ not close it.
 - A hosting/database/storage/auth provider, selected only at M19 per the
   deferral above.
 
-## Explicit non-goals through M22
+## Explicit non-goals through M25
 
 Restated from the milestone-by-milestone exclusions above: this roadmap
 does not authorize, at any point before its own relevant gate, cloud
 deployment (before M19), production authentication or real customer data
 (before M19's exit gate and M20's legal/security work), public launch or
-broad onboarding (before M22), or any claim of commercial demand,
+broad onboarding (before M22), self-serve billing or public marketing
+surfaces (before M23), enterprise identity/compliance/isolated-deployment
+work against no named customer requirement (before M24's own gated
+entry), or scale infrastructure against no measured volume problem
+(before M25's own gated entry) - or any claim of commercial demand,
 traction, retention or valuation without the specific evidence each
 milestone's exit gate requires (`06-truth-register.md`'s existing rule,
 carried forward unchanged).

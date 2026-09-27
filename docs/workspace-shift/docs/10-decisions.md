@@ -263,6 +263,68 @@ left implicit:
   entries are preserved unchanged; this is an additive extension, not a
   competing planning system.
 
+D18 (added 2026-09-27) Extend the post-M17 roadmap (D17) through M23
+(Repeatable Commercial and Customer-Administration Experience), M24
+(Enterprise Identity, Audit, Compliance and Isolated Deployment) and M25
+(Scalable Operational Capabilities), and adopt a code-verified
+reconciliation of every canonical surface in `docs/product/
+02-experience-and-information-architecture.md`'s 25-surface target
+route/page inventory against the actual implementation - full detail:
+`docs/product/07-surface-reconciliation.md`; roadmap integration:
+`docs/workspace-shift/docs/13-post-m17-roadmap.md`'s "25-surface
+information-architecture reconciliation" section and `08-roadmap.md`'s
+M18-M25 entries. Documentation and planning only - no implementation,
+route, schema or dependency change. Findings and their disposition,
+recorded here rather than left implicit:
+
+- 13 of 25 canonical surfaces are complete and reachable through the
+  real product (verified route-by-route against `frontend/src/App.tsx`
+  and the corresponding route component, not inferred from a milestone
+  title); 2 more (#21-22, Validation Cases/Case-Report) are correctly
+  static-only, a deliberate preserved exception, not a gap. The other 9
+  (#1-4 public marketing pages, #5 Sign in, #6 Invitation/onboarding,
+  #23 Team and Access, #24 Organization Settings, #25 Usage and Billing)
+  are genuinely absent or dev-stub-only, confirmed at the code level
+  including, for #24 and org-level #23, that no HTTP route exists at
+  all, not merely no frontend. Each is assigned to a specific later
+  milestone (M19, M20 or M23) in `13-post-m17-roadmap.md` rather than
+  left as an unattributed gap.
+- One partial gap inside the local product itself: canonical surface #13
+  (Document Detail) resolves to a raw inline file link, not an in-app
+  version-history/citation-backlink view. Left as an open founder
+  decision for M18 (build it before founder acceptance, or explicitly
+  defer it) - not decided here.
+- **A real conflict, not resolved by this decision**: four shipped,
+  backend-complete deal-level destinations - Readiness (`readiness.py`),
+  Targeted Reassessment (`reassessments.py`), Monitoring/Triggers
+  (`triggers.py`), and Assertions (`assertion_ledger.py`, wired per D15)
+  - exist in the real product with no corresponding row in the canonical
+  25-surface table. This decision does not amend that table. Two options
+  are presented in `07-surface-reconciliation.md` (amend the table to add
+  them; or declare them a disclosed exception) and left open for the
+  founder.
+- No canonical surface was found to be no longer justified, so none was
+  removed; this decision's own disposition rule (record removal as an
+  explicit founder decision, never delete silently) was not triggered
+  but is recorded here for when a future reconciliation does trigger it.
+- Static pages `static/index-legacy.html`, `project.html`,
+  `workspace.html`, `cross-analysis.html`, `inspect.html`,
+  `reconcile.html` and `workbook-inspect.html` are confirmed orphaned (no
+  live link from `frontend/src` anywhere) and are not counted as
+  completed implementations of any canonical surface.
+  `static/validation.html` and its two case/report pages remain the sole
+  disclosed, deliberate exception (canonical surfaces #21-22, Validation
+  Cases/Case-Report) - internal quality surfaces, not the customer-facing
+  Review workflow, per the existing D13 and `06-truth-register.md`
+  Review-vs-Validation-Lab boundary; this decision leaves that boundary
+  unchanged.
+- M18's exit gate (`13-post-m17-roadmap.md`) now explicitly requires
+  every canonical surface to be classified and every essential
+  local-product surface to have either passed founder acceptance or
+  received an explicit approved later milestone, before M18 can close -
+  this reconciliation is what makes that condition checkable, not itself
+  the founder acceptance decision.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

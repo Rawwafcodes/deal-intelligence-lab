@@ -1,5 +1,5 @@
 # Workspace Shift — portable build specification
-Version 1.2.0 · 27 September 2026 · Product direction baseline, extended with the Integrity Review integration and the post-M17 validation/hosting/pilot roadmap (both docs-only)
+Version 1.3.0 · 27 September 2026 · Product direction baseline, extended with the Integrity Review integration, the post-M17 validation/hosting/pilot roadmap (M18-M25) and its 25-surface information-architecture reconciliation (all docs-only)
 
 > Adoption status: this package is now part of the application repository.
 > Root `AGENTS.md` and `docs/product/README.md` are the current entry points.

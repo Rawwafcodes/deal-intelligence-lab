@@ -16,6 +16,7 @@ entry point into them.
 4. [Build and delivery rules](04-build-and-delivery-rules.md)
 5. [Current product map](05-current-product-map.md)
 6. [Truth register and open decisions](06-truth-register.md)
+7. [25-surface information-architecture reconciliation](07-surface-reconciliation.md)
 
 Then read the relevant detailed sources:
 

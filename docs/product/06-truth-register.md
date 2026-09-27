@@ -49,11 +49,20 @@ evidence.
 Full milestone-by-milestone detail, entry/exit criteria and an explicit
 open-decisions/external-dependencies register for the approved path from
 the completed local product (M17) to a secured, hosted, commercially
-piloted one (M18-M22) live in
+piloted and repeatably sold one (M18-M25) live in
 `docs/workspace-shift/docs/13-post-m17-roadmap.md`
-(`docs/workspace-shift/docs/10-decisions.md`'s D17). The items below are
-not superseded by that document; M20 is where several of them get
+(`docs/workspace-shift/docs/10-decisions.md`'s D17/D18). The items below
+are not superseded by that document; M20 is where several of them get
 answered with real evidence.
+
+`07-surface-reconciliation.md` is the code-verified status of every
+canonical surface in `02-experience-and-information-architecture.md`'s
+25-surface table, plus a real conflict it discloses rather than resolves
+(four shipped destinations - Readiness, Reassessments, Triggers,
+Assertions - outside that table) and three confirmed-absent
+administrative surfaces (Team and Access, Organization Settings, Usage
+and Billing) already routed to M19/M20/M23 below rather than left
+unaccounted for.
 
 - Final product and company name.
 - Exact first customer segment and buyer title.
@@ -72,6 +81,10 @@ inspects and compares before implementation - see
 `docs/workspace-shift/docs/13-post-m17-roadmap.md`'s M19 section.
 Provider/hosting selection is deliberately deferred to that milestone;
 no mention of any provider anywhere in this repository is a decision.
+Production identity provider and Team/Access/Organization-Settings
+administration are also where `07-surface-reconciliation.md`'s three
+confirmed-missing administrative surfaces (#23-25) land: a working
+minimum at M19 for private staging, the full self-serve version at M23.
 
 - Hosting and service boundaries.
 - Managed database and object-storage providers.

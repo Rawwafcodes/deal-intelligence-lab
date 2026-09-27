@@ -97,6 +97,16 @@ screens are implemented or that all should appear in navigation.
 Create/edit/upload/select-evidence actions should usually use a focused drawer
 or dialog rather than spawning another full page.
 
+**Reconciliation note (2026-09-27)**: `07-surface-reconciliation.md` checks
+every row above against the actual implementation (route, backend
+capability, frontend capability, form - page/panel/drawer/component) and
+records one real conflict this table does not yet resolve: four shipped,
+backend-complete deal-level destinations (Readiness, Targeted
+Reassessment, Monitoring/Triggers, Assertions) exist with no row here.
+That file presents options; it does not itself amend this table - the 25
+rows above are unchanged pending an explicit founder decision
+(`docs/workspace-shift/docs/10-decisions.md` D18).
+
 ## Mandate composer experience
 
 The Mandates surface begins with:
