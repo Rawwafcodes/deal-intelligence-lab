@@ -28,6 +28,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import cross_format_analyses
+import deal_briefs
 import documents
 import identity
 import mandate_planning
@@ -649,6 +650,7 @@ class LlmPlanningEndpointTests(unittest.TestCase):
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
         version_dependencies.init_version_dependencies_db()
+        deal_briefs.init_deal_briefs_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

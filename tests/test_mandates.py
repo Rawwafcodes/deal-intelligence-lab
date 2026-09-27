@@ -1023,6 +1023,7 @@ class ReconciliationWithReviewTests(unittest.TestCase):
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
         version_dependencies.init_version_dependencies_db()
+        deal_briefs.init_deal_briefs_db()
         mandates.init_mandates_db()
         self.project = store.create_project("Reconciliation With Review Tests", "")
         self.pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", PDF_BYTES).document
