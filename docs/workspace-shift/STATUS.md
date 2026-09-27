@@ -6676,3 +6676,96 @@ founder's machine and can be dropped with `dropdb -h "$(pwd)/pgsocket" -p
 
 **Permissions needed**: push of this commit; whether to fix items 1-4;
 whether to authorize a second paid run (integrity review) to populate S15.
+
+## 2026-09-27 — Walkthrough gaps fixed; S12/S14/S15/S16/S20 re-run with real populated content
+
+**Authorization**: founder instruction "do the three" after the previous
+entry: (1) fix the gaps it recorded, (2) authorize the further paid runs
+needed to populate S15 (and the S14/S16 runs the fixes made reachable),
+(3) push. Same environment as the previous entry (founder's Mac, branch
+`claude/gifted-turing-79cs5r`, disposable DB `deal_lab_m18_ai`, synthetic
+"Project Kestrel" deal, claude-sonnet-5 via `.env.local`).
+
+**Fixes (two commits)**:
+- `c749009` - lost-update race in `workspaces.update_finding_workflow`:
+  the UPDATE is now conditional on the expected revision (`AND revision =
+  %s`); 0 rows affected re-reads and raises the same
+  `FindingRevisionConflictError` (409). New deterministic test
+  (`test_overlapping_writers_on_same_revision_exactly_one_wins`, barrier
+  forces both writers past the Python pre-check) fails on the old code (2
+  winners) and passes now. This was the only revision-guarded write in the
+  codebase.
+- `6ffc4e9` - React:
+  - **Finding Detail (surface #15)**: Findings rows expand inline
+    (`aria-expanded`) showing explanation, relevance, uncertainty,
+    recommended action, management response, and evidence - PDF citations
+    link to the exact analysed version with `#page=N`, Excel citations show
+    `Sheet!Ref (kind)` linked to the pinned workbook version. Roles with
+    `manage_findings` get a review panel (decision, adjusted severity,
+    resolution, owner, notes) that saves with the finding's revision; a
+    409 shows the other person's saved values with "Load their version".
+  - **Workspace-scoped mandates**: `MandateDetail` shows a "Findings
+    workspace" picker for readiness, decision-package and reassessment
+    templates and sends it as the stage's `workspace_id`.
+  - **Document versions**: Documents gains a Version column and a per-row
+    "New version" upload (the existing Task 11.4 endpoint); the bulk upload
+    dialog warns when a chosen filename matches an existing document.
+
+**Verification**: full backend suite `python -m unittest discover -s tests
+-t .` - 911 tests OK. `tsc -b` clean; `oxlint` shows no new warnings in
+changed files (remaining warnings pre-existing). Frontend rebuilt into
+`static/` via `scripts/build-frontend-into-static.sh`; server restarted.
+Every result below is from Playwright driving the real app on port 8765.
+
+**Additional paid calls (4, all claude-sonnet-5)**, bringing the session
+total to 6:
+
+| Call | Trigger (real UI) | Tokens in/out |
+|---|---|---|
+| Decision package draft | Composer → Pipeline → Decision package → workspace picker → approve → run | 2,468 / 2,766 |
+| Targeted reassessment | Composer → Pipeline → Targeted reassessment (after a real new version) | 5,978 / 1,279 |
+| Integrity review | Composer → Review → memo submission + term sheet v2 + model | 19,349 / 6,101 |
+| (earlier) plan proposal + reconciliation | see previous entry | 1,742 / 165 and 32,176 / 6,042 |
+
+**Results**:
+
+| Scenario | Result | Note |
+|---|---|---|
+| S12 Review findings and evidence | **PASS** | As `reviewer`: EBITDA finding expands; both evidence links resolve to the pinned versions (200, `application/pdf` / xlsx); review saved (Accepted, awaiting information, owner, notes) and the row updates. |
+| S14 Readiness | **PASS (populated)** | Readiness mandate proposed from the UI with the workspace picker, no AI call, succeeded in 3s: "Not yet ready", 5 unmet checks that match real state (no brief, open critical/high finding, 5 unreviewed findings, request not closed, no approved package at that time). |
+| S14 Reassessments | **PASS (populated)** | "New version" on the original term sheet → v2 (exclusivity 6 → 8 weeks). Findings and Decision package both showed "Potentially stale". Reassessment run found exactly that change, marked the exclusivity finding materially affected and the other five unaffected with reasons. Acknowledging all 6 items cleared the stale banner. |
+| S15 Assertions | **PASS mechanically - semantic defect found** | Analyst created a task and submitted a synthetic memo PDF (planted miscitation: "per the term sheet, EBITDA is 3.4m"). Integrity review returned 5 real candidates; the top two caught the miscitation and the resulting multiple error (14.1x vs ~15.5x). Two accepted, three left unresolved, checkpoint resumed; mandate completed. **But Assertions lists the memo's challenged claims as "Confirmed"** - e.g. "Per the term sheet, FY2025 EBITDA is GBP 3.4m. — Confirmed" under "Claims confirmed through Integrity Review". `assertion_ledger.promote_candidate` records the candidate's `assertion_text` with `verification_status="confirmed"`; for an accepted integrity *challenge* that text is the claim the reviewer agreed is wrong. |
+| S16 Decision package | **PASS (populated)** | Draft produced from the UI; it treats only the accepted EBITDA finding as a position and explicitly declines to conclude on the five unreviewed findings (D06/D14 rule holds). Approved by `deal_lead` in the UI (status `approved`). |
+| S20 Revision conflict (UI) | **PASS** | Two independent contexts (`reviewer`, `deal_lead`) at the same revision: the second save shows the conflict banner with the first saver's values; "Load their version" advances to the new revision. Simultaneous clicks: exactly one of the two saw a conflict (previously both silently succeeded). |
+
+**New findings for founder decision (not fixed here)**:
+1. **Assertion semantics (S15)** - an accepted integrity challenge promotes
+   the challenged claim as "Confirmed". Misleading in exactly the way the
+   product must avoid; needs a D15 decision on what the ledger records (the
+   corrected fact, the claim marked refuted, or both).
+2. **Decision package ignores request responses** - `decision_package.
+   build_digest` sends each request's question/priority/status only, not
+   `management_response`, and the request stays "Sent" after the external
+   executive answers. The draft therefore said no response had been
+   received when one had. Including response text changes what is sent to
+   the model, so it is a product decision.
+3. **External executive and decision packages** - `external_executive`
+   holds `view_decision_packages`, but the restricted Overview lists only
+   approved work products, and a direct `/decision-package` URL hangs on
+   "Loading…" with "Could not load this deal's workspaces" (the page first
+   lists workspaces, which needs `view_findings`). The approved package is
+   unreachable for that role.
+4. `07-surface-reconciliation.md` rows 14/15 are now accurate in substance
+   (Finding Detail exists as inline expansion as of `6ffc4e9`), but were
+   inaccurate before it; no roadmap document was edited.
+
+**Files changed**: `workspaces.py`, `tests/test_workspaces.py`,
+`frontend/src/{components/FindingDetail.tsx, components/
+DocumentUploadDialog.tsx, lib/api.ts, lib/findingDisplay.ts,
+routes/Documents.tsx, routes/Findings.tsx, routes/MandateDetail.tsx}`,
+`static/` (rebuilt), and this file. No schema change, no dependency change.
+
+**Data note**: an earlier probe (previous entry) left a second, separate
+document also named `kestrel-term-sheet.pdf` in the synthetic deal; it is
+synthetic and harmless. The disposable database can be dropped with
+`dropdb -h "$(pwd)/pgsocket" -p 5544 deal_lab_m18_ai`.
