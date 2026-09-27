@@ -58,6 +58,67 @@ export async function uploadDocuments(
   return jsonOrThrow(res, "Could not upload documents.")
 }
 
+// Surface #13 (Document Detail).
+export interface DocumentVersionRecord {
+  id: string
+  document_id: string
+  version_number: number
+  size_bytes: number
+  sha256: string
+  uploaded_at: string
+}
+
+export interface DocumentCitingFinding {
+  workspace_id: string
+  workspace_label: string
+  finding_id: string
+  title: string
+  effective_severity: string | null
+  review_status: string | null
+  pages: number[]
+  cells: string[]
+  version_number: number | null
+}
+
+export interface DocumentDependent {
+  dependent_type: string
+  dependent_id: string
+  label: string | null
+  version_number: number | null
+  potentially_stale: boolean
+}
+
+export interface DocumentUsage {
+  citing_findings: DocumentCitingFinding[]
+  dependents: DocumentDependent[]
+}
+
+export async function getDocument(projectId: string, documentId: string): Promise<ProjectDocument> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}`)
+  return jsonOrThrow(res, "Could not load this document.")
+}
+
+export async function listDocumentVersions(projectId: string, documentId: string): Promise<DocumentVersionRecord[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/versions`
+  )
+  return jsonOrThrow(res, "Could not load this document's versions.")
+}
+
+export async function getDocumentUsage(projectId: string, documentId: string): Promise<DocumentUsage> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/usage`
+  )
+  return jsonOrThrow(res, "Could not load where this document is used.")
+}
+
+export function documentVersionHref(projectId: string, documentId: string, versionId: string, page?: number): string {
+  return (
+    `${BACKEND_ORIGIN}/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}` +
+    `/versions/${encodeURIComponent(versionId)}/download?inline=1${page ? `#page=${page}` : ""}`
+  )
+}
+
 // Task 11.4's explicit "replace this document's content" action - a
 // separate route from bulk upload, which never infers a version from a
 // filename. A new version marks dependent workspaces potentially stale

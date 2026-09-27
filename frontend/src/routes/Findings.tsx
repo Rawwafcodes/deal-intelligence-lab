@@ -165,7 +165,10 @@ export function Findings() {
   const [severityFilter, setSeverityFilter] = useState("all")
   const [requests, setRequests] = useState<WorkspaceRequest[]>([])
   const [requestDialogOpen, setRequestDialogOpen] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // A backlink (e.g. from Document Detail) may name one finding to open.
+  const [expandedId, setExpandedId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("finding")
+  )
   const canManageFindings = useCapability("manage_findings")
   const pinned = useMemo(() => pinnedVersionsFromAnalysis(bundle?.analysis ?? null), [bundle])
 

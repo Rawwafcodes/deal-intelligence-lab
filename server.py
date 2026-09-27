@@ -98,6 +98,9 @@ _DOCUMENT_VERSION_DOWNLOAD_RE = re.compile(
     r"^/api/projects/([^/]+)/documents/([^/]+)/versions/([^/]+)/download$"
 )
 _DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
+# Task 18.1 follow-up (surface #13, Document Detail): where one document is
+# cited and what depends on it.
+_DOCUMENT_USAGE_RE = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)/usage$")
 _INSPECTION_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/inspections/([^/]+)$")
 _CROSS_ANALYSIS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/cross-analysis$")
 _CROSS_ANALYSIS_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/cross-analyses/([^/]+)$")
@@ -522,6 +525,65 @@ class Handler(BaseHTTPRequestHandler):
             "activity": self._project_activity_feed(project_id, task_list),
             "stale_items": stale_items,
         }
+
+    def _document_usage(self, project_id: str, document_id: str) -> dict:
+        """Surface #13's citation backlinks: every finding (any origin, any
+        workspace) whose citations or evidence reference this document,
+        with the exact version its analysis read, plus every recorded
+        dependent (workspaces, decision packages, assertion entries, runs)
+        and whether it is now potentially stale. Findings are included only
+        for callers who may view findings."""
+        version_numbers = {v.id: v.version_number for v in documents.list_versions(document_id)}
+        can_view_findings = authz.has_capability(self._caller_deal_role(project_id), authz.VIEW_FINDINGS)
+        citing: list[dict] = []
+        labels: dict[str, str] = {}
+        if can_view_findings:
+            for ws in workspaces.list_workspaces(project_id):
+                labels[ws.id] = self._workspace_label(project_id, ws)
+                analysis = (
+                    cross_format_analyses.get_cross_format_analysis(project_id, ws.cross_format_analysis_id)
+                    if ws.cross_format_analysis_id else None
+                )
+                pinned_version_id = None
+                if analysis is not None:
+                    pairs = list(zip(analysis.pdf_document_ids, analysis.pdf_document_version_ids or []))
+                    pairs += list(zip(analysis.excel_document_ids, analysis.excel_document_version_ids or []))
+                    pinned_version_id = dict(pairs).get(document_id)
+                elif ws.integrity_review_id:
+                    review = integrity_reviews.get_integrity_review(project_id, ws.integrity_review_id)
+                    if review is not None:
+                        pinned_version_id = dict(zip(review.source_document_ids, review.source_version_ids)).get(document_id)
+                for finding in workspaces.list_findings(ws, analysis):
+                    pages = [c.get("start_page") for c in finding.get("pdf_citations", []) if c.get("document_id") == document_id]
+                    cells = [
+                        f"{c.get('sheet')}!{c.get('ref')}"
+                        for c in finding.get("excel_citations", []) if c.get("document_id") == document_id
+                    ]
+                    in_evidence = document_id in (finding.get("evidence_document_ids") or [])
+                    if not (pages or cells or in_evidence):
+                        continue
+                    citing.append({
+                        "workspace_id": ws.id,
+                        "workspace_label": labels[ws.id],
+                        "finding_id": finding["id"],
+                        "title": finding["title"],
+                        "effective_severity": finding.get("effective_severity"),
+                        "review_status": finding.get("review_status"),
+                        "pages": [p for p in pages if p is not None],
+                        "cells": cells,
+                        "version_number": version_numbers.get(pinned_version_id) if pinned_version_id else None,
+                    })
+        dependents = []
+        for dependent_type, dependent_id in version_dependencies.list_dependents_of("document", document_id):
+            pinned = version_dependencies.get_pinned_version(dependent_type, dependent_id, "document", document_id)
+            dependents.append({
+                "dependent_type": dependent_type,
+                "dependent_id": dependent_id,
+                "label": labels.get(dependent_id) if dependent_type == "workspace" else None,
+                "version_number": version_numbers.get(pinned) if pinned else None,
+                "potentially_stale": version_dependencies.get_staleness(dependent_type, dependent_id) is not None,
+            })
+        return {"citing_findings": citing, "dependents": dependents}
 
     def _workspace_label(self, project_id: str, workspace: "workspaces.Workspace") -> str:
         """Task 18.1 follow-up: a human-readable name for a findings
@@ -1043,6 +1105,29 @@ class Handler(BaseHTTPRequestHandler):
             inline = parse_qs(parsed.query).get("inline", ["0"])[0] == "1"
             version_path = documents.version_file_path(document, version)
             self._send_stored_file(version_path, document.original_filename, document.extension, inline=inline)
+            return
+
+        document_usage_match = _DOCUMENT_USAGE_RE.match(path)
+        if document_usage_match:
+            project_id, document_id = document_usage_match.groups()
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
+                return
+            if documents.get_document(project_id, document_id) is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+            self._send_json(200, self._document_usage(project_id, document_id))
+            return
+
+        document_item_match = _DOCUMENT_ITEM_RE.match(path)
+        if document_item_match:
+            project_id, document_id = document_item_match.groups()
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
+                return
+            document = documents.get_document(project_id, document_id)
+            if document is None:
+                self._send_json(404, {"error": "document not found"})
+                return
+            self._send_json(200, document.to_dict())
             return
 
         versions_match = _DOCUMENT_VERSIONS_RE.match(path)

@@ -8,6 +8,7 @@ import { Assertions } from "@/routes/Assertions"
 import { DealOverview } from "@/routes/DealOverview"
 import { Deals } from "@/routes/Deals"
 import { DecisionPackage } from "@/routes/DecisionPackage"
+import { DocumentDetail } from "@/routes/DocumentDetail"
 import { Documents } from "@/routes/Documents"
 import { Findings } from "@/routes/Findings"
 import { Home } from "@/routes/Home"
@@ -34,6 +35,10 @@ function App() {
             <Route
               path="documents"
               element={<RequireCapability capability="view_internal_documents"><Documents /></RequireCapability>}
+            />
+            <Route
+              path="documents/:documentId"
+              element={<RequireCapability capability="view_internal_documents"><DocumentDetail /></RequireCapability>}
             />
             <Route
               path="findings"

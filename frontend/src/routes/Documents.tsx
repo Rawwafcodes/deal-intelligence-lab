@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { DocumentUploadDialog } from "@/components/DocumentUploadDialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { BACKEND_ORIGIN, listDocuments, uploadDocumentVersion, type ProjectDocument } from "@/lib/api"
+import { listDocuments, uploadDocumentVersion, type ProjectDocument } from "@/lib/api"
 
 // Unifying the workspace frontend: the real document register, in React,
 // wired to the same GET .../documents endpoint the static project.html
@@ -151,14 +151,9 @@ export function Documents() {
             {filtered.map((doc) => (
               <tr key={doc.id} className="border-b border-border last:border-0 hover:bg-accent/5">
                 <td className="px-4 py-2">
-                  <a
-                    href={`${BACKEND_ORIGIN}/api/projects/${encodeURIComponent(projectId ?? "")}/documents/${encodeURIComponent(doc.id)}/download?inline=1`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-foreground hover:underline"
-                  >
+                  <Link to={`/projects/${projectId}/documents/${doc.id}`} className="text-foreground hover:underline">
                     {doc.original_filename}
-                  </a>
+                  </Link>
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">{folderOf(doc)}</td>
                 <td className="px-4 py-2 text-muted-foreground">{doc.extension.replace(/^\./, "").toUpperCase()}</td>

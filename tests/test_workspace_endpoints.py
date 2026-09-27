@@ -277,6 +277,33 @@ class WorkspaceEndpointTests(unittest.TestCase):
         listed = next(w for w in payload if w["id"] == workspace["id"])
         self.assertEqual(listed["label"], "Reconciliation: im.pdf vs model.xlsx")
 
+    # -- Document Detail (surface #13) ------------------------------------
+
+    def test_document_item_and_usage_backlinks(self):
+        _, workspace = self._open_workspace()
+        status, _ = self._post_json(
+            f"/api/projects/{self.project.id}/workspaces/{workspace['id']}/findings",
+            {"title": "Price clause unclear", "severity": "medium", "evidence_document_ids": [self.pdf_doc.id]},
+        )
+        self.assertEqual(status, 201)
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/documents/{self.pdf_doc.id}")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["id"], self.pdf_doc.id)
+
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/documents/{self.pdf_doc.id}/usage")
+        self.assertEqual(status, 200)
+        usage = json.loads(body)
+        cited = [f for f in usage["citing_findings"] if f["title"] == "Price clause unclear"]
+        self.assertEqual(len(cited), 1)
+        self.assertEqual(cited[0]["workspace_id"], workspace["id"])
+        self.assertTrue(cited[0]["workspace_label"].startswith("Reconciliation"))
+
+    def test_document_usage_unknown_document_is_not_found(self):
+        status, _, _ = self._get(f"/api/projects/{self.project.id}/documents/nope/usage")
+        self.assertEqual(status, 404)
+        status, _, _ = self._get(f"/api/projects/{self.project.id}/documents/nope")
+        self.assertEqual(status, 404)
+
     def test_list_workspaces_labels_integrity_review_workspace(self):
         workspace = self._open_integrity_review_workspace()
         status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces")
