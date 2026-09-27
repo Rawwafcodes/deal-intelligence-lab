@@ -13,6 +13,7 @@ import { MandateDetail } from "@/routes/MandateDetail"
 import { MandateList } from "@/routes/MandateList"
 import { Readiness } from "@/routes/Readiness"
 import { Reassessments } from "@/routes/Reassessments"
+import { Triggers } from "@/routes/Triggers"
 import { Work } from "@/routes/Work"
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
             <Route path="decision-package" element={<DecisionPackage />} />
             <Route path="readiness" element={<Readiness />} />
             <Route path="reassessments" element={<Reassessments />} />
+            <Route path="triggers" element={<Triggers />} />
             <Route path="mandates" element={<MandateList />} />
             <Route path="mandates/:mandateId" element={<MandateDetail />} />
             <Route path="work" element={<Work />} />

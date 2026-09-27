@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileUpIcon, ListTodoIcon, PencilIcon } from "lucide-react"
+import { BellIcon, FileUpIcon, ListTodoIcon, PencilIcon } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -154,6 +154,9 @@ export function DealOverview() {
           </Button>
           <Button variant="secondary" render={<Link to={`/projects/${projectId}/work`} />}>
             <ListTodoIcon /> Manage work
+          </Button>
+          <Button variant="secondary" render={<Link to={`/projects/${projectId}/triggers`} />}>
+            <BellIcon /> Monitoring
           </Button>
           <Button onClick={() => setBriefEditorOpen(true)}><PencilIcon /> Edit brief</Button>
         </div>

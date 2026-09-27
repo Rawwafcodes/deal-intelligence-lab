@@ -358,6 +358,82 @@ export async function decideReassessmentItem(
   return jsonOrThrow(res, "Could not record this decision.")
 }
 
+// Matches triggers.py exactly - v1 supports exactly these two event
+// types and their exact compatible templates (the module's own
+// EVENT_TEMPLATE_COMPATIBILITY). Mirrored here for the create form's
+// dependent select only; the server independently re-validates the same
+// compatibility regardless of what this sends.
+export const TRIGGER_EVENT_TEMPLATE_COMPATIBILITY: Record<string, readonly string[]> = {
+  document_version_changed: ["readiness", "reassessment"],
+  decision_package_prepared: ["readiness"],
+}
+
+export interface Trigger {
+  id: string
+  project_id: string
+  name: string
+  event_type: string
+  template_key: string
+  scope_document_id: string | null
+  scope_workspace_id: string | null
+  owner_user_id: string
+  budget_limit: number | null
+  reason: string
+  approval_policy: "manual"
+  status: "active" | "disabled"
+  created_at: string
+  created_by: string | null
+  disabled_at: string | null
+}
+
+export interface TriggerFiring {
+  id: string
+  trigger_id: string
+  project_id: string
+  workspace_id: string
+  event_detail: Record<string, unknown>
+  mandate_id: string | null
+  plan_id: string | null
+  status: "proposed" | "error"
+  error_message: string | null
+  fired_at: string
+}
+
+export async function listTriggers(projectId: string): Promise<Trigger[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/triggers`)
+  return jsonOrThrow(res, "Could not load monitoring triggers.")
+}
+
+export async function getTrigger(projectId: string, triggerId: string): Promise<Trigger & { firings: TriggerFiring[] }> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/triggers/${encodeURIComponent(triggerId)}`)
+  return jsonOrThrow(res, "Could not load this trigger.")
+}
+
+export async function createTrigger(
+  projectId: string,
+  data: {
+    name: string
+    event_type: string
+    template_key: string
+    scope_document_id?: string | null
+    scope_workspace_id?: string | null
+    budget_limit?: number | null
+    reason?: string
+  }
+): Promise<Trigger> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/triggers`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+  })
+  return jsonOrThrow(res, "Could not create this trigger.")
+}
+
+export async function disableTrigger(projectId: string, triggerId: string): Promise<Trigger> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/triggers/${encodeURIComponent(triggerId)}/disable`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  })
+  return jsonOrThrow(res, "Could not disable this trigger.")
+}
+
 export async function updateRequest(
   projectId: string,
   workspaceId: string,

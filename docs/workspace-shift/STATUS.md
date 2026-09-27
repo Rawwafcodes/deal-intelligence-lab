@@ -8,10 +8,10 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. Tasks 17.1-17.4 (Information Requests, Decision
-Packages, Readiness, Targeted Reassessment), all in React, are complete;
-**the current task is 17.5 (Monitoring/Triggers in React)**, the last
-item in Phase A. This
+for the full plan. **Phase A (17.1-17.5) is complete** - every backend-
+complete workflow the audit found unreachable now has a React-native
+path; **the current task is 17.6, Phase B's product-shell completion**.
+This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5211,3 +5211,70 @@ backend module (`triggers.py`) that has never had any frontend at all.
 Continuing automatically.
 
 **Permissions needed**: none identified yet for 17.5.
+
+## 2026-09-27 — Task 17.5 executed (Monitoring/Triggers in React; closes Phase A)
+
+Full detail in `docs/workspace-shift/tasks/17.5-monitoring-triggers.md`.
+Summary: new project-scoped deep route `/projects/:projectId/triggers`
+(`Triggers.tsx`), the **first-ever React (or any) frontend**
+`triggers.py` has had - unlike 17.1-17.4 there was no orphaned link to
+restore, only a fully backend-tested module (M15.3) with zero UI.
+Reuses `triggers.py`'s existing create/list/item/disable routes
+verbatim. Lists every trigger with its real event type (plain-English:
+"A document gets a new version" / "A decision package is drafted"),
+the mandate template it would fire, owner, budget limit, and reason; a
+role-gated ("New trigger", visible only to reviewer/deal_lead - checked
+client-side via the existing `/memberships` route, same pattern as
+17.2's approval gate) create dialog whose template-key options are
+dynamically filtered by the chosen event type, mirroring
+`EVENT_TEMPLATE_COMPATIBILITY` client-side; a scope picker that switches
+between a document picker and a workspace picker depending on event
+type; a disable action; and an expandable per-trigger firings list
+(fetched on expand, not eagerly).
+
+Disclosed, not invented: no new event types beyond the real backend's
+two; no approval-policy choice beyond "manual" (the only value
+`triggers.py` accepts); no "fire now" button - firing only ever happens
+as a real side effect of the real event inside `mandates.py`'s own
+hooks.
+
+**Verification**: `tsc -b`/`oxlint`/`npm run build` clean; `node --test
+tests/frontend/*.test.mjs` 5/5; full backend suite 858 tests OK. Live
+Playwright check (no Anthropic call): created a real trigger through
+the actual dialog as the deal-lead identity, confirmed it lists
+correctly, disabled it and confirmed the status updated; granted the
+analyst dev identity a real deal membership and confirmed, by switching
+identity in the running browser, that "New trigger" is correctly absent
+for that role; seeded one synthetic `TriggerFiring` directly and
+confirmed it renders in the expanded firings list with its real status
+and mandate reference.
+
+**Files changed**: `frontend/src/lib/api.ts` (new
+`Trigger`/`TriggerFiring` types, `TRIGGER_EVENT_TEMPLATE_COMPATIBILITY`,
+`listTriggers`/`getTrigger`/`createTrigger`/`disableTrigger`), new
+`frontend/src/routes/Triggers.tsx`, `frontend/src/App.tsx` (new route),
+`frontend/src/routes/DealOverview.tsx` (one new header link, since
+Monitoring is deal-wide context rather than a Findings-page concern).
+No backend file changed.
+
+**Decisions**: none - reuse of already-decided backend behavior.
+
+**This closes Phase A.** All five backend-complete workflows the
+2026-09-27 re-entry audit found unreachable (Information Requests,
+Decision Packages, Readiness, Targeted Reassessment, Monitoring/
+Triggers) now have a real, reachable, React-native path. Zero new
+tables, zero new backend routes, zero rewritten domain logic across all
+five tasks - every one reused existing, already-tested backend code.
+One real pre-existing bug was found and fixed along the way (the
+baseline `deal_briefs` fixture gap, commit `149c4a0`); one real
+pre-existing under-typed frontend field was corrected (`WorkspaceBundle
+.staleness`, in 17.4) along with finally rendering data
+(`bundle.staleness`) that had been fetched but silently unused since
+2026-09-18.
+
+**Blockers**: none. **Next task**: 17.6, Phase B (product shell
+completion) - its own task file is being written now, per this
+program's "write immediately before it starts" convention. Continuing
+automatically.
+
+**Permissions needed**: none identified yet for 17.6.
