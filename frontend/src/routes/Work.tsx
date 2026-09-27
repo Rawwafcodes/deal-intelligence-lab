@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useCapability } from "@/lib/dealAccess"
 import {
   addTaskComment,
   addWorkProductVersion,
@@ -139,6 +140,13 @@ interface WorkProductItemProps {
 function WorkProductItem({ projectId, task, workProduct, busy, mutate }: WorkProductItemProps) {
   const [rationale, setRationale] = useState("")
   const currentVersionId = workProduct.current_version_id
+  // M17 authorization closeout: the backend has always independently
+  // rejected a review decision from a role without it (docs/09-
+  // acceptance.md T04) - this component previously showed Approve/
+  // Return to every role regardless, relying entirely on that 403 to
+  // stop an analyst's own click. An analyst must not be shown controls
+  // for a decision they can never make, own submission or otherwise.
+  const canReview = useCapability("review_work")
 
   return (
     <li className="rounded-md border border-border p-3">
@@ -178,7 +186,7 @@ function WorkProductItem({ projectId, task, workProduct, busy, mutate }: WorkPro
         <Button size="sm" type="submit" variant="secondary" disabled={busy}>Add version</Button>
       </form>
 
-      {task.status === "submitted" ? (
+      {task.status === "submitted" && canReview ? (
         <div className="mt-3 grid gap-2 border-t border-border pt-3">
           <Textarea
             value={rationale}

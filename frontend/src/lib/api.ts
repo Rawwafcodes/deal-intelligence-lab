@@ -1288,9 +1288,22 @@ export interface FindingsSummary {
   open_by_severity: Record<string, number>
 }
 
+// M17 authorization closeout: the caller's own effective deal role and
+// the full capability set authz.py computed for it (authz.capabilities_
+// for's own return shape, verbatim) - the "smallest coherent API
+// addition" the closeout directive asked for, riding the same overview
+// fetch DealShell.tsx already makes on every deal-scoped page load
+// rather than a new endpoint. Backend-authoritative: this is exposed
+// for the frontend to hide/disable what a role cannot do, never to
+// decide it - every one of these booleans is re-checked server-side on
+// the matching route regardless of what React does with it.
+export type DealCapabilities = Record<string, boolean>
+
 export interface DealOverview {
   project: Project
   restricted?: false
+  role: string | null
+  capabilities: DealCapabilities
   brief: Record<string, unknown> | null
   workstreams: unknown[]
   tasks: { counts: Record<string, number>; needs_attention: TaskSummary[] }
@@ -1313,8 +1326,11 @@ export interface ApprovedDeliverable {
 export interface RestrictedDealOverview {
   project: Project
   restricted: true
+  role: string | null
+  capabilities: DealCapabilities
   brief: Record<string, unknown> | null
   approved_deliverables: ApprovedDeliverable[]
+  requests: WorkspaceRequest[]
 }
 
 export async function getDealOverview(projectId: string): Promise<DealOverview | RestrictedDealOverview> {

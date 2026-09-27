@@ -6,9 +6,11 @@ import { toast } from "sonner"
 import { BriefEditorDialog } from "@/components/BriefEditorDialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import {
   getDealOverview,
-  type DealOverview as DealOverviewData, type RestrictedDealOverview,
+  updateRequest,
+  type DealOverview as DealOverviewData, type RestrictedDealOverview, type WorkspaceRequest,
 } from "@/lib/api"
 
 // Task 13.3: this is the "MD drill-down" landing page for a single deal -
@@ -57,8 +59,50 @@ function CountRow({ counts, labels }: { counts: Record<string, number>; labels: 
   )
 }
 
-function RestrictedDealOverviewView({ overview }: { overview: RestrictedDealOverview }) {
-  const { project, brief, approved_deliverables } = overview
+function RequestResponseRow({
+  projectId, request, onResponded,
+}: { projectId: string; request: WorkspaceRequest; onResponded: () => void }) {
+  const [response, setResponse] = useState(request.management_response)
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    setBusy(true)
+    try {
+      await updateRequest(projectId, request.workspace_id, request.id, { management_response: response })
+      toast.success("Response sent.")
+      onResponded()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send the response.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="rounded-md border border-border p-3">
+      <p className="text-sm font-medium text-foreground">{request.question}</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {request.management_response.trim() ? "You already responded - you can update your response below." : "Awaiting your response."}
+      </p>
+      <Textarea
+        className="mt-2"
+        value={response}
+        onChange={(event) => setResponse(event.target.value)}
+        placeholder="Your response"
+        aria-label={`Response to: ${request.question}`}
+        rows={3}
+      />
+      <Button size="sm" className="mt-2" disabled={busy || !response.trim()} onClick={submit}>
+        {request.management_response.trim() ? "Update response" : "Send response"}
+      </Button>
+    </li>
+  )
+}
+
+function RestrictedDealOverviewView({
+  overview, projectId, onReload,
+}: { overview: RestrictedDealOverview; projectId: string; onReload: () => void }) {
+  const { project, brief, approved_deliverables, requests } = overview
   return (
     <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 space-y-6">
       <div>
@@ -103,6 +147,22 @@ function RestrictedDealOverviewView({ overview }: { overview: RestrictedDealOver
           </ul>
         )}
       </Card>
+
+      <Card className="p-6">
+        <h2 className="font-heading text-lg font-semibold text-foreground">Information requests</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Requests the deal team has sent you - respond directly below.
+        </p>
+        {requests.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">No requests are waiting on you right now.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {requests.map((request) => (
+              <RequestResponseRow key={request.id} projectId={projectId} request={request} onResponded={onReload} />
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   )
 }
@@ -131,7 +191,7 @@ export function DealOverview() {
   }
 
   if (overview.restricted) {
-    return <RestrictedDealOverviewView overview={overview} />
+    return <RestrictedDealOverviewView overview={overview} projectId={projectId} onReload={reload} />
   }
 
   const { project, brief, workstreams, tasks, mandates, reconciliations, documents } = overview

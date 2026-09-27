@@ -22,7 +22,11 @@ test("React owns document upload and the human-work route", () => {
   const work = source("frontend/src/routes/Work.tsx")
 
   assert.match(documents, /DocumentUploadDialog/)
-  assert.match(app, /path="work" element=\{<Work \/>\}/)
+  // M17 authorization closeout wraps the route element in a
+  // RequireCapability guard, so `<Work />` no longer sits directly next
+  // to `element={` - still proves React (not a legacy static page) owns
+  // this route, just without requiring exact literal adjacency.
+  assert.match(app, /path="work"[\s\S]{0,120}<Work \/>/)
   assert.match(work, /Workstreams &amp; tasks/)
   assert.match(work, /submitWorkProduct/)
   assert.match(work, /reviewWorkProduct/)

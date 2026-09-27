@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, urlparse
 import ai_client
 import answer_keys
 import assertion_ledger
+import authz
 import cross_analyses
 import cross_document_analysis
 import cross_format_analyses
@@ -279,6 +280,46 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return project
 
+    def _caller_deal_role(self, project_id: str) -> str | None:
+        return identity.get_deal_role(project_id, self.current_user_id)
+
+    def _require_capability(self, project_id: str, capability: str) -> "store.Project | None":
+        """M17 authorization closeout (authz.py's own module docstring):
+        the one gate every project-scoped route should call instead of
+        `_authorized_project` directly. Existence + membership first
+        (404, same as `_authorized_project` - a denied caller still
+        can't distinguish "not yours" from "doesn't exist"); then the
+        caller's own real, server-resolved role against the centralized
+        policy (403 when membership exists but the role lacks this
+        capability - a real, disclosed reason, not a fabricated 404).
+        `_authorized_project` itself is intentionally left as a separate,
+        still-used primitive: a handful of callers need existence+
+        membership with no single capability attached (e.g. an object-
+        level filter applied after the fact), and this method is built
+        on top of it, not a replacement for it."""
+        project = self._authorized_project(project_id)
+        if project is None:
+            return None
+        role = self._caller_deal_role(project_id)
+        if not authz.has_capability(role, capability):
+            self._send_json(403, {"error": f"your role on this deal does not permit this action ({capability})"})
+            return None
+        return project
+
+    def _require_capability_only(self, project_id: str, capability: str) -> bool:
+        """The capability half of `_require_capability`, for handlers
+        that already resolved project/workspace existence through a
+        different shared helper (`_get_owned_workspace`,
+        `_get_owned_validation_case`) and only need the role gate
+        layered on top - avoids re-fetching the project and re-sending
+        a 404 that already didn't fire. Sends 403 and returns False when
+        denied; sends nothing and returns True when allowed."""
+        role = self._caller_deal_role(project_id)
+        if not authz.has_capability(role, capability):
+            self._send_json(403, {"error": f"your role on this deal does not permit this action ({capability})"})
+            return False
+        return True
+
     # -- identity endpoints (Task 11.3b) --------------------------------
 
     def _session_dict(self, user_id: str) -> dict:
@@ -425,9 +466,10 @@ class Handler(BaseHTTPRequestHandler):
         _task_with_details/_workstream_with_assignments already use)."""
         project_id = project.id
         brief = deal_briefs.get_current_version(project_id)
+        role = self._caller_deal_role(project_id)
 
-        if identity.get_deal_role(project_id, self.current_user_id) == "external_executive":
-            return self._deal_overview_restricted(project, brief)
+        if role == "external_executive":
+            return self._deal_overview_restricted(project, brief, role)
 
         workstream_list = [self._workstream_with_assignments(w) for w in workstreams.list_workstreams(project_id)]
 
@@ -469,6 +511,8 @@ class Handler(BaseHTTPRequestHandler):
 
         return {
             "project": project.to_dict(),
+            "role": role,
+            "capabilities": authz.capabilities_for(role),
             "brief": brief.to_dict() if brief is not None else None,
             "workstreams": workstream_list,
             "tasks": tasks_out,
@@ -479,7 +523,9 @@ class Handler(BaseHTTPRequestHandler):
             "stale_items": stale_items,
         }
 
-    def _deal_overview_restricted(self, project: "store.Project", brief: "deal_briefs.BriefVersion | None") -> dict:
+    def _deal_overview_restricted(
+        self, project: "store.Project", brief: "deal_briefs.BriefVersion | None", role: str | None
+    ) -> dict:
         """Task 13.4 / docs/05-experience.md: 'External executive view
         exposes approved shared materials only by default' and T05.
         Deliberately a much smaller payload than the full Deal Overview -
@@ -489,7 +535,18 @@ class Handler(BaseHTTPRequestHandler):
         surface only (see this task's own task file for the disclosed
         limitation that other routes - documents, task detail, mandate
         detail - are not separately retrofitted with role-based
-        restriction in this task)."""
+        restriction in this task).
+
+        Task 17.14 (M17 authorization closeout) added `requests`: every
+        information request, across every workspace in this project,
+        that `authz.request_visible_to` says this role may see - for
+        external_executive that means only ones already `sent`/
+        `answered`, matching the founder's own "information requests
+        explicitly assigned or exposed to them" and "management-response
+        controls needed to answer those requests". Composed the same way
+        `approved_deliverables` above already is (iterate every workspace
+        in the project) - requests are workspace-scoped, this overview
+        is not."""
         project_id = project.id
         approved_deliverables = []
         for task in tasks.list_tasks(project_id):
@@ -502,11 +559,19 @@ class Handler(BaseHTTPRequestHandler):
                     "work_product": work_product.to_dict(),
                     "approved_at": decision.created_at if decision is not None else None,
                 })
+        visible_requests = []
+        for ws in workspaces.list_workspaces(project_id):
+            for request in workspaces.list_requests(ws.id):
+                if authz.request_visible_to(role, request.status):
+                    visible_requests.append(request.to_dict())
         return {
             "project": project.to_dict(),
             "restricted": True,
+            "role": role,
+            "capabilities": authz.capabilities_for(role),
             "brief": brief.to_dict() if brief is not None else None,
             "approved_deliverables": approved_deliverables,
+            "requests": visible_requests,
         }
 
     def _workspace_overview(self) -> dict:
@@ -532,6 +597,23 @@ class Handler(BaseHTTPRequestHandler):
         engagements: list[dict] = []
         material_change_events: list[dict] = []
         for project in projects:
+            # M17 authorization closeout: a caller whose role on this
+            # specific project lacks VIEW_INTERNAL_ACTIVITY (in practice,
+            # external_executive) still sees the deal listed here - they
+            # need to find it - but with none of the internal task/mandate
+            # counts or activity a restricted Deal Overview also withholds.
+            # A caller's role is looked up per-project (not once for the
+            # whole call) since accessible projects can carry different
+            # roles for the same caller.
+            role = self._caller_deal_role(project.id)
+            if not authz.has_capability(role, authz.VIEW_INTERNAL_ACTIVITY):
+                engagements.append({
+                    "project": project.to_dict(),
+                    "task_counts": {},
+                    "mandate_counts": {},
+                })
+                continue
+
             task_list = tasks.list_tasks(project.id)
             mandate_list = mandates.list_mandates(project.id)
             engagements.append({
@@ -578,6 +660,13 @@ class Handler(BaseHTTPRequestHandler):
         projects = [p for p in store.list_projects() if p.id in accessible_ids]
         out: list[dict] = []
         for project in projects:
+            # M17 authorization closeout: skip any project where the
+            # caller's own role lacks VIEW_MANDATES (external_executive) -
+            # mandate plans/prompts/runs are explicitly internal-only, so
+            # this aggregation must not surface them just because the
+            # caller happens to hold some role on the project.
+            if not authz.has_capability(self._caller_deal_role(project.id), authz.VIEW_MANDATES):
+                continue
             for mandate in mandates.list_mandates(project.id):
                 row = mandate.to_dict()
                 row["project"] = project.to_dict()
@@ -868,7 +957,7 @@ class Handler(BaseHTTPRequestHandler):
         deal_overview_match = _DEAL_OVERVIEW_RE.match(path)
         if deal_overview_match:
             (project_id,) = deal_overview_match.groups()
-            project = self._authorized_project(project_id)
+            project = self._require_capability(project_id, authz.VIEW_DEAL)
             if project is None:
                 return
             self._send_json(200, self._deal_overview(project))
@@ -877,7 +966,7 @@ class Handler(BaseHTTPRequestHandler):
         download_match = _DOCUMENT_DOWNLOAD_RE.match(path)
         if download_match:
             project_id, document_id = download_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.DOWNLOAD_DOCUMENTS) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -890,7 +979,7 @@ class Handler(BaseHTTPRequestHandler):
         version_download_match = _DOCUMENT_VERSION_DOWNLOAD_RE.match(path)
         if version_download_match:
             project_id, document_id, version_id = version_download_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.DOWNLOAD_DOCUMENTS) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -908,7 +997,7 @@ class Handler(BaseHTTPRequestHandler):
         versions_match = _DOCUMENT_VERSIONS_RE.match(path)
         if versions_match:
             project_id, document_id = versions_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             if documents.get_document(project_id, document_id) is None:
                 self._send_json(404, {"error": "document not found"})
@@ -920,7 +1009,7 @@ class Handler(BaseHTTPRequestHandler):
         inspection_match = _INSPECTION_ITEM_RE.match(path)
         if inspection_match:
             project_id, inspection_id = inspection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             inspection = inspections.get_inspection(project_id, inspection_id)
             if inspection is None:
@@ -932,7 +1021,7 @@ class Handler(BaseHTTPRequestHandler):
         cross_analysis_match = _CROSS_ANALYSIS_ITEM_RE.match(path)
         if cross_analysis_match:
             project_id, cross_analysis_id = cross_analysis_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             record = cross_analyses.get_cross_analysis(project_id, cross_analysis_id)
             if record is None:
@@ -944,7 +1033,7 @@ class Handler(BaseHTTPRequestHandler):
         xlsx_inspection_match = _XLSX_INSPECTION_ITEM_RE.match(path)
         if xlsx_inspection_match:
             project_id, xlsx_inspection_id = xlsx_inspection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             xlsx_record = xlsx_inspections.get_xlsx_inspection(project_id, xlsx_inspection_id)
             if xlsx_record is None:
@@ -956,7 +1045,7 @@ class Handler(BaseHTTPRequestHandler):
         reconciliation_match = _RECONCILIATION_ITEM_RE.match(path)
         if reconciliation_match:
             project_id, reconciliation_id = reconciliation_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
             reconciliation_record = cross_format_analyses.get_cross_format_analysis(project_id, reconciliation_id)
             if reconciliation_record is None:
@@ -968,7 +1057,7 @@ class Handler(BaseHTTPRequestHandler):
         cross_format_list_match = _CROSS_FORMAT_ANALYSES_LIST_RE.match(path)
         if cross_format_list_match:
             (project_id,) = cross_format_list_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
             records = cross_format_analyses.list_cross_format_analyses(project_id)
             self._send_json(200, [r.to_dict() for r in records])
@@ -985,6 +1074,8 @@ class Handler(BaseHTTPRequestHandler):
             project_id, workspace_id = workspace_audit_log_match.groups()
             workspace = self._get_owned_workspace(project_id, workspace_id)
             if workspace is None:
+                return
+            if not self._require_capability_only(project_id, authz.VIEW_INTERNAL_ACTIVITY):
                 return
             events = workspaces.list_audit_log(workspace_id)
             self._send_json(200, [e.to_dict() for e in events])
@@ -1026,14 +1117,18 @@ class Handler(BaseHTTPRequestHandler):
             workspace = self._get_owned_workspace(project_id, workspace_id)
             if workspace is None:
                 return
-            requests = workspaces.list_requests(workspace_id)
+            role = self._caller_deal_role(project_id)
+            if not authz.has_capability(role, authz.VIEW_REQUESTS):
+                self._send_json(403, {"error": "your role on this deal does not permit this action (view_requests)"})
+                return
+            requests = [r for r in workspaces.list_requests(workspace_id) if authz.request_visible_to(role, r.status)]
             self._send_json(200, [r.to_dict() for r in requests])
             return
 
         workspaces_collection_match = _WORKSPACES_COLLECTION_RE.match(path)
         if workspaces_collection_match:
             (project_id,) = workspaces_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
             self._send_json(200, [w.to_dict() for w in workspaces.list_workspaces(project_id)])
             return
@@ -1094,7 +1189,7 @@ class Handler(BaseHTTPRequestHandler):
         validation_cases_collection_match = _VALIDATION_CASES_COLLECTION_RE.match(path)
         if validation_cases_collection_match:
             (project_id,) = validation_cases_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             cases = validation_cases.list_validation_cases(project_id)
             self._send_json(200, [c.to_dict() for c in cases])
@@ -1103,7 +1198,7 @@ class Handler(BaseHTTPRequestHandler):
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
         if collection_match:
             (project_id,) = collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             docs = [d.to_dict() for d in documents.list_documents(project_id)]
             self._send_json(200, docs)
@@ -1112,7 +1207,7 @@ class Handler(BaseHTTPRequestHandler):
         brief_versions_match = _BRIEF_VERSIONS_RE.match(path)
         if brief_versions_match:
             (project_id,) = brief_versions_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             brief_versions = deal_briefs.list_versions(project_id)
             self._send_json(200, [v.to_dict() for v in brief_versions])
@@ -1121,7 +1216,7 @@ class Handler(BaseHTTPRequestHandler):
         brief_version_item_match = _BRIEF_VERSION_ITEM_RE.match(path)
         if brief_version_item_match:
             project_id, version_id = brief_version_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             brief_version = deal_briefs.get_version(project_id, version_id)
             if brief_version is None:
@@ -1133,7 +1228,7 @@ class Handler(BaseHTTPRequestHandler):
         brief_match = _BRIEF_RE.match(path)
         if brief_match:
             (project_id,) = brief_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_DEAL) is None:
                 return
             current = deal_briefs.get_current_version(project_id)
             self._send_json(200, current.to_dict() if current else None)
@@ -1142,7 +1237,7 @@ class Handler(BaseHTTPRequestHandler):
         workstream_assignments_match = _WORKSTREAM_ASSIGNMENTS_RE.match(path)
         if workstream_assignments_match:
             project_id, workstream_id = workstream_assignments_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             if workstreams.get_workstream(project_id, workstream_id) is None:
                 self._send_json(404, {"error": "workstream not found"})
@@ -1153,7 +1248,7 @@ class Handler(BaseHTTPRequestHandler):
         memberships_collection_match = _MEMBERSHIPS_COLLECTION_RE.match(path)
         if memberships_collection_match:
             (project_id,) = memberships_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_ACTIVITY) is None:
                 return
             self._send_json(200, self._memberships_with_users(project_id))
             return
@@ -1161,7 +1256,7 @@ class Handler(BaseHTTPRequestHandler):
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             workstream = workstreams.get_workstream(project_id, workstream_id)
             if workstream is None:
@@ -1173,7 +1268,7 @@ class Handler(BaseHTTPRequestHandler):
         workstreams_collection_match = _WORKSTREAMS_COLLECTION_RE.match(path)
         if workstreams_collection_match:
             (project_id,) = workstreams_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             out = [self._workstream_with_assignments(w) for w in workstreams.list_workstreams(project_id)]
             self._send_json(200, out)
@@ -1182,7 +1277,7 @@ class Handler(BaseHTTPRequestHandler):
         work_product_version_download_match = _WORK_PRODUCT_VERSION_DOWNLOAD_RE.match(path)
         if work_product_version_download_match:
             project_id, work_product_id, version_id = work_product_version_download_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             work_product = work_products.get_work_product(project_id, work_product_id)
             if work_product is None:
@@ -1202,7 +1297,7 @@ class Handler(BaseHTTPRequestHandler):
         work_product_versions_match = _WORK_PRODUCT_VERSIONS_RE.match(path)
         if work_product_versions_match:
             project_id, work_product_id = work_product_versions_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             work_product = work_products.get_work_product(project_id, work_product_id)
             if work_product is None:
@@ -1214,7 +1309,7 @@ class Handler(BaseHTTPRequestHandler):
         work_product_review_list_match = _WORK_PRODUCT_REVIEW_RE.match(path)
         if work_product_review_list_match:
             project_id, work_product_id = work_product_review_list_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             work_product = work_products.get_work_product(project_id, work_product_id)
             if work_product is None:
@@ -1226,7 +1321,7 @@ class Handler(BaseHTTPRequestHandler):
         task_item_match = _TASK_ITEM_RE.match(path)
         if task_item_match:
             project_id, task_id = task_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             task = tasks.get_task(project_id, task_id)
             if task is None:
@@ -1238,7 +1333,7 @@ class Handler(BaseHTTPRequestHandler):
         tasks_collection_match = _TASKS_COLLECTION_RE.match(path)
         if tasks_collection_match:
             (project_id,) = tasks_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_WORK_PRODUCTS) is None:
                 return
             out = [self._task_with_details(t) for t in tasks.list_tasks(project_id)]
             self._send_json(200, out)
@@ -1251,7 +1346,7 @@ class Handler(BaseHTTPRequestHandler):
         mandate_run_item_match = _MANDATE_RUN_ITEM_RE.match(path)
         if mandate_run_item_match:
             project_id, mandate_id, run_id = mandate_run_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_MANDATES) is None:
                 return
             mandate_run = mandates.get_run(mandate_id, run_id)
             if mandate_run is None:
@@ -1263,7 +1358,7 @@ class Handler(BaseHTTPRequestHandler):
         mandate_runs_collection_match = _MANDATE_RUNS_COLLECTION_RE.match(path)
         if mandate_runs_collection_match:
             project_id, mandate_id = mandate_runs_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_MANDATES) is None:
                 return
             if mandates.get_mandate(project_id, mandate_id) is None:
                 self._send_json(404, {"error": "mandate not found"})
@@ -1275,7 +1370,7 @@ class Handler(BaseHTTPRequestHandler):
         mandate_item_match = _MANDATE_ITEM_RE.match(path)
         if mandate_item_match:
             project_id, mandate_id = mandate_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_MANDATES) is None:
                 return
             mandate = mandates.get_mandate(project_id, mandate_id)
             if mandate is None:
@@ -1287,7 +1382,7 @@ class Handler(BaseHTTPRequestHandler):
         mandates_collection_match = _MANDATES_COLLECTION_RE.match(path)
         if mandates_collection_match:
             (project_id,) = mandates_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_MANDATES) is None:
                 return
             out = [m.to_dict() for m in mandates.list_mandates(project_id)]
             self._send_json(200, out)
@@ -1296,7 +1391,7 @@ class Handler(BaseHTTPRequestHandler):
         integrity_review_item_match = _INTEGRITY_REVIEW_ITEM_RE.match(path)
         if integrity_review_item_match:
             project_id, review_id = integrity_review_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
             review = integrity_reviews.get_integrity_review(project_id, review_id)
             if review is None:
@@ -1308,7 +1403,7 @@ class Handler(BaseHTTPRequestHandler):
         integrity_reviews_collection_match = _INTEGRITY_REVIEWS_COLLECTION_RE.match(path)
         if integrity_reviews_collection_match:
             (project_id,) = integrity_reviews_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
                 return
             out = [r.to_dict() for r in integrity_reviews.list_integrity_reviews(project_id)]
             self._send_json(200, out)
@@ -1317,7 +1412,7 @@ class Handler(BaseHTTPRequestHandler):
         reassessment_record_match = _REASSESSMENT_RECORD_RE.match(path)
         if reassessment_record_match:
             project_id, reassessment_id = reassessment_record_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_REASSESSMENTS) is None:
                 return
             reassessment_record = reassessments.get_reassessment(project_id, reassessment_id)
             if reassessment_record is None:
@@ -1329,7 +1424,7 @@ class Handler(BaseHTTPRequestHandler):
         reassessments_collection_match = _REASSESSMENTS_COLLECTION_RE.match(path)
         if reassessments_collection_match:
             (project_id,) = reassessments_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_REASSESSMENTS) is None:
                 return
             out = [r.to_dict() for r in reassessments.list_reassessments(project_id)]
             self._send_json(200, out)
@@ -1338,7 +1433,7 @@ class Handler(BaseHTTPRequestHandler):
         trigger_item_match = _TRIGGER_ITEM_RE.match(path)
         if trigger_item_match:
             project_id, trigger_id = trigger_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_TRIGGERS) is None:
                 return
             trigger = triggers.get_trigger(project_id, trigger_id)
             if trigger is None:
@@ -1352,7 +1447,7 @@ class Handler(BaseHTTPRequestHandler):
         triggers_collection_match = _TRIGGERS_COLLECTION_RE.match(path)
         if triggers_collection_match:
             (project_id,) = triggers_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_TRIGGERS) is None:
                 return
             out = [t.to_dict() for t in triggers.list_triggers(project_id)]
             self._send_json(200, out)
@@ -1361,7 +1456,7 @@ class Handler(BaseHTTPRequestHandler):
         assertion_ledger_collection_match = _ASSERTION_LEDGER_COLLECTION_RE.match(path)
         if assertion_ledger_collection_match:
             (project_id,) = assertion_ledger_collection_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_ASSERTIONS) is None:
                 return
             out = [e.to_dict() for e in assertion_ledger.list_entries(project_id)]
             self._send_json(200, out)
@@ -1369,7 +1464,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/projects/"):
             project_id = path.removeprefix("/api/projects/")
-            project = self._authorized_project(project_id)
+            project = self._require_capability(project_id, authz.VIEW_DEAL)
             if project is None:
                 return
             self._send_json(200, project.to_dict())
@@ -1740,7 +1835,7 @@ class Handler(BaseHTTPRequestHandler):
         item_match = _DOCUMENT_ITEM_RE.match(path)
         if item_match:
             project_id, document_id = item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             if documents.get_document(project_id, document_id) is None:
                 self._send_json(404, {"error": "document not found"})
@@ -1764,7 +1859,7 @@ class Handler(BaseHTTPRequestHandler):
         assignment_item_match = _WORKSTREAM_ASSIGNMENT_ITEM_RE.match(path)
         if assignment_item_match:
             project_id, workstream_id, user_id = assignment_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
                 return
             if workstreams.get_workstream(project_id, workstream_id) is None:
                 self._send_json(404, {"error": "workstream not found"})
@@ -1785,7 +1880,7 @@ class Handler(BaseHTTPRequestHandler):
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
-            if self._authorized_project(project_id) is None:
+            if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
                 return
             body = self._read_json_body()
             if not body or body.get("confirm") is not True:
@@ -1800,7 +1895,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def _handle_document_upload(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
 
         content_type_header = self.headers.get("Content-Type", "")
@@ -1854,7 +1949,7 @@ class Handler(BaseHTTPRequestHandler):
         single-file action from the bulk upload endpoint (see
         documents.save_uploaded_file's docstring for why the two are not
         merged)."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
         if documents.get_document(project_id, document_id) is None:
             self._send_json(404, {"error": "document not found"})
@@ -1911,7 +2006,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- deal brief (Task 11.4) -------------------------------------------
 
     def _handle_create_brief_version(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -1927,7 +2022,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- workstreams (Task 11.4) ------------------------------------------
 
     def _handle_create_workstream(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -1943,7 +2038,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, self._workstream_with_assignments(workstream))
 
     def _handle_create_assignment(self, project_id: str, workstream_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         if workstreams.get_workstream(project_id, workstream_id) is None:
             self._send_json(404, {"error": "workstream not found"})
@@ -1970,7 +2065,7 @@ class Handler(BaseHTTPRequestHandler):
         restricted to an existing deal_lead, not merely any authorized
         member - the same "check the caller's own real role, never a
         client-supplied one" pattern as the review-decision role check."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.MANAGE_MEMBERSHIP) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
             self._send_json(403, {"error": "only a deal lead may grant deal membership"})
@@ -1991,7 +2086,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, self._memberships_with_users(project_id))
 
     def _handle_revoke_membership(self, project_id: str, user_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.MANAGE_MEMBERSHIP) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
             self._send_json(403, {"error": "only a deal lead may revoke deal membership"})
@@ -2005,7 +2100,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- tasks and work-product submissions (Task 13.1) --------------------
 
     def _handle_create_task(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2032,7 +2127,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, self._task_with_details(task))
 
     def _handle_update_task_status(self, project_id: str, task_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2053,7 +2148,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, self._task_with_details(task))
 
     def _handle_assign_task(self, project_id: str, task_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2072,7 +2167,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, self._task_with_details(task))
 
     def _handle_add_task_comment(self, project_id: str, task_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         if tasks.get_task(project_id, task_id) is None:
             self._send_json(404, {"error": "task not found"})
@@ -2098,7 +2193,7 @@ class Handler(BaseHTTPRequestHandler):
         the task "submitted" is composed here, at the API boundary,
         exactly like _assignments_with_users composes workstreams.py with
         identity.py - work_products.py itself never imports tasks.py."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         task = tasks.get_task(project_id, task_id)
         if task is None:
@@ -2142,7 +2237,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, result.to_dict())
 
     def _handle_add_work_product_version(self, project_id: str, work_product_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.SUBMIT_WORK) is None:
             return
         work_product = work_products.get_work_product(project_id, work_product_id)
         if work_product is None:
@@ -2188,7 +2283,7 @@ class Handler(BaseHTTPRequestHandler):
         match - composed here, at the API boundary, exactly like
         _handle_create_work_product composes work_products.py with
         tasks.py (reviews.py imports neither)."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.REVIEW_WORK) is None:
             return
         # Task 13.4 / docs/09-acceptance.md T04: "analyst cannot approve
         # final package" - checked against the caller's own real deal
@@ -2260,7 +2355,7 @@ class Handler(BaseHTTPRequestHandler):
         direct analogue, so it is gated the same way, not as strictly as
         the review-decision endpoint's reviewer/deal_lead-only gate
         (which is closer to "Approve decision package")."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.MANAGE_FINDINGS) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
             self._send_json(
@@ -2364,7 +2459,7 @@ class Handler(BaseHTTPRequestHandler):
         staleness flag is cleared - the only path that ever clears one.
         Gated the same as an Integrity Review candidate decision (docs/06:
         "Recommend finding disposition: Yes/Yes/Yes/No")."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.REQUEST_REASSESSMENT) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
             self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may decide a reassessment item"})
@@ -2407,7 +2502,7 @@ class Handler(BaseHTTPRequestHandler):
         handler independently re-verifies the entry actually belongs to
         the project in the URL before acting on it, the same source-
         ownership check every other project-scoped route already makes."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.MANAGE_ASSERTIONS) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
             self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may dispute an assertion"})
@@ -2429,7 +2524,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, updated.to_dict())
 
     def _handle_confirm_assertion(self, project_id: str, entry_key: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.MANAGE_ASSERTIONS) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
             self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may confirm an assertion"})
@@ -2453,7 +2548,7 @@ class Handler(BaseHTTPRequestHandler):
         deal_lead, the same role pair docs/06-security-and-collaboration.md
         gives "Create mandate... Yes within workspace policy" beyond a
         plain analyst's own scoped capability/budget."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CONFIGURE_TRIGGERS) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("reviewer", "deal_lead"):
             self._send_json(403, {"error": "only a reviewer or deal lead may configure a trigger"})
@@ -2481,7 +2576,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, trigger.to_dict())
 
     def _handle_disable_trigger(self, project_id: str, trigger_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CONFIGURE_TRIGGERS) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) not in ("reviewer", "deal_lead"):
             self._send_json(403, {"error": "only a reviewer or deal lead may disable a trigger"})
@@ -2496,7 +2591,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- mandates (Task 12.1) --------------------------------------------
 
     def _handle_create_mandate(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CREATE_MANDATES) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2512,7 +2607,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, self._mandate_with_plans(mandate))
 
     def _handle_propose_plan(self, project_id: str, mandate_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CREATE_MANDATES) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2545,7 +2640,7 @@ class Handler(BaseHTTPRequestHandler):
         # prior proposal (docs/04: "AI can request adaptation... Record a
         # new plan revision") - always produces a brand new PlanRevision,
         # never mutates one already on record.
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CREATE_MANDATES) is None:
             return
         data = self._read_json_body() or {}
         feedback = data.get("feedback")
@@ -2576,7 +2671,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, result.to_dict())
 
     def _handle_approve_plan(self, project_id: str, mandate_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CREATE_MANDATES) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2597,7 +2692,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, plan.to_dict())
 
     def _handle_reject_plan(self, project_id: str, mandate_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.CREATE_MANDATES) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2618,7 +2713,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, plan.to_dict())
 
     def _handle_start_run(self, project_id: str, mandate_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.EXECUTE_MANDATES) is None:
             return
         # Task 12.2: an optional per-run budget_limit - the minimal ledger
         # is enforced against whatever is passed here (or unlimited, if
@@ -2646,7 +2741,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(202, self._run_with_attempts(run))
 
     def _handle_resume_run(self, project_id: str, mandate_id: str, run_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.EXECUTE_MANDATES) is None:
             return
         data = self._read_json_body()
         if data is None:
@@ -2667,7 +2762,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, self._run_with_attempts(run))
 
     def _handle_cancel_run(self, project_id: str, mandate_id: str, run_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.EXECUTE_MANDATES) is None:
             return
         try:
             run = mandates.cancel_run(project_id, mandate_id, run_id)
@@ -2680,7 +2775,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, self._run_with_attempts(run))
 
     def _handle_document_inspect(self, project_id: str, document_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
 
         document = documents.get_document(project_id, document_id)
@@ -2716,7 +2811,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_cross_analysis(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
 
         body = self._read_json_body()
@@ -2763,7 +2858,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_workbook_inspect(self, project_id: str, document_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
 
         document = documents.get_document(project_id, document_id)
@@ -2809,7 +2904,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200 if outcome.success else 502, record.to_dict())
 
     def _handle_reconciliation(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
             return
 
         body = self._read_json_body()
@@ -2882,7 +2977,7 @@ class Handler(BaseHTTPRequestHandler):
         endpoint. Sends the 404 response itself and returns None when the
         project or case doesn't exist (or the case belongs to a different
         project) - callers should `if case is None: return`."""
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return None
         case = validation_cases.get_validation_case(project_id, validation_case_id)
         if case is None:
@@ -2909,7 +3004,7 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def _handle_create_validation_case(self, project_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
             return
 
         data = self._read_json_body()
@@ -3266,7 +3361,7 @@ class Handler(BaseHTTPRequestHandler):
         return analysis
 
     def _handle_open_workspace(self, project_id: str, analysis_id: str) -> None:
-        if self._authorized_project(project_id) is None:
+        if self._require_capability(project_id, authz.VIEW_FINDINGS) is None:
             return
         analysis = cross_format_analyses.get_cross_format_analysis(project_id, analysis_id)
         if analysis is None:
@@ -3315,6 +3410,8 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.VIEW_FINDINGS):
+            return
         analysis: cross_format_analyses.CrossFormatAnalysis | None = None
         if workspace.cross_format_analysis_id is not None:
             analysis = cross_format_analyses.get_cross_format_analysis(project_id, workspace.cross_format_analysis_id)
@@ -3339,6 +3436,8 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_update_finding(self, project_id: str, workspace_id: str, finding_id: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.MANAGE_FINDINGS):
             return
         analysis = self._get_workspace_analysis(workspace)
         if analysis is None:
@@ -3368,6 +3467,8 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.MANAGE_FINDINGS):
+            return
         analysis = self._get_workspace_analysis(workspace)
         if analysis is None:
             return
@@ -3396,6 +3497,8 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.MANAGE_FINDINGS):
+            return
         body = self._read_json_body()
         if not body or body.get("confirm") is not True:
             self._send_json(400, {"error": "deletion requires {\"confirm\": true} in the request body"})
@@ -3413,6 +3516,8 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_set_duplicate(self, project_id: str, workspace_id: str, finding_id: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.MANAGE_FINDINGS):
             return
         analysis = self._get_workspace_analysis(workspace)
         if analysis is None:
@@ -3443,6 +3548,8 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.CREATE_REQUESTS):
+            return
         data = self._read_json_body()
         if data is None:
             self._send_json(400, {"error": "invalid JSON body"})
@@ -3455,12 +3562,41 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201, request.to_dict())
 
     def _handle_update_request(self, project_id: str, workspace_id: str, request_id: str) -> None:
+        """Two very different callers reach this route (M17 authorization
+        closeout): an internal team member editing any field of a request
+        they manage, and an external_executive answering one already sent
+        to them - the founder's directive's own "management-response
+        controls needed to answer those requests". Internal roles keep the
+        full pre-existing edit surface unchanged. An external_executive is
+        allowed only when the request's own *current* status is already
+        externally visible (authz.request_visible_to - draft requests are
+        still internal-only) and the request body touches nothing but
+        `management_response` - never status, assignment, or the other
+        internal-only fields `workspaces.update_request` would otherwise
+        accept from any caller."""
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
         data = self._read_json_body()
         if data is None:
             self._send_json(400, {"error": "invalid JSON body"})
+            return
+        role = self._caller_deal_role(project_id)
+        if authz.has_capability(role, authz.CREATE_REQUESTS):
+            pass  # internal roles: unchanged, full edit surface
+        elif authz.has_capability(role, authz.RESPOND_AS_EXTERNAL):
+            existing = workspaces.get_request(workspace_id, request_id)
+            if existing is None or not authz.request_visible_to(role, existing.status):
+                self._send_json(404, {"error": "request not found"})
+                return
+            if set(data.keys()) - {"management_response"}:
+                self._send_json(
+                    403,
+                    {"error": "an external participant may only set management_response on this request"},
+                )
+                return
+        else:
+            self._send_json(403, {"error": "your role on this deal does not permit this action (respond_as_external)"})
             return
         try:
             request = workspaces.update_request(workspace_id, request_id, data)
@@ -3476,6 +3612,8 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.VIEW_FINDINGS):
+            return
         analysis = self._get_workspace_analysis(workspace)
         if analysis is None:
             return
@@ -3485,6 +3623,8 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_update_memo(self, project_id: str, workspace_id: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.MANAGE_FINDINGS):
             return
         analysis = self._get_workspace_analysis(workspace)
         if analysis is None:
@@ -3505,8 +3645,18 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, memo.to_dict())
 
     def _handle_approve_memo(self, project_id: str, workspace_id: str) -> None:
+        """M17 authorization closeout: this route had no role check at
+        all before this task - any active deal member, analyst included,
+        could approve a memo. Its sibling action (`_handle_approve_
+        deliverable`) has always been deal_lead-only, matching docs/06's
+        "Approve decision package: No/Recommend/Yes/Explicit grant only"
+        row - leaving this one ungated undermined the "one centralized,
+        auditable policy" goal this closeout exists to satisfy, so it now
+        shares the same `APPROVE_PUBLISH` gate (deal_lead-only)."""
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.APPROVE_PUBLISH):
             return
         body = self._read_json_body()
         if not body or body.get("confirm") is not True:
@@ -3532,15 +3682,26 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
-        versions = deliverables.list_deliverable_versions(workspace_id)
+        role = self._caller_deal_role(project_id)
+        if not authz.has_capability(role, authz.VIEW_DECISION_PACKAGES):
+            self._send_json(403, {"error": "your role on this deal does not permit this action (view_decision_packages)"})
+            return
+        versions = [
+            v for v in deliverables.list_deliverable_versions(workspace_id)
+            if authz.deliverable_visible_to(role, v.status)
+        ]
         self._send_json(200, [v.to_dict() for v in versions])
 
     def _handle_get_deliverable(self, project_id: str, workspace_id: str, deliverable_id: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        role = self._caller_deal_role(project_id)
+        if not authz.has_capability(role, authz.VIEW_DECISION_PACKAGES):
+            self._send_json(403, {"error": "your role on this deal does not permit this action (view_decision_packages)"})
+            return
         version = deliverables.get_deliverable_version(workspace_id, deliverable_id)
-        if version is None:
+        if version is None or not authz.deliverable_visible_to(role, version.status):
             self._send_json(404, {"error": "deliverable version not found"})
             return
         staleness = version_dependencies.get_staleness("deliverable_version", deliverable_id)
@@ -3557,8 +3718,7 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
-        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
-            self._send_json(403, {"error": "only a deal lead may approve a decision package"})
+        if not self._require_capability_only(project_id, authz.APPROVE_PUBLISH):
             return
         body = self._read_json_body()
         if not body or body.get("confirm") is not True:
@@ -3580,12 +3740,16 @@ class Handler(BaseHTTPRequestHandler):
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
+        if not self._require_capability_only(project_id, authz.VIEW_READINESS):
+            return
         records = readiness_assessments.list_readiness_assessments(workspace_id)
         self._send_json(200, [r.to_dict() for r in records])
 
     def _handle_get_readiness_assessment(self, project_id: str, workspace_id: str, assessment_id: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.VIEW_READINESS):
             return
         record = readiness_assessments.get_readiness_assessment(workspace_id, assessment_id)
         if record is None:
@@ -3596,6 +3760,8 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_workspace_export(self, project_id: str, workspace_id: str, export_name: str) -> None:
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
+            return
+        if not self._require_capability_only(project_id, authz.VIEW_FINDINGS):
             return
         project = store.get_project(project_id)
         assert project is not None

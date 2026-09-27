@@ -8,7 +8,16 @@ do not trust a free-text owner or arbitrary user header.
 Browser profiles test distinct sessions. Organization admins do not automatically gain
 client-deal content rights merely by administering accounts.
 
-## Proposed first permissions (confirm in task 000)
+## Proposed first permissions (superseded - see "Final authorization matrix" below)
+**Status: historical.** This table was the pre-implementation proposal
+from Task 000 ("confirm in task 000"). Task 17.14 (the M17 security
+closeout, 2026-09-27) is that confirmation - it replaced plain deal-
+membership gating with a centralized, capability-based policy
+(`authz.py`) enforced on every route, superseding the table below.
+Kept here, unmodified, as the historical record the founder's own D06
+requires ("historical evidence... must remain stable") - use the final
+matrix, not this one, for current behavior.
+
 | Action | Analyst | Reviewer | Deal lead | External executive |
 | --- | --- | --- | --- | --- |
 | Read internal deal work | If deal member | If deal member | If deal member | Shared approved subset |
@@ -20,6 +29,56 @@ client-deal content rights merely by administering accounts.
 | Close material issue/accept risk | No | Recommend | Yes | No by default |
 | Approve decision package | No | Recommend | Yes | Explicit grant only |
 | Change access | No | No | Authorized deal management | No |
+
+## Final authorization matrix (Task 17.14, M17 security closeout, 2026-09-27)
+
+**Status: implemented fact.** Every cell below is enforced by
+`authz.py`'s `_MATRIX` and independently re-checked by `server.py` on
+its own matching route - never only by the React frontend, which
+consumes the same matrix (via `GET .../overview`'s `role`/
+`capabilities` fields) purely as a usability aid to hide/disable what a
+role cannot do. See `authz.py`'s own module docstring for the full
+capability list (more granular than this table's 17 required rows -
+several rows below map onto more than one `authz.py` capability where
+the real route surface needed a finer grain, e.g. "respond to requests"
+covers both `CREATE_REQUESTS` (internal) and `RESPOND_AS_EXTERNAL`).
+
+Legend: **Allowed** (unconditional) / **Denied** / **Conditional**
+(depends on the specific object's own state, not just the caller's
+role) / **Own-object** (restricted to something the caller authored or
+is assigned) / **Shared-only** (restricted to material another human
+already marked explicitly approved/sent).
+
+| Permission | Analyst | Reviewer | Deal lead | External executive |
+| --- | --- | --- | --- | --- |
+| View deal | Allowed | Allowed | Allowed | Allowed (restricted-shaped: brief + approved deliverables + sent/answered requests only, via `_deal_overview_restricted`) |
+| View internal documents | Allowed | Allowed | Allowed | Denied |
+| Download documents | Allowed | Allowed | Allowed | Denied |
+| View findings | Allowed | Allowed | Allowed | Denied |
+| Create/update findings | Allowed | Allowed | Allowed | Denied |
+| Create requests | Allowed | Allowed | Allowed | Denied |
+| Respond to requests | Allowed (full edit) | Allowed (full edit) | Allowed (full edit) | **Shared-only + own-field**: only requests already `sent`/`answered` (`authz.request_visible_to`), and only the `management_response` field - never status, assignment, or the other internal-only fields |
+| Create mandates | Allowed | Allowed | Allowed | Denied |
+| Execute mandates | Allowed | Allowed | Allowed | Denied |
+| View work products | Allowed | Allowed | Allowed | Denied |
+| Submit work | Allowed | Allowed | Allowed | Denied |
+| Review/return work | Denied | Allowed | Allowed | Denied |
+| Approve/publish | Denied | Denied (still "recommend"-tier - no dedicated endpoint, unchanged since Task 14.3) | Allowed | Denied |
+| View internal activity | Allowed | Allowed | Allowed | Denied (the restricted overview's own omission of `activity`/`tasks`/`mandates` is this row's real effect, not a separate check) |
+| Configure triggers | Denied | Allowed | Allowed | Denied |
+| Request reassessment | Allowed | Allowed | Allowed | Denied |
+| Manage membership | Denied | Denied | Allowed | Denied |
+
+Two rows the 17 required by the founder's directive don't name, added
+because the real route surface needed them and because leaving them
+undocumented would defeat "easy to audit":
+- **View/manage decision packages**: Allowed (all statuses) for
+  analyst/reviewer/deal_lead; **Conditional** for external_executive -
+  only deliverable versions whose status is `approved`
+  (`authz.deliverable_visible_to`), matching "explicitly approved or
+  published decision packages/deliverables".
+- **View assertions / manage assertions**: Allowed for analyst/
+  reviewer/deal_lead; Denied for external_executive.
 
 Job title does not confer rights. Membership, content visibility, responsibility and
 approval power are distinct. Revocation stops reads, downloads, event streams and new

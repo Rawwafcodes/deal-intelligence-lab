@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom"
 
-import { getDealOverview } from "@/lib/api"
+import { getDealOverview, type DealCapabilities } from "@/lib/api"
+import { DealAccessProvider } from "@/lib/dealAccess"
 
 // Unifying the workspace frontend: a single, in-app tab strip for every
 // deal-scoped destination (Overview / Documents / Findings / Mandates /
@@ -16,12 +17,19 @@ import { getDealOverview } from "@/lib/api"
 // (not one of the artifact's 6 tabs; still an external link to
 // validation.html) - migrating it is a separate, larger task, not
 // attempted here.
-const TABS = [
-  { to: "", label: "Overview", end: true },
-  { to: "documents", label: "Documents" },
-  { to: "findings", label: "Findings" },
-  { to: "mandates", label: "Mandates" },
-  { to: "activity", label: "Activity" },
+// M17 authorization closeout: each tab beyond Overview names the
+// capability that must be true for the caller's own role before the
+// tab even renders - an external_executive's sidebar simply never
+// shows Documents/Findings/Mandates/Activity, rather than showing them
+// and letting a click land on a 403. `null` means "always visible"
+// (Overview itself is allowed for every role - a restricted-shaped
+// response still is one).
+const TABS: { to: string; label: string; end?: true; capability: string | null }[] = [
+  { to: "", label: "Overview", end: true, capability: null },
+  { to: "documents", label: "Documents", capability: "view_internal_documents" },
+  { to: "findings", label: "Findings", capability: "view_findings" },
+  { to: "mandates", label: "Mandates", capability: "view_mandates" },
+  { to: "activity", label: "Activity", capability: "view_internal_activity" },
 ]
 
 export function DealShell() {
@@ -34,14 +42,28 @@ export function DealShell() {
   // header just said "Documents"/"Findings"/etc, never which deal.
   // Fetched once here, at the shell every deal-scoped route already
   // renders inside, rather than duplicating a fetch in each of those
-  // five page components.
+  // five page components. Task 17.14 (M17 authorization closeout):
+  // this same fetch now also carries the caller's own role/capabilities
+  // (authz.py, exposed on the overview response) - the one place this
+  // whole deal-scoped subtree gets it from, via DealAccessProvider.
   const [dealName, setDealName] = useState<string | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+  const [capabilities, setCapabilities] = useState<DealCapabilities | null>(null)
 
   useEffect(() => {
     if (!projectId) return
     setDealName(null)
-    getDealOverview(projectId).then((overview) => setDealName(overview.project.name)).catch(() => undefined)
+    setCapabilities(null)
+    getDealOverview(projectId)
+      .then((overview) => {
+        setDealName(overview.project.name)
+        setRole(overview.role)
+        setCapabilities(overview.capabilities)
+      })
+      .catch(() => undefined)
   }, [projectId])
+
+  const visibleTabs = TABS.filter((tab) => tab.capability === null || capabilities?.[tab.capability])
 
   return (
     <div className="flex min-h-full flex-col">
@@ -52,7 +74,7 @@ export function DealShell() {
           <span className="truncate font-medium text-foreground">{dealName ?? "…"}</span>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-6 pt-2" aria-label="Deal sections">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <NavLink
               key={tab.label}
               to={`/projects/${projectId}${tab.to ? `/${tab.to}` : ""}`}
@@ -71,7 +93,9 @@ export function DealShell() {
         </nav>
       </div>
       <div className="flex-1">
-        <Outlet />
+        <DealAccessProvider value={{ role, capabilities }}>
+          <Outlet />
+        </DealAccessProvider>
       </div>
     </div>
   )

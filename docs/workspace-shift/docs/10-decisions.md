@@ -180,6 +180,48 @@ require building new capability, not integration, and stays out of
 this program's scope until a separate, explicit decision authorizes
 that new work.
 
+D16 (added 2026-09-27, Task 17.14) Close M17 with a centralized,
+backend-enforced, capability-based authorization policy replacing plain
+deal-membership gating - not a new product milestone, the M17 program's
+own final closeout. Context: Task 17.13 (Phase F, local collaborative
+proof) disclosed two real gaps rather than fixing them, since fixing
+either was a permission-model decision outside a verification task's
+authority: (1) seven destinations Phase A-D built (Findings, Documents,
+Decision Package, Readiness, Reassessments, Assertions, Triggers) were
+reachable by any deal member regardless of role - only Overview/Activity
+self-restricted; (2) `Work.tsx`'s Approve/Return buttons rendered for
+every role, relying entirely on the backend's real 403. The founder
+directly authorized closing both, with a full role interpretation for
+all four `identity.DEAL_ROLES` (analyst/reviewer/deal_lead/
+external_executive) and explicit requirements: backend-authoritative
+enforcement, frontend guards as a usability aid only, no broad sharing
+subsystem, deny-by-default where the data model can't express "explicitly
+shared". Implemented as a new `authz.py` module (one `(role,
+capability) -> bool` matrix plus two object-level filters for request/
+deliverable visibility, entirely pure and unit-tested independent of
+any server) and `server.py`'s new `_require_capability`/
+`_require_capability_only` helpers, replacing `_authorized_project` at
+every one of its ~75 call sites with the correctly-scoped capability
+check. `identity.py`'s own role model (`DEAL_ROLES`, `get_deal_role`,
+`has_deal_access`) was deliberately left unchanged - this closeout adds
+a policy layer on top of it, not a new identity architecture. Full
+detail: `docs/workspace-shift/tasks/17.14-authorization-closeout.md`,
+`docs/06-security-and-collaboration.md`'s new "Final authorization
+matrix" section (the row-by-row table this decision authorized),
+`STATUS.md`'s own dated entry. A React `DealAccessProvider`/
+`RequireCapability` guard (fed by the same `GET .../overview` response,
+extended with `role`/`capabilities` fields) now hides inaccessible
+destinations and blocks direct navigation with a clear denied state
+before the guarded page's own data fetch ever fires; `Work.tsx`'s
+Approve/Return controls render only when the caller's own capability
+set includes `review_work`. A small, explicitly-scoped frontend
+addition beyond the two disclosed gaps: the restricted Deal Overview
+(the one screen `external_executive` actually lands on) now also shows
+requests already sent to them with real `management_response` controls
+- the approved role interpretation's own "management-response controls
+needed to answer those requests," which had no frontend surface at all
+before this task despite the backend already supporting it.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

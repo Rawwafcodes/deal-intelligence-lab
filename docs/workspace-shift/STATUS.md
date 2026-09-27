@@ -5823,3 +5823,133 @@ this task's own commit) are held locally, per this program's own
 standing instruction not to push without separate explicit approval.
 Pushing them is itself a decision for the founder, not this task's to
 make.
+
+## 2026-09-27 — Task 17.14 executed (centralized role-based authorization, D16) - M17 security closeout, final task of the program
+
+**Authorization**: the founder directly authorized closing both gaps
+Task 17.13 disclosed, with a full approved role interpretation for all
+four `identity.DEAL_ROLES`, an explicit "one centralized backend policy
+layer" architecture requirement, frontend/documentation/test/browser-
+verification requirements, and an explicit "do not push" instruction
+(local commit only, same as every prior M17 task).
+
+Built `authz.py` - a new, pure, dependency-free module: 25 capability
+constants, one `(role, capability) -> bool` matrix for all four deal
+roles, `has_capability`/`capabilities_for`, and two object-level
+filters (`request_visible_to`/`deliverable_visible_to`) expressing
+"explicitly shared/approved" entirely through fields the existing data
+model already has (`workspaces.REQUEST_STATUSES`/`deliverables.
+DELIVERABLE_STATUSES`) - no new sharing subsystem, no schema change,
+per the directive's own explicit instruction. `server.py` gained
+`_require_capability`/`_require_capability_only` (built on the existing
+`_authorized_project`, not a replacement for it) and had every one of
+`_authorized_project`'s ~75 route call sites replaced with the
+correctly-scoped capability check - `_workspace_overview`/
+`_org_wide_mandates` (the org-wide aggregate routes) now filter/shape
+per-project by the caller's own role, not just membership;
+`_handle_update_request` now branches cleanly between internal full-
+edit and `external_executive`'s status-gated, field-restricted
+management-response path; `_deal_overview`/`_deal_overview_restricted`
+now expose `role`/`capabilities` for the frontend to consume (never
+re-derive).
+
+**Two real mis-mappings caught by a dedicated verification pass, before
+either ever shipped**: a systematic re-read of every `_require_
+capability` call site against its actual route (not trusted from
+earlier line-number bookkeeping across several fragmented reads) found
+the memberships-list/workstream-assignments-list routes had swapped
+capabilities, and five consecutive do_GET route pairs had each drifted
+onto the *next* route's intended capability. Both fixed and reconfirmed
+by the full test suite before proceeding - a real instance of exactly
+the "verify claims honestly" discipline this whole program has held
+throughout.
+
+Frontend: new `frontend/src/lib/dealAccess.tsx`
+(`DealAccessProvider`/`useCapability`/`RequireCapability`) - a
+server-provided capability set consumed by shared guards, explicitly
+not a second, frontend-only permission model (the directive's own
+requirement). `DealShell.tsx` fetches `role`/`capabilities` alongside
+its existing deal-name fetch and filters its own tab list; `App.tsx`
+wraps every deep-page route so a denied role sees a clear "Not
+available for your role" card with the guarded page's own component
+never mounting (no sensitive fetch ever fires); `Work.tsx`'s Approve/
+Return controls now check `useCapability("review_work")` before
+rendering at all - an analyst no longer sees an action they could never
+legally take. A small, explicitly-scoped addition beyond the two
+disclosed gaps: `DealOverview.tsx`'s restricted view gained a real
+"Information requests" section with working response controls - the
+approved role interpretation's own "management-response controls
+needed to answer those requests," which had no frontend surface at all
+before this task despite `authz.py`'s `RESPOND_AS_EXTERNAL` already
+supporting it end to end at the API layer.
+
+Also closed, disclosed rather than silently changed: `_handle_
+approve_memo` had no role check at all before this task (any deal
+member, analyst included, could approve a memo) - now gated to
+`APPROVE_PUBLISH` (deal_lead-only), matching its sibling `_handle_
+approve_deliverable`'s pre-existing gate exactly. A real, small
+behavior tightening, not a new restriction invented for this task.
+
+**Verification**: `tests/test_authz.py` (21 pure unit tests, every
+role/capability pair, no server or database) and `tests/
+test_authorization_matrix.py` (19 HTTP integration tests against the
+real running server, four independent cookie-jar sessions, covering
+the founder's own required scenario list 1-23 and 25 - scenario 24,
+frontend action visibility, is React-only and verified live via
+Playwright instead) both pass, all green. Full backend suite: 910
+tests (870 baseline + 40 new), 0 failures. mypy clean. Frontend `tsc
+-b`/`oxlint` clean (same pre-existing warning categories, two new
+entries in already-accepted categories, no new category); `npm run
+build` clean; `node --test tests/frontend/*.test.mjs` 5/5 (one
+pre-existing test's regex updated to match the new `RequireCapability`-
+wrapped route JSX, still proving the same underlying fact).
+
+**Live browser verification**, real running app, four independent
+Playwright contexts with real session cookies, synthetic data only, no
+Anthropic calls: independent sessions confirmed distinct with no
+bleed; `external_executive`'s nav strip correctly shows only Overview;
+direct URL entry to `/findings` and `/work` as `external_executive`
+shows the real access-denied card, never a flash of content; `analyst`
+reaches Work but sees no Approve/Return control anywhere; a real
+submitted work product was created directly and `reviewer` correctly
+saw and used real Approve/Return controls through the live UI (the
+item updated to "Approved"), while `analyst` was confirmed to see no
+such control for that exact item; a real request was sent to
+`external_executive` and their restricted Overview showed it with a
+working response textarea - submitting a real response through the
+real UI persisted it (confirmed on reload) with zero console errors
+across every session throughout.
+
+Postgres needed a clean restart mid-task (the container had gone idle
+since the prior M17 session) - WAL recovery completed automatically, no
+data loss, confirmed by every pre-existing project/membership/workspace
+still being present afterward.
+
+**Files changed**: new `authz.py`, `tests/test_authz.py`, `tests/
+test_authorization_matrix.py`, `docs/workspace-shift/tasks/17.14-
+authorization-closeout.md`; `server.py` (import + 2 new helpers + ~78
+call-site changes + `_deal_overview`/`_deal_overview_restricted`/
+`_workspace_overview`/`_org_wide_mandates`/`_handle_update_request`/
+`_handle_approve_memo` edits); `frontend/src/lib/api.ts` (`role`/
+`capabilities`/`requests` fields, `DealCapabilities` type); new
+`frontend/src/lib/dealAccess.tsx`; `frontend/src/components/
+DealShell.tsx`, `frontend/src/App.tsx`, `frontend/src/routes/Work.tsx`,
+`frontend/src/routes/DealOverview.tsx`; `tests/frontend/react-native-
+workflows.test.mjs` (one regex updated); `docs/06-security-and-
+collaboration.md` (new "Final authorization matrix", old table marked
+historical/superseded); `docs/10-decisions.md` (new D16); this file;
+`docs/workspace-shift/tasks/17.0-product-integration-program.md`.
+
+**Decisions**: D16 (see above) - the founder's own direct authorization
+to close both disclosed gaps with a centralized policy, given in full
+detail rather than requiring a further stop-and-ask.
+
+**Blockers**: none. **The M17 program (Phases A-F plus this security
+closeout) is now complete in its entirety.** See this program's
+completion-report addendum for the final closing state.
+
+**Permissions needed**: none for this task's own scope. All 14 commits
+of the M17 program (`149c4a0` through this task's own commit) remain
+held locally per the program's standing "do not push without separate
+explicit approval" instruction - unchanged by this task, and this
+task's own directive explicitly repeated "do not push."

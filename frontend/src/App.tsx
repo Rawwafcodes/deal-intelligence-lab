@@ -18,6 +18,7 @@ import { Readiness } from "@/routes/Readiness"
 import { Reassessments } from "@/routes/Reassessments"
 import { Triggers } from "@/routes/Triggers"
 import { Work } from "@/routes/Work"
+import { RequireCapability } from "@/lib/dealAccess"
 
 function App() {
   return (
@@ -30,17 +31,50 @@ function App() {
           <Route path="/mandates" element={<MandatesHome />} />
           <Route path="/projects/:projectId" element={<DealShell />}>
             <Route index element={<DealOverview />} />
-            <Route path="documents" element={<Documents />} />
-            <Route path="findings" element={<Findings />} />
-            <Route path="decision-package" element={<DecisionPackage />} />
-            <Route path="readiness" element={<Readiness />} />
-            <Route path="reassessments" element={<Reassessments />} />
-            <Route path="assertions" element={<Assertions />} />
-            <Route path="triggers" element={<Triggers />} />
-            <Route path="mandates" element={<MandateList />} />
-            <Route path="mandates/:mandateId" element={<MandateDetail />} />
-            <Route path="work" element={<Work />} />
-            <Route path="activity" element={<Activity />} />
+            <Route
+              path="documents"
+              element={<RequireCapability capability="view_internal_documents"><Documents /></RequireCapability>}
+            />
+            <Route
+              path="findings"
+              element={<RequireCapability capability="view_findings"><Findings /></RequireCapability>}
+            />
+            <Route
+              path="decision-package"
+              element={<RequireCapability capability="view_decision_packages"><DecisionPackage /></RequireCapability>}
+            />
+            <Route
+              path="readiness"
+              element={<RequireCapability capability="view_readiness"><Readiness /></RequireCapability>}
+            />
+            <Route
+              path="reassessments"
+              element={<RequireCapability capability="view_reassessments"><Reassessments /></RequireCapability>}
+            />
+            <Route
+              path="assertions"
+              element={<RequireCapability capability="view_assertions"><Assertions /></RequireCapability>}
+            />
+            <Route
+              path="triggers"
+              element={<RequireCapability capability="view_triggers"><Triggers /></RequireCapability>}
+            />
+            <Route
+              path="mandates"
+              element={<RequireCapability capability="view_mandates"><MandateList /></RequireCapability>}
+            />
+            <Route
+              path="mandates/:mandateId"
+              element={<RequireCapability capability="view_mandates"><MandateDetail /></RequireCapability>}
+            />
+            <Route
+              path="work"
+              element={<RequireCapability capability="view_work_products"><Work /></RequireCapability>}
+            />
+            <Route
+              path="activity"
+              element={<RequireCapability capability="view_internal_activity"><Activity /></RequireCapability>}
+            />
           </Route>
         </Route>
       </Routes>
