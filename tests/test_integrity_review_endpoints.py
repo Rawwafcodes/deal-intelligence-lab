@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tests.test_identity_endpoints import _Client
 
+import assertion_ledger
 import deal_briefs
 import documents
 import identity
@@ -86,6 +87,7 @@ class IntegrityReviewEndpointTests(unittest.TestCase):
         workstreams.init_workstreams_db()
         integrity_reviews.init_integrity_reviews_db()
         version_dependencies.init_version_dependencies_db()
+        assertion_ledger.init_assertion_ledger_db()
         mandates.init_mandates_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -235,6 +237,86 @@ class IntegrityReviewEndpointTests(unittest.TestCase):
         self.assertEqual(status, 200)
         final = self._wait_for_terminal_run(mandate_id, run_id)
         self.assertEqual(final["status"], "succeeded")
+
+    def test_accepting_a_candidate_promotes_it_into_the_assertion_ledger(self):
+        """Task 17.10 (D15): every real accepted decision now also
+        promotes into assertion_ledger.py, previously wired to nothing
+        (the 2026-09-27 re-entry audit's own finding)."""
+        _, review_id, _ = self._run_to_waiting_review()
+        status, review = self._get(f"/api/projects/{self.project.id}/integrity-reviews/{review_id}")
+        candidate_id = review["candidates"][0]["id"]
+
+        status, updated = self._post(
+            f"/api/projects/{self.project.id}/integrity-reviews/{review_id}/candidates/{candidate_id}/decision",
+            {"decision": "accepted"},
+        )
+        self.assertEqual(status, 200)
+
+        entry = assertion_ledger.get_entry_by_candidate(candidate_id)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.assertion_text, "the memo states net investment of $91.75m.")
+        self.assertEqual(entry.verification_status, "confirmed")
+        self.assertEqual(entry.published_finding_id, updated["published_finding_id"])
+        self.assertEqual(entry.project_id, self.project.id)
+
+        status, listed = self._get(f"/api/projects/{self.project.id}/assertion-ledger")
+        self.assertEqual(status, 200)
+        self.assertEqual([e["id"] for e in listed], [entry.id])
+
+    def test_disputing_and_reconfirming_an_assertion_over_http(self):
+        _, review_id, _ = self._run_to_waiting_review()
+        _, review = self._get(f"/api/projects/{self.project.id}/integrity-reviews/{review_id}")
+        candidate_id = review["candidates"][0]["id"]
+        self._post(
+            f"/api/projects/{self.project.id}/integrity-reviews/{review_id}/candidates/{candidate_id}/decision",
+            {"decision": "accepted"},
+        )
+        entry = assertion_ledger.get_entry_by_candidate(candidate_id)
+
+        status, _ = self._post(f"/api/projects/{self.project.id}/assertion-ledger/{entry.entry_key}/dispute", {})
+        self.assertEqual(status, 400)  # a reason is required
+
+        status, disputed = self._post(
+            f"/api/projects/{self.project.id}/assertion-ledger/{entry.entry_key}/dispute",
+            {"reason": "The term sheet was itself later corrected."},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(disputed["verification_status"], "disputed")
+
+        status, confirmed = self._post(f"/api/projects/{self.project.id}/assertion-ledger/{entry.entry_key}/confirm")
+        self.assertEqual(status, 200)
+        self.assertEqual(confirmed["verification_status"], "confirmed")
+        self.assertIsNone(confirmed["disputed_by"])
+
+    def test_assertion_ledger_entry_from_another_project_is_not_found(self):
+        _, review_id, _ = self._run_to_waiting_review()
+        _, review = self._get(f"/api/projects/{self.project.id}/integrity-reviews/{review_id}")
+        candidate_id = review["candidates"][0]["id"]
+        self._post(
+            f"/api/projects/{self.project.id}/integrity-reviews/{review_id}/candidates/{candidate_id}/decision",
+            {"decision": "accepted"},
+        )
+        entry = assertion_ledger.get_entry_by_candidate(candidate_id)
+
+        status, _ = self._post(
+            f"/api/projects/{self.other_project.id}/assertion-ledger/{entry.entry_key}/confirm"
+        )
+        self.assertEqual(status, 404)
+
+        status, listed = self._get(f"/api/projects/{self.other_project.id}/assertion-ledger")
+        self.assertEqual(status, 200)
+        self.assertEqual(listed, [])
+
+    def test_rejecting_a_candidate_does_not_promote_it(self):
+        _, review_id, _ = self._run_to_waiting_review()
+        status, review = self._get(f"/api/projects/{self.project.id}/integrity-reviews/{review_id}")
+        candidate_id = review["candidates"][0]["id"]
+
+        self._post(
+            f"/api/projects/{self.project.id}/integrity-reviews/{review_id}/candidates/{candidate_id}/decision",
+            {"decision": "rejected", "decision_notes": "Not a real conflict."},
+        )
+        self.assertIsNone(assertion_ledger.get_entry_by_candidate(candidate_id))
 
     def test_rejecting_a_candidate_never_publishes_it(self):
         mandate_id, review_id, run_id = self._run_to_waiting_review()

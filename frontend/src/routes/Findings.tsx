@@ -233,6 +233,8 @@ export function Findings() {
             <Link to={`/projects/${projectId}/readiness`} className="underline">Readiness</Link>
             {" · "}
             <Link to={`/projects/${projectId}/reassessments`} className="underline">Reassessments</Link>
+            {" · "}
+            <Link to={`/projects/${projectId}/assertions`} className="underline">Assertions</Link>
           </p>
         </div>
         {workspaces.length > 1 && (

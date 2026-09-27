@@ -195,6 +195,10 @@ _REASSESSMENT_ITEM_DECISION_RE = re.compile(
     r"^/api/projects/([^/]+)/reassessments/([^/]+)/items/([^/]+)/decision$"
 )
 
+_ASSERTION_LEDGER_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/assertion-ledger$")
+_ASSERTION_LEDGER_DISPUTE_RE = re.compile(r"^/api/projects/([^/]+)/assertion-ledger/([^/]+)/dispute$")
+_ASSERTION_LEDGER_CONFIRM_RE = re.compile(r"^/api/projects/([^/]+)/assertion-ledger/([^/]+)/confirm$")
+
 _TRIGGERS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/triggers$")
 _TRIGGER_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/triggers/([^/]+)$")
 _TRIGGER_DISABLE_RE = re.compile(r"^/api/projects/([^/]+)/triggers/([^/]+)/disable$")
@@ -1354,6 +1358,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, out)
             return
 
+        assertion_ledger_collection_match = _ASSERTION_LEDGER_COLLECTION_RE.match(path)
+        if assertion_ledger_collection_match:
+            (project_id,) = assertion_ledger_collection_match.groups()
+            if self._authorized_project(project_id) is None:
+                return
+            out = [e.to_dict() for e in assertion_ledger.list_entries(project_id)]
+            self._send_json(200, out)
+            return
+
         if path.startswith("/api/projects/"):
             project_id = path.removeprefix("/api/projects/")
             project = self._authorized_project(project_id)
@@ -1526,6 +1539,18 @@ class Handler(BaseHTTPRequestHandler):
         if reassessment_item_decision_match:
             project_id, reassessment_id, item_id = reassessment_item_decision_match.groups()
             self._handle_reassessment_item_decision(project_id, reassessment_id, item_id)
+            return
+
+        assertion_ledger_dispute_match = _ASSERTION_LEDGER_DISPUTE_RE.match(path)
+        if assertion_ledger_dispute_match:
+            project_id, entry_key = assertion_ledger_dispute_match.groups()
+            self._handle_dispute_assertion(project_id, entry_key)
+            return
+
+        assertion_ledger_confirm_match = _ASSERTION_LEDGER_CONFIRM_RE.match(path)
+        if assertion_ledger_confirm_match:
+            project_id, entry_key = assertion_ledger_confirm_match.groups()
+            self._handle_confirm_assertion(project_id, entry_key)
             return
 
         trigger_disable_match = _TRIGGER_DISABLE_RE.match(path)
@@ -2311,6 +2336,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
             return
 
+        # Task 17.10 (D15): every real accepted decision also promotes into
+        # the evidence assertion ledger - the same human act (docs/10-
+        # decisions.md I05: "only after validation") that already publishes
+        # the candidate as a shared finding above. Reuses the exact
+        # lineage record_candidate_decision just persisted (decision,
+        # decided_by/at, published_finding_id) - promote_candidate re-reads
+        # the candidate fresh rather than trusting anything computed
+        # earlier in this request.
+        if decision == "accepted":
+            try:
+                assertion_ledger.promote_candidate(project_id, review_id, candidate_id)
+            except assertion_ledger.AlreadyPromotedError:
+                pass
+
         self._send_json(200, updated.to_dict())
 
     # -- targeted reassessment (Task 15.2) -----------------------------------
@@ -2356,6 +2395,54 @@ class Handler(BaseHTTPRequestHandler):
         if reassessments.all_items_acknowledged(reassessment_id):
             version_dependencies.clear_staleness("workspace", record.workspace_id)
 
+        self._send_json(200, updated.to_dict())
+
+    # -- evidence assertion ledger (Task 16.2/17.10) -------------------------
+
+    def _handle_dispute_assertion(self, project_id: str, entry_key: str) -> None:
+        """Gated the same as an Integrity Review candidate decision or a
+        reassessment item (docs/06: "Recommend finding disposition:
+        Yes/Yes/Yes/No"). `assertion_ledger.dispute_entry` itself takes no
+        project_id at all (entry_key alone is globally unique) - this
+        handler independently re-verifies the entry actually belongs to
+        the project in the URL before acting on it, the same source-
+        ownership check every other project-scoped route already makes."""
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may dispute an assertion"})
+            return
+        entry = assertion_ledger.get_entry(entry_key)
+        if entry is None or entry.project_id != project_id:
+            self._send_json(404, {"error": "assertion ledger entry not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        reason = str(data.get("reason", "") or "")
+        try:
+            updated = assertion_ledger.dispute_entry(entry_key, disputed_by=self.current_user_id, reason=reason)
+        except assertion_ledger.AssertionLedgerError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, updated.to_dict())
+
+    def _handle_confirm_assertion(self, project_id: str, entry_key: str) -> None:
+        if self._authorized_project(project_id) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) not in ("analyst", "reviewer", "deal_lead"):
+            self._send_json(403, {"error": "only an analyst, reviewer, or deal lead may confirm an assertion"})
+            return
+        entry = assertion_ledger.get_entry(entry_key)
+        if entry is None or entry.project_id != project_id:
+            self._send_json(404, {"error": "assertion ledger entry not found"})
+            return
+        try:
+            updated = assertion_ledger.confirm_entry(entry_key, confirmed_by=self.current_user_id)
+        except assertion_ledger.AssertionLedgerError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
         self._send_json(200, updated.to_dict())
 
     # -- opt-in triggers (Task 15.3) -----------------------------------------

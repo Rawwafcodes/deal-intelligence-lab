@@ -153,6 +153,33 @@ O07 Which real case has independent human-scored ground truth.
 O08 Retention and external-research policy. No new external research tools enabled by default.
 O09 Brand and pricing: not selected here.
 
+D15 (added 2026-09-27, Task 17.10) Wire `assertion_ledger.py` into the
+real Integrity Review accept-decision path and give it a real, visible
+surface in the unified Findings register - not silent backend-only
+bookkeeping. Context: the 2026-09-27 re-entry audit found
+`assertion_ledger.py`/`reconciler.py` fully built and tested but with
+zero live callers anywhere. The M17 product-integration program's own
+Phase D procedure required a founder decision before wiring either
+in, since doing so changes professional semantics (a new "assertion"
+concept becomes visible to users) rather than only exposing existing
+substrate. Options presented: (a) wire `promote_candidate` silently,
+no new UI; (b) wire it and add a visible assertion view in Findings;
+(c) leave both unwired, pending M16 gate 4's own still-unmet "recurring
+reusable assertions" evidence bar. Founder chose (b) directly. Scope,
+for both this repository and any successor session picking up Task
+17.10/17.11: `assertion_ledger.promote_candidate` is called from
+`server.py`'s `_handle_integrity_candidate_decision` on every real
+`accepted` decision (the same data already assembled there for
+`publish_integrity_candidate_as_finding`'s own lineage); the unified
+Findings register gets a real, permission-scoped view of promoted
+entries (verification status, provenance, supersession/dispute state) -
+not a synthesized or invented display. **`reconciler.py` remains
+unwired** - the founder's chosen options did not extend to it, and no
+real fact-extraction pipeline exists to feed it; wiring it would still
+require building new capability, not integration, and stays out of
+this program's scope until a separate, explicit decision authorizes
+that new work.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

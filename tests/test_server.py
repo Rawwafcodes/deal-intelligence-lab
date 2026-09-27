@@ -67,6 +67,7 @@ class ServerTests(unittest.TestCase):
             "/projects/some-id/work", "/projects/some-id/activity",
             "/projects/some-id/decision-package", "/projects/some-id/readiness",
             "/projects/some-id/reassessments", "/projects/some-id/triggers",
+            "/projects/some-id/assertions",
         ]
         for path in real_react_paths:
             with self.subTest(path=path):

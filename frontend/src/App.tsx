@@ -4,6 +4,7 @@ import { DealShell } from "@/components/DealShell"
 import { Layout } from "@/components/Layout"
 import { Toaster } from "@/components/ui/sonner"
 import { Activity } from "@/routes/Activity"
+import { Assertions } from "@/routes/Assertions"
 import { DealOverview } from "@/routes/DealOverview"
 import { Deals } from "@/routes/Deals"
 import { DecisionPackage } from "@/routes/DecisionPackage"
@@ -34,6 +35,7 @@ function App() {
             <Route path="decision-package" element={<DecisionPackage />} />
             <Route path="readiness" element={<Readiness />} />
             <Route path="reassessments" element={<Reassessments />} />
+            <Route path="assertions" element={<Assertions />} />
             <Route path="triggers" element={<Triggers />} />
             <Route path="mandates" element={<MandateList />} />
             <Route path="mandates/:mandateId" element={<MandateDetail />} />

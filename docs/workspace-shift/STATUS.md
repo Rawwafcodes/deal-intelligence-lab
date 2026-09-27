@@ -8,9 +8,10 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phases A, B and C (17.1-17.9) are complete**;
-**the current task is Phase D, unifying Findings** (including the
-assertion-ledger/reconciler wiring decision). This
+for the full plan. **Phases A, B, C and D1 (17.1-17.10) are complete**;
+the founder decided D15 (`docs/10-decisions.md`) on the assertion-
+ledger/reconciler question; **the current task is D2 (17.11), unifying
+Findings display across workspace origins**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5537,3 +5538,64 @@ own Phase D procedure requires before any wiring occurs.
 
 **Permissions needed**: possibly one, pending Phase D's own analysis -
 see above.
+
+## 2026-09-27 — Founder decision D15; Task 17.10 executed (assertion ledger wired, visible Assertions view)
+
+Per this program's own required Phase D procedure, inspected
+`assertion_ledger.py`/`reconciler.py` before any wiring. Findings:
+`reconciler.py` cannot be usefully wired at all - nothing in the app
+extracts structured `NumericFact`s from real documents, and building
+that extractor would be new capability, not integration, out of this
+program's scope. `assertion_ledger.py` is different -
+`promote_candidate` is a clean, minimal addition to the existing
+Integrity Review accept-decision handler, using data already assembled
+there. Presented this analysis and three options to the founder
+directly; **founder chose to wire it and add a visible assertion view
+in Findings** - recorded as `docs/10-decisions.md` D15.
+
+Full detail in `docs/workspace-shift/tasks/17.10-assertion-ledger-
+wiring.md`. Summary: `_handle_integrity_candidate_decision` now calls
+`assertion_ledger.promote_candidate` on every real `accepted` decision;
+three new routes (list/dispute/confirm) reuse
+`list_entries`/`dispute_entry`/`confirm_entry` verbatim, role-gated the
+same as every other candidate/item-decision route, with a handler-level
+project-ownership check `assertion_ledger.py` itself doesn't provide
+(entry_key is globally unique, not project-scoped). New project-scoped
+deep page `Assertions.tsx` (no workspace picker - entries aren't
+workspace-scoped), cross-referencing work-product/document names the
+same way every earlier Phase A task did, linked from Findings. Kept
+deliberately distinct from the findings register itself, not merged -
+an assertion is a confirmed claim; a finding is an open matter, a real
+distinction `docs/03-domain-model.md` already draws.
+
+**Verification**: new backend tests (promotion on accept with correct
+lineage; no promotion on reject; dispute requires a reason; confirm
+clears a dispute; cross-project isolation on both the item routes and
+the list) all pass; full suite 869 tests OK; mypy clean; frontend
+tsc/lint/build clean; `node --test tests/frontend/*.test.mjs` 5/5. Live
+Playwright check seeded a real Integrity Review + candidate directly
+(no Anthropic call) and accepted it over the real HTTP decision
+endpoint - confirmed the real assertion, cross-references, and
+published-finding link all render, and dispute/re-confirm work end to
+end. **One pre-existing, already-disclosed gap reconfirmed live, not a
+new regression**: Findings still 400s gracefully for an Integrity-
+Review-backed workspace (the documented `_get_workspace_analysis`
+boundary) - confirms 17.11 is real, needed work, not speculative.
+
+**Files changed**: `server.py` (`promote_candidate` call, 3 new
+routes/handlers), `tests/test_integrity_review_endpoints.py` (5 new
+tests), `docs/10-decisions.md` (new D15), new `frontend/src/routes/
+Assertions.tsx`, `frontend/src/lib/api.ts` (new
+`AssertionLedgerEntry` type and 3 functions), `frontend/src/App.tsx`
+(new route), `frontend/src/routes/Findings.tsx` (one more link),
+`tests/test_server.py` (route coverage extended).
+
+**Decisions**: D15 (see above) - the one founder decision this whole
+program anticipated needing.
+
+**Blockers**: none. **Next task**: 17.11 - unify Findings display
+across cross-format and Integrity-Review workspace origins (the
+`_get_workspace_analysis` boundary just reconfirmed live). Continuing
+automatically.
+
+**Permissions needed**: none identified yet for 17.11.

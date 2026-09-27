@@ -434,6 +434,64 @@ export async function disableTrigger(projectId: string, triggerId: string): Prom
   return jsonOrThrow(res, "Could not disable this trigger.")
 }
 
+// Task 17.10 (D15): matches assertion_ledger.py's AssertionLedgerEntry
+// exactly - the real fields the ledger actually persists, not a
+// simplified or invented subset.
+export interface AssertionLedgerEntry {
+  id: string
+  entry_key: string
+  version_number: number
+  status: "active" | "superseded"
+  project_id: string
+  source_review_id: string
+  source_candidate_id: string
+  target_work_product_id: string
+  target_version_id: string
+  source_document_ids: string[]
+  source_version_ids: string[]
+  assertion_text: string
+  language: string
+  pdf_citations: PdfCitation[]
+  excel_citations: ExcelCitation[]
+  normalized_fields: Record<string, unknown> | null
+  modality: string
+  verification_status: "confirmed" | "disputed"
+  confirmed_by: string | null
+  confirmed_at: string | null
+  disputed_by: string | null
+  disputed_at: string | null
+  dispute_reason: string
+  extraction_model: string
+  extraction_prompt_version: string
+  published_finding_id: string | null
+  created_at: string
+}
+
+export async function listAssertionLedgerEntries(projectId: string): Promise<AssertionLedgerEntry[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/assertion-ledger`)
+  return jsonOrThrow(res, "Could not load the assertion ledger.")
+}
+
+export async function disputeAssertion(
+  projectId: string,
+  entryKey: string,
+  reason: string
+): Promise<AssertionLedgerEntry> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/assertion-ledger/${encodeURIComponent(entryKey)}/dispute`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }
+  )
+  return jsonOrThrow(res, "Could not dispute this assertion.")
+}
+
+export async function confirmAssertion(projectId: string, entryKey: string): Promise<AssertionLedgerEntry> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/assertion-ledger/${encodeURIComponent(entryKey)}/confirm`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }
+  )
+  return jsonOrThrow(res, "Could not confirm this assertion.")
+}
+
 export async function updateRequest(
   projectId: string,
   workspaceId: string,
