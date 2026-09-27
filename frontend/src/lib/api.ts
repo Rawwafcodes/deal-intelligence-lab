@@ -125,12 +125,26 @@ export interface FindingsSummary {
   by_severity: Record<string, number>
 }
 
+// Matches version_dependencies.StalenessFlag.to_dict() exactly - shared
+// by every staleness call site (workspace bundle, deliverable, and
+// reassessment's own workspace_staleness), not a per-feature shape.
+export interface StalenessFlag {
+  dependent_type: string
+  dependent_id: string
+  reason: string
+  superseded_source_type: string
+  superseded_source_id: string
+  superseded_version_id: string
+  first_marked_at: string
+  last_marked_at: string
+}
+
 export interface WorkspaceBundle {
   workspace: Workspace
   analysis: Record<string, unknown>
   findings: Finding[]
   summary: FindingsSummary
-  staleness: { reason: string } | null
+  staleness: StalenessFlag | null
 }
 
 export async function getWorkspaceBundle(projectId: string, workspaceId: string): Promise<WorkspaceBundle> {
@@ -211,15 +225,6 @@ export interface Deliverable {
   approved_at: string | null
 }
 
-export interface DeliverableStaleness {
-  reason: string
-  superseded_source_type: string
-  superseded_source_id: string
-  superseded_version_id: string
-  first_marked_at: string
-  last_marked_at: string
-}
-
 export async function listDeliverables(projectId: string, workspaceId: string): Promise<Deliverable[]> {
   const res = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/deliverables`
@@ -231,7 +236,7 @@ export async function getDeliverable(
   projectId: string,
   workspaceId: string,
   deliverableId: string
-): Promise<Deliverable & { staleness: DeliverableStaleness | null }> {
+): Promise<Deliverable & { staleness: StalenessFlag | null }> {
   const res = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/deliverables/${encodeURIComponent(deliverableId)}`
   )
@@ -279,6 +284,78 @@ export async function listReadinessAssessments(projectId: string, workspaceId: s
     `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/readiness`
   )
   return jsonOrThrow(res, "Could not load readiness assessments.")
+}
+
+// Matches reassessments.py's Reassessment/ReassessmentItem exactly.
+export interface Reassessment {
+  id: string
+  project_id: string
+  workspace_id: string
+  mandate_id: string | null
+  run_id: string | null
+  attempt_id: string | null
+  document_id: string
+  old_version_id: string
+  new_version_id: string
+  status: "success" | "error"
+  transmitted: boolean
+  created_at: string
+  completed_at: string
+  analysis_seconds: number
+  model: string
+  reassessment_template_version: string
+  stop_reason: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  error_type: string | null
+  error_message: string | null
+  executive_summary: string
+  what_changed: string
+}
+
+export interface ReassessmentItem {
+  id: string
+  reassessment_id: string
+  item_index: number
+  finding_title: string
+  finding_id: string | null
+  status: string
+  explanation: string
+  evidence_of_change: string
+  raw_text: string
+  pdf_citations: PdfCitation[]
+  decision: "pending" | "acknowledged"
+  decision_notes: string
+  decided_by: string | null
+  decided_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function listReassessments(projectId: string): Promise<Reassessment[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/reassessments`)
+  return jsonOrThrow(res, "Could not load reassessments.")
+}
+
+export async function getReassessment(
+  projectId: string,
+  reassessmentId: string
+): Promise<Reassessment & { items: ReassessmentItem[]; workspace_staleness: StalenessFlag | null }> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/reassessments/${encodeURIComponent(reassessmentId)}`)
+  return jsonOrThrow(res, "Could not load this reassessment.")
+}
+
+export async function decideReassessmentItem(
+  projectId: string,
+  reassessmentId: string,
+  itemId: string,
+  decisionNotes: string
+): Promise<ReassessmentItem> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/reassessments/${encodeURIComponent(reassessmentId)}/items/${encodeURIComponent(itemId)}/decision`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision_notes: decisionNotes }) }
+  )
+  return jsonOrThrow(res, "Could not record this decision.")
 }
 
 export async function updateRequest(

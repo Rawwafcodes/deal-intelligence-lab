@@ -8,9 +8,10 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. Tasks 17.1 (Information Requests), 17.2 (Decision
-Packages) and 17.3 (Readiness), all in React, are complete; **the
-current task is 17.4 (Targeted Reassessment in React)**. This
+for the full plan. Tasks 17.1-17.4 (Information Requests, Decision
+Packages, Readiness, Targeted Reassessment), all in React, are complete;
+**the current task is 17.5 (Monitoring/Triggers in React)**, the last
+item in Phase A. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5149,3 +5150,64 @@ the "close the remaining 4 items" pointer all render correctly.
 React), per `17.0`'s tracker. Continuing automatically.
 
 **Permissions needed**: none identified yet for 17.4.
+
+## 2026-09-27 — Task 17.4 executed (Targeted Reassessment in React; staleness finally rendered)
+
+Full detail in `docs/workspace-shift/tasks/17.4-targeted-reassessment.md`.
+Summary: new project-scoped deep route `/projects/:projectId/reassessments`
+(`Reassessments.tsx` - no workspace picker, since the real
+`/api/projects/{id}/reassessments` route has no workspace filter
+exposed), reusing `reassessments.py`'s existing list/item/item-decision
+routes verbatim - zero new backend code. Each reassessment shows its
+real changed-document name (cross-referenced by id against
+`listDocuments`, the same pattern 17.1 established for findings), the
+model's `what_changed`/`executive_summary`, and every item with an
+acknowledge control gated by the existing analyst/reviewer/deal_lead
+role check.
+
+**Also fixed, not just added-to**: `Findings.tsx`'s `bundle.staleness`
+field has been fetched from the real backend since the 2026-09-18
+frontend-unification work but was never once rendered anywhere - this
+task finally surfaces it as a banner, linking to the new Reassessments
+page. Along the way, corrected `WorkspaceBundle.staleness`'s frontend
+type (previously narrowed to `{reason: string} | null`, which
+underclaimed what `version_dependencies.get_staleness` actually returns)
+by generalizing 17.2's `DeliverableStaleness` into a shared
+`StalenessFlag` type used by all three staleness call sites
+(workspace bundle, deliverable, reassessment's own `workspace_staleness`)
+- a type correction, not a backend change.
+
+**Verification**: `tsc -b`/`oxlint`/`npm run build` clean; `node --test
+tests/frontend/*.test.mjs` 5/5; full backend suite 858 tests OK. Live
+Playwright check against a full synthetic chain (no Anthropic call):
+recorded a real dependency edge, added a genuine second document
+version, called the real `mark_superseded` (the exact mechanism a real
+upload triggers) to produce a real `StalenessFlag`, seeded a
+`Reassessment`/`ReassessmentItem`. Confirmed live: the staleness banner
+appears on Findings with the real reason text; Reassessments renders the
+real document name/what-changed/item; acknowledging the one item
+succeeds; and - because it was the only item - the workspace's staleness
+flag cleared automatically via the backend's own
+`all_items_acknowledged` path, confirmed by the Findings banner being
+gone on a fresh page load.
+
+**Files changed**: `frontend/src/lib/api.ts` (new shared
+`StalenessFlag` type replacing the narrower inline one,
+`Reassessment`/`ReassessmentItem` types,
+`listReassessments`/`getReassessment`/`decideReassessmentItem`), new
+`frontend/src/routes/Reassessments.tsx`, `frontend/src/App.tsx` (new
+route), `frontend/src/routes/Findings.tsx` (staleness banner + link),
+`frontend/src/routes/DecisionPackage.tsx` (updated import for the
+renamed shared type). No backend file changed.
+
+**Decisions**: none - reuse of already-decided backend behavior; the
+type correction is a bug fix (the frontend type undersold what the
+backend already returned), not a new architectural choice.
+
+**Blockers**: none. **This closes Phase A's first four sub-tasks.**
+**Next task**: 17.5 (Monitoring/Triggers in React) - the last Phase A
+item, and the only one building a genuinely new React surface for a
+backend module (`triggers.py`) that has never had any frontend at all.
+Continuing automatically.
+
+**Permissions needed**: none identified yet for 17.5.

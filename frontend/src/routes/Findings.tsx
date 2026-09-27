@@ -231,6 +231,8 @@ export function Findings() {
             <Link to={`/projects/${projectId}/decision-package`} className="underline">Decision package</Link>
             {" · "}
             <Link to={`/projects/${projectId}/readiness`} className="underline">Readiness</Link>
+            {" · "}
+            <Link to={`/projects/${projectId}/reassessments`} className="underline">Reassessments</Link>
           </p>
         </div>
         {workspaces.length > 1 && (
@@ -247,6 +249,13 @@ export function Findings() {
           </select>
         )}
       </div>
+
+      {bundle?.staleness && (
+        <div className="rounded-md border border-amber-900 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+          Potentially stale: {bundle.staleness.reason}{" "}
+          <Link to={`/projects/${projectId}/reassessments`} className="underline">Review reassessment</Link>
+        </div>
+      )}
 
       {selected && (
         <Card className="p-0">

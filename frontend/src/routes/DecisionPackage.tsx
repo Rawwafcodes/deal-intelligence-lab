@@ -12,7 +12,7 @@ import {
   listDeliverables,
   listWorkspaces,
   type Deliverable,
-  type DeliverableStaleness,
+  type StalenessFlag,
   type Workspace,
 } from "@/lib/api"
 
@@ -55,7 +55,7 @@ function DeliverableCard({
   canApprove: boolean
   onApproved: () => void
 }) {
-  const [staleness, setStaleness] = useState<DeliverableStaleness | null | undefined>(undefined)
+  const [staleness, setStaleness] = useState<StalenessFlag | null | undefined>(undefined)
   const [approving, setApproving] = useState(false)
   const { projectId } = useParams<{ projectId: string }>()
 
