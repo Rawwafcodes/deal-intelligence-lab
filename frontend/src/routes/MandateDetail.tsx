@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -278,6 +278,13 @@ function IntegrityReviewPanel({ projectId, reviewId }: { projectId: string; revi
 
 export function MandateDetail() {
   const { projectId, mandateId } = useParams<{ projectId: string; mandateId: string }>()
+  // Task 17.9: the composer navigates here with ?structure=.../&template=...
+  // right after creating a mandate - read once, never re-read on later
+  // visits to the same URL (a user could bookmark/reshare it), so this
+  // never re-fires the effect below after its own first successful run.
+  const [searchParams] = useSearchParams()
+  const composerStructure = searchParams.get("structure")
+  const composerTemplate = searchParams.get("template")
   const [mandate, setMandate] = useState<Mandate | null>(null)
   const [templates, setTemplates] = useState<MandateTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState("")
@@ -297,6 +304,7 @@ export function MandateDetail() {
   const [selectedWorkstreamId, setSelectedWorkstreamId] = useState("")
   const [reviewScope, setReviewScope] = useState("")
   const reloadingRef = useRef(false)
+  const composerHandledRef = useRef(false)
 
   async function reload() {
     if (!projectId || !mandateId || reloadingRef.current) return
@@ -316,7 +324,12 @@ export function MandateDetail() {
       setTasksWithWorkProducts(taskList)
       setWorkstreams(workstreamList)
       setCurrentBrief(brief)
-      if (!selectedTemplate && templateList.length > 0) setSelectedTemplate(templateList[0].key)
+      if (!selectedTemplate && templateList.length > 0) {
+        const preferred = composerTemplate && templateList.some((t) => t.key === composerTemplate)
+          ? composerTemplate
+          : templateList[0].key
+        setSelectedTemplate(preferred)
+      }
     } catch {
       toast.error("Could not load this mandate.")
     } finally {
@@ -391,6 +404,20 @@ export function MandateDetail() {
       setBusy(false)
     }
   }
+
+  // Task 17.9: the composer's "Flexible" card creates the mandate and
+  // sends the human straight here with ?structure=flexible - fires the
+  // exact same AI-proposal call a manual "Propose with AI" click already
+  // makes, once, only for a freshly-created draft mandate with no plan
+  // revision yet (never re-fires on a later visit or a real plan revision).
+  useEffect(() => {
+    if (composerHandledRef.current) return
+    if (composerStructure !== "flexible") return
+    if (!mandate || mandate.plans.length > 0) return
+    composerHandledRef.current = true
+    handleProposeWithAi()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerStructure, mandate])
 
   if (!mandate || !projectId || !mandateId) {
     return <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 text-sm text-muted-foreground">Loading…</div>
@@ -756,6 +783,10 @@ export function MandateDetail() {
                 <StageRow key={stage.id} stage={stage} />
               ))}
             </ul>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Human approval is always required before this plan can run - there is no way to skip it. A usage
+              limit can be set once approved, below.
+            </p>
             <div className="mt-4 flex gap-3">
               <Button
                 disabled={busy}

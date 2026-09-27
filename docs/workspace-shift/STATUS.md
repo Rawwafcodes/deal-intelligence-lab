@@ -8,10 +8,9 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phase A and Phase B (17.1-17.8) are complete** -
-the six primary destinations are all real, reachable, top-level routes
-with clear deal context throughout; **the current task is Phase C, the
-unified Mandates composer**. This
+for the full plan. **Phases A, B and C (17.1-17.9) are complete**;
+**the current task is Phase D, unifying Findings** (including the
+assertion-ledger/reconciler wiring decision). This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5453,3 +5452,88 @@ existing template/capability registry) - its own task file will be
 written immediately before it starts. Continuing automatically.
 
 **Permissions needed**: none identified yet for Phase C.
+
+## 2026-09-27 — Task 17.9 executed (unified Mandates composer; closes Phase C)
+
+Full detail in `docs/workspace-shift/tasks/17.9-mandates-composer.md`.
+Summary: the biggest realization driving this task's scope was that
+`MandateDetail.tsx` (948 lines) already implements essentially all of
+plan proposal (AI and manual), evidence/document selection, approval,
+budget-limited execution, and Integrity-Review-specific selection UI -
+already real, already tested. The actual gap was narrower than "build a
+composer": mandate *creation* asked only for a free-text objective, with
+no explicit Flexible/Review/Pipeline/Monitoring choice anywhere, and a
+human had to already know which of 8 template keys they wanted.
+
+New `MandateComposerDialog.tsx` (replacing `MandateList.tsx`'s bare
+objective dialog) adds that explicit choice: Objective -> four real
+starting-structure cards. **Flexible** creates the mandate and navigates
+to it with `?structure=flexible`, which a small new effect in
+`MandateDetail.tsx` reads once to auto-invoke the *existing*
+`handleProposeWithAi()` - the same call a manual "Propose with AI" click
+already makes, just fired automatically for this one entry path.
+**Review** pre-selects the real `integrity-review` template via
+`?template=`. **Pipeline** shows the real, currently-registered
+templates (`reconciliation`, `reconciliation-with-review`,
+`decision-package`, `readiness`, `reassessment`) as real cards using
+their own registered names/descriptions verbatim - new
+`frontend/src/lib/mandateTemplates.ts` deliberately hides the two
+`fixture-*` templates from this list, since their own registered
+descriptions say plainly they "register no real analytical capability"
+(a disclosed frontend-only display decision, not a backend change -
+both remain reachable via the existing manual dropdown). **Monitoring**
+does not create a mandate at all - it navigates straight to the real
+Triggers page (17.5), since that is what "reacts to future changes"
+already means on this backend.
+
+**Controls, resolved honestly rather than faked**: "Set usage limit"
+already existed and is unchanged (`MandateDetail.tsx`'s own budget-limit
+input at run-start). "Human approval before publishing" is not a
+control at all - it is unconditional - so a small static notice was
+added next to the proposed plan instead of a toggle. **"Require
+citations" has no real backend hook anywhere** (confirmed by direct
+inspection) - no checkbox was added for it, per the spec's own explicit
+instruction that controls "must affect real execution configuration -
+not be visual checkboxes with no backend consequence."
+
+**Verification**: full backend suite unaffected (865 tests, no backend
+file touched); `tsc -b`/`oxlint`/`npm run build` clean; `node --test
+tests/frontend/*.test.mjs` 5/5. Live Playwright check exercised all four
+starting structures for real through the actual UI: Pipeline's own
+template list and pre-selection confirmed correct, hides fixtures
+confirmed; Review's pre-selection confirmed; Monitoring's redirect to
+Triggers (never creating a mandate) confirmed; Flexible's auto-invoke
+confirmed to fire and degrade gracefully (this container has no
+`ANTHROPIC_API_KEY` configured, so the real provider call fails at
+auth, not silently - no real spend was possible or attempted). The new
+approval notice was separately confirmed rendering on a real proposed
+plan (using the `fixture-echo` template specifically to avoid any
+provider call for that check).
+
+**Files changed**: new `frontend/src/lib/mandateTemplates.ts`, new
+`frontend/src/components/MandateComposerDialog.tsx`,
+`frontend/src/routes/MandateList.tsx` (uses the new dialog),
+`frontend/src/routes/MandateDetail.tsx` (reads `?structure=`/`?template=`
+once, auto-invokes AI proposal for Flexible, one new static notice). No
+backend file changed.
+
+**Decisions**: none - every choice here (which templates count as
+"pipeline," hiding fixtures, omitting the citations control) follows
+directly from direct inspection of what the real backend already
+supports, not a new product decision requiring founder sign-off.
+
+**This closes Phase C.** Flexible, Review, Pipeline and Monitoring are
+now one understandable, guided choice at mandate creation, reusing the
+existing runtime/planner/templates/Validation-Lab-adjacent
+infrastructure and Trigger interface throughout - no new capability, no
+new executor, no rewritten runtime.
+
+**Blockers**: none. **Next task**: Phase D, unifying Findings across
+origins - including the assertion-ledger/reconciler wiring decision
+this program's own tracker (`17.0`) flagged from the start as possibly
+needing a founder decision. Its own task file will be written next,
+starting with the smallest-useful-integration analysis the directive's
+own Phase D procedure requires before any wiring occurs.
+
+**Permissions needed**: possibly one, pending Phase D's own analysis -
+see above.
