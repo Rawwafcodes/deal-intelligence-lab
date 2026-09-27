@@ -6873,3 +6873,40 @@ No paid calls in this step.
 
 **Open**: founder acceptance of Track A (D21's precondition is met); the
 four non-canonical surfaces; Track B inputs.
+
+## 2026-09-27 — D22 recorded; Track B started on Universal Logic and الكعكية
+
+**Authorization**: founder "accepted, canonical, all is authorised. you can
+do it for الكعكية deal + universal logic" (D22): Track A accepted;
+Readiness, Reassessments, Assertions, Triggers made canonical surfaces
+#26-29 (`02-experience-and-information-architecture.md` updated); Track B
+authorized on the two deals including document transmission and paid calls.
+
+**Methodology boundary kept**: no answer-key content was read or written by
+the agent, and no finding was graded against a key - both would break
+Track B's rules and `answer_keys.py`'s blindness guarantee. The Validation
+Lab page that displays the key was driven without reading its content.
+
+**Environment change**: real database backed up to
+`~/deal_lab_backups/deal_lab-before-trackB-20260927.dump`, then the branch
+server (model pinned to claude-opus-5 via env for these runs) was pointed at
+the real `deal_lab`, applying the M17/M18 additive schema changes to it.
+
+**Universal Logic**: two further blind runs (`838f1789`, `c46a3f79`)
+through the real Validation Lab, same model, key version and mandate
+checksum as the existing blind run `417bb2df`. Paid: 7,656,589 input /
+99,759 output tokens ≈ $40.8. Mechanical metrics on all three: every PDF
+citation lands on its cited page (≈ 20% only by word overlap, from
+extraction formatting); 323 of 330 Excel references resolve (7 unverified
+ranges); all 58 parseable quoted workbook values match. Two critical issues
+recur in all three runs. Full tables in `tasks/18.3-track-b-plan.md`.
+
+**الكعكية**: deal and six text documents set up through the UI; blocked on
+(1) no answer key and no Validation Lab support for non-Excel cases, and
+(2) a real product limitation - the 54 MB scanned technical offer exceeds
+the product's 23.5 MB per-request PDF cap with no chunking path.
+
+**Open (founder)**: approve thresholds; score the three Universal Logic runs
+in the Validation Lab (or name an evaluator); write and lock a الكعكية key
+(the offer-evaluation deck may be it - unopened); decide whether to build
+Validation Lab support for Integrity Review cases and a large-PDF path.
