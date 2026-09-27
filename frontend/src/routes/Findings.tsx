@@ -28,13 +28,11 @@ import {
 // answers by making the caller navigate from a specific reconciliation;
 // here it's an explicit dropdown instead, defaulting to the most recent.
 //
-// Disclosed scope boundary, inherited from the backend (server.py's
-// `_get_workspace_analysis`, unchanged by this task): the full findings
-// bundle only exists for a cross-format-analysis-backed workspace. An
-// Integrity-Review-backed workspace (`integrity_review_id` set instead)
-// 400s on that same endpoint - this screen shows a plain explanatory
-// message for those rather than a broken fetch, and does not attempt to
-// extend that backend boundary itself.
+// A workspace's `analysis` is genuinely optional (Task 17.11): a
+// cross-format-analysis-backed workspace has one, an Integrity-Review-
+// backed workspace (`integrity_review_id` set instead) does not and
+// gets `analysis: null` from the bundle - the findings register itself
+// renders identically either way.
 
 const SEVERITY_LABELS: Record<string, string> = {
   critical: "Critical", high: "High", medium: "Medium", low: "Low", informational: "Info",

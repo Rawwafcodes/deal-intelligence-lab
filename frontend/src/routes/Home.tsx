@@ -215,7 +215,7 @@ export function Home() {
       <Card className="p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-heading text-lg font-semibold text-foreground">Active engagements</h2>
-          <Link to="/deals" className="text-sm text-accent hover:underline">See all deals →</Link>
+          <Link to="/deals" className="text-sm text-foreground hover:underline">See all deals →</Link>
         </div>
         <div className="mt-3" ref={listRef}>
           {overview === null ? (
@@ -250,7 +250,7 @@ export function Home() {
                     </Link>
                     <Link
                       to={`/projects/${engagement.project.id}/mandates`}
-                      className="mt-2 inline-block text-xs text-accent hover:underline"
+                      className="mt-2 inline-block text-xs text-foreground hover:underline"
                     >
                       Mandates →
                     </Link>

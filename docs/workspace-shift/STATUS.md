@@ -8,11 +8,12 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phases A, B, C and D (17.1-17.11) are complete**;
+for the full plan. **Phases A, B, C, D and E (17.1-17.12) are complete**;
 the founder decided D15 (`docs/10-decisions.md`) on the assertion-
 ledger/reconciler question; Task 17.11 closed the last Phase D gap
-(Findings display unified across workspace origins). **Phase E
-(design-system pass) is next**. This
+(Findings display unified across workspace origins); Task 17.12's live
+screenshot audit found and fixed a real accessibility bug (near-invisible
+link text). **Phase F (local collaborative proof) is next and final**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5663,3 +5664,71 @@ across the six-destination shell, per the original directive's
 sequencing. Continuing automatically.
 
 **Permissions needed**: none identified yet for Phase E.
+
+## 2026-09-27 — Task 17.12 executed (Meridian design-system consistency pass) - closes Phase E
+
+Per CLAUDE.md's Design decision-making section, loaded the
+project-local `emil-design-eng` skill before making any change, then
+weighed its animation-first program against CLAUDE.md's own precedence
+rule (clarity/accessibility/professional credibility over visual
+flourish for this M&A intelligence product) - took its review-checklist
+habit, not its motion budget. `ui-ux-pro-max` is referenced in
+CLAUDE.md but was confirmed (via `ListSkills`) not actually present as
+an enabled or project-local skill in this session; proceeded by
+applying its named concerns (usability, IA, accessibility) directly
+rather than invoking something unavailable.
+
+Did a real, live audit rather than a speculative one: full-page
+Playwright screenshots of all six top-level destinations (Overview,
+Deals, Mandates, Documents, Findings, Activity) against the actually-
+running app with real synthetic data, plus a project-wide grep for
+known anti-patterns (non-token colors, unstyled interactive elements).
+
+**Real accessibility bug found and fixed, 3 sites**: `Home.tsx`'s "See
+all deals →" header link and each engagement card's "Mandates →" link,
+plus `Documents.tsx`'s document-filename hover state, all used
+`text-accent`/`hover:text-accent` as a link text color. `--accent`
+(`#1b1b20`) is a near-black background-fill token, not a text color -
+against the `#0a0a0c` page background this rendered as effectively
+invisible text, confirmed directly in the "before" screenshot. Fixed by
+switching all three to the `text-foreground` + `underline` pattern
+already used at every other `<Link>` site in the app (~12 others) -
+a consistency fix, not an invented pattern. Also corrected a stale
+comment in `Findings.tsx` that still described the pre-17.11 400
+boundary for Integrity-Review-backed workspaces.
+
+**Investigated and deliberately left unchanged**: `Findings.tsx`'s
+severity-badge colors (including blue for "low") - initially looked
+like a possible violation of D12's "one blue reserved for
+links/selection," but verified against `static/workspace.css`'s own
+pre-existing `.ws-severity-low` rule (also blue) before touching
+anything; the two stacks already agree, and severity coloring is a
+distinct semantic scale orthogonal to D12's brand-accent rule.
+`MandatesHome.tsx`'s missing "New mandate" CTA (asymmetric with
+`Deals.tsx`'s header button) is a deliberate, already-documented
+information-architecture decision (mandate creation stays deal-scoped),
+not a design-system defect - left alone as out of this task's scope.
+
+**Verification**: before/after screenshots confirm the fix visually;
+project-wide grep confirmed exactly 3 `text-accent`-as-text-color sites
+existed and all 3 are fixed. `tsc -b` clean, `oxlint` clean (same
+pre-existing warning categories, no new ones), `npm run build` clean.
+Full backend suite unaffected (870 tests, 0 failures - this task
+touched only `.tsx` files). `node --test tests/frontend/*.test.mjs`
+5/5 passing.
+
+**Files changed**: `frontend/src/routes/Home.tsx` (2 link color fixes),
+`frontend/src/routes/Documents.tsx` (1 hover-color fix),
+`frontend/src/routes/Findings.tsx` (stale comment corrected).
+
+**Decisions**: none required - a bounded visual-consistency fix within
+this program's existing Phase E authorization.
+
+**Blockers**: none. **Phases A through E (17.1-17.12) are now
+complete.** **Next task**: Phase F - local collaborative proof, re-
+running the applicable T01-T20 acceptance scenarios against the
+integrated product with synthetic two-identity data, per the original
+directive's sequencing. This is the program's final phase. Continuing
+automatically.
+
+**Permissions needed**: none identified yet for Phase F.

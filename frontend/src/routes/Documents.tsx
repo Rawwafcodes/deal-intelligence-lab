@@ -133,7 +133,7 @@ export function Documents() {
                     href={`${BACKEND_ORIGIN}/api/projects/${encodeURIComponent(projectId ?? "")}/documents/${encodeURIComponent(doc.id)}/download?inline=1`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-foreground hover:text-accent hover:underline"
+                    className="text-foreground hover:underline"
                   >
                     {doc.original_filename}
                   </a>
