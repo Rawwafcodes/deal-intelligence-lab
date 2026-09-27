@@ -6769,3 +6769,60 @@ routes/Documents.tsx, routes/Findings.tsx, routes/MandateDetail.tsx}`,
 document also named `kestrel-term-sheet.pdf` in the synthetic deal; it is
 synthetic and harmless. The disposable database can be dropped with
 `dropdb -h "$(pwd)/pgsocket" -p 5544 deal_lab_m18_ai`.
+
+## 2026-09-27 — Three S15/S16 defects fixed; Track A acceptance pack prepared
+
+**Authorization**: founder "ok go" to the recommended fixes for the three
+defects the previous entry left open, plus preparing the Track A outputs.
+Same environment and synthetic deal. Not pushed (push needs separate
+authorization).
+
+**Fixes**:
+- `a35f47b` -
+  - **Assertion semantics** (critical): `assertion_ledger` entries now carry
+    `claim_verdict` ("refuted" for every promoted Integrity Review
+    challenge) and `evidence_summary` (the candidate's conflicting
+    evidence). Additive `ADD COLUMN IF NOT EXISTS`; existing rows default
+    to "refuted" (correct - only accepted challenges were ever promoted),
+    and an empty summary is read from the source candidate at read time
+    without rewriting the row. **This schema change will also apply to the
+    founder's real `deal_lab` database the next time `server.py` starts
+    against it** - additive only, no rows rewritten. Assertions page now
+    shows claim / "Refuted by review" / "What the evidence shows"; Dispute
+    and Re-confirm became "Dispute verdict" / "Reinstate verdict".
+  - **Decision package + request responses**: digest includes each
+    request's management response (capped at 2,000 chars, labelled
+    unverified); mandate rule 6 says a response doesn't resolve a finding
+    by itself; `DRAFT_TEMPLATE_VERSION` "2". The server moves a `sent`
+    request to `answered` when the external participant responds - which
+    also fixes Readiness, whose "no request awaiting a response" check
+    counts only `sent` requests.
+  - **External access to decision packages**: restricted Overview carries
+    the workspace's current approved package (latest version, only if
+    approved - same rule as approved work products), content only; the
+    Decision Package route points external executives to the Overview.
+- `87756f4` - 8 unlabeled selects given accessible names.
+
+**Verification** (real UI, Playwright):
+- Assertions shows both existing entries as "Refuted by review" with the
+  evidence text; no "Confirmed" badge remains.
+- External executive's response moved the request to `answered`.
+- Decision package v2 (1 further paid call, claude-sonnet-5, 2,614 / 3,996
+  tokens) reported management's answer and called it "a management
+  statement ... unverified", keeping the finding open.
+- External executive saw nothing while v2 was an unapproved draft, and v2
+  once approved.
+- Backend suite 917 tests OK in four full runs; one earlier run reported a
+  single failure that did not reproduce (name not captured) - disclosed in
+  the acceptance pack.
+- `tsc -b` clean; no new oxlint warnings.
+
+**Track A outputs**: `docs/workspace-shift/tasks/18.2-track-a-acceptance-pack.md` -
+scenario status table, usability/defect register (9 fixed, 9 open with
+severity and suggested owner), accessibility check (axe WCAG 2.1 A/AA:
+0 violations on 16 pages after `87756f4`, plus keyboard pass), performance
+and AI cost observations (6 paid calls total this session, ≈ $0.33), and the
+founder decisions that remain.
+
+**Session paid-call total**: 6 calls, 64,327 input / 20,349 output tokens,
+all claude-sonnet-5.
