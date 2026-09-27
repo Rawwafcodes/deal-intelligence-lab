@@ -382,6 +382,72 @@ extension still lands at M24, consistent with the founder's own
 "commercially complete by M23, enterprise additions at M24, M25 for
 scaling only" framing.
 
+D20 (added 2026-09-27) The founder recorded a working architecture
+hypothesis for M19 and a new post-M19 strategic-pause gate, both
+directly. Documentation and planning only - **no provisioning,
+deployment, account creation, or spend is authorized by this decision**;
+full content: `docs/workspace-shift/docs/13-post-m17-roadmap.md`'s M19
+and "Post-M19 strategic pause" sections, and `08-roadmap.md`'s matching
+short entries, both updated in place.
+
+**Working architecture hypothesis** (to evaluate during M19, explicitly
+not a final or pre-approved provider decision): Railway web service for
+the current React/Python application; a separate Railway background-
+worker service for long-running analysis jobs; Neon PostgreSQL for
+managed application data; Cloudflare R2 for private document/object
+storage; Clerk for production authentication; GitHub Actions for CI/CD;
+Sentry for error tracking; Anthropic remains the initial AI provider
+behind the existing `ai_client.py` abstraction; Cloudflare may provide
+DNS/domain management. Reasoning offered (a starting point, not itself
+evidence the hypothesis is correct): the app is a React/Vite frontend
+alongside a substantial Python backend; AI analyses can run many minutes
+and must not depend on one browser request staying open; the existing
+mandate/job state should be preserved and executed by a separate
+long-running worker (the M12.2 durable-worker precedent); PostgreSQL is
+already the application database; documents should move from local
+filesystem storage to private object storage; dev-only identity
+switching must be replaced with real authentication; a Vercel-only
+deployment is not currently assumed to fit the long-running Python/
+worker workload; splitting the frontend onto Vercel is optional, only if
+demonstrably beneficial.
+
+**Required comparison set**: Railway with Railway PostgreSQL; Render;
+Fly.io; a Vercel frontend combined with a separately hosted Python
+API/worker; an appropriate AWS architecture; any materially stronger
+option found during current research - compared across compatibility
+with existing code, migration effort, long-running worker support,
+document security, managed PostgreSQL, authentication integration,
+regional/data-residency options, operational complexity, backup/
+recovery, observability, estimated staging cost, estimated pilot cost,
+vendor lock-in, and the path to Saudi/GCC regulated customers.
+
+**Required architecture decision report**: M19 must begin with a
+plain-English report recommending (1) the simplest safe private-staging
+architecture; (2) the likely architecture for an early non-regulated
+pilot; (3) the likely changes required for a Saudi residency-sensitive
+or regulated customer; (4) expected monthly costs at founder-only
+staging, one pilot customer, and several simultaneous pilot customers;
+(5) migration and rollback plans. **Do not provision or deploy anything
+until the founder approves the architecture recommendation and expected
+cost** - this applies to the working hypothesis exactly as it would to
+any alternative the report ends up recommending instead.
+
+**Post-M19 strategic pause**: M19 is a deliberate stop point. Reaching
+its exit gate does not automatically begin M20. A formal review is
+required first, covering product coherence, intelligence quality,
+backend maintainability, frontend quality, authorization and document
+security, infrastructure reliability, AI and infrastructure costs, the
+initial customer, the sellable first service, pricing, differentiation,
+legal and procurement obstacles, and founder capacity and available
+budget - concluding in exactly one of: Proceed, Remediate, Narrow,
+Reposition, Pause, Stop. **M20-M25 remain conditional future milestones.
+Only an explicit Proceed decision authorizes M20** - every other outcome
+ends this roadmap's forward motion at this point until a further,
+separately recorded founder decision (its own dated entry here) reopens
+it. M20's own entry criteria in `13-post-m17-roadmap.md` and
+`08-roadmap.md` were updated to require this Proceed decision, not M19's
+exit gate alone.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

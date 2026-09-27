@@ -31,6 +31,17 @@ what was adopted first; this document's own M21-M25 sections below now
 state the D19 content, not the superseded D18 content. M18-M20 and the
 25-surface reconciliation are unchanged by D19.
 
+**Extended again the same day (D20)**: recorded M19's working
+architecture hypothesis (Railway web+worker, Neon, Cloudflare R2, Clerk,
+GitHub Actions, Sentry, Anthropic unchanged) as a starting point for
+M19's own required comparison and architecture decision report -
+explicitly not a pre-approved provider decision, and no provisioning or
+deployment is authorized by recording it. Also recorded a new **post-M19
+strategic pause**: M19's exit gate no longer flows automatically into
+M20 - a formal review and an explicit Proceed decision are required
+first, per the new section between M19 and M20 below. See
+`10-decisions.md`'s D20 and the relevant M19/post-M19 sections below.
+
 ## 25-surface information-architecture reconciliation
 
 `docs/product/07-surface-reconciliation.md` is the code-verified status
@@ -82,11 +93,12 @@ retroactively edit any M10-M17 entry, any decision D01-D16, or any
   founder's direct M21-M25 naming/content revision that supersedes D18's
   version of those five milestones (D17/D18 are not deleted or rewritten
   - D19 records the supersession explicitly, per root `AGENTS.md`'s
-  "latest explicit founder instruction outranks accepted decisions").
-  Further M18-M25 decisions are appended there as D20+ when the founder
-  actually decides them. This file's own "Open founder decisions" section
-  below is the register of what is not yet decided — it is not itself a
-  decision record.
+  "latest explicit founder instruction outranks accepted decisions"); D20
+  records M19's working architecture hypothesis and the post-M19
+  strategic pause. Further M18-M25 decisions are appended there as D21+
+  when the founder actually decides them. This file's own "Open founder
+  decisions" section below is the register of what is not yet decided —
+  it is not itself a decision record.
 - `09-acceptance.md` — the existing T01-T20 scenarios are safety/integrity
   properties (permission boundaries, revision conflicts, audit lineage,
   export literalness) proven at the code/API level. M18 Track A's S01-S20
@@ -126,10 +138,13 @@ retroactively edit any M10-M17 entry, any decision D01-D16, or any
 - Paid API calls require explicit, task-specific authorization — unchanged
   from the standing rule in root `AGENTS.md`.
 - Deployment/provider selection (hosting, database, storage, auth, CI/CD)
-  remains **open until M19's own architecture-decision task**. This
-  document does not select or imply Vercel, Neon, Supabase, AWS or any
-  other provider, and no earlier document's mention of any provider name
-  is a decision.
+  remains **open until M19's own architecture-decision task**. D20
+  records a working hypothesis naming specific providers (Railway,
+  Neon, Cloudflare R2, Clerk, GitHub Actions, Sentry) for that task to
+  evaluate against a required comparison set - naming them there is
+  recording a starting point for comparison, not a decision, and no
+  provisioning or deployment against any of them is authorized until the
+  founder approves M19's own architecture decision report and its cost.
 - Existing working intelligence and domain logic (the mandate runtime,
   findings register, assertion ledger, authz policy, and every backend
   module M11-M17 built) is preserved through M19's infrastructure
@@ -276,11 +291,87 @@ expected AI runtime and concurrency; cost at zero, one and several pilot
 customers.
 
 Do not assume Vercel, Neon, Supabase, AWS or any other provider in
-advance (per this file's own planning principles above). The chosen
+advance (per this file's own planning principles above) - this rule
+governs the **decision**, not the working hypothesis immediately below,
+which exists precisely to be evaluated, not pre-approved. The chosen
 architecture must support long-running analysis without depending on one
 browser request remaining open — the existing durable local worker
 (M12.2) is the functional precedent to preserve, not discard, when
 choosing the hosted equivalent.
+
+### Working architecture hypothesis (2026-09-27, D20) — to evaluate, not a pre-approved decision
+
+Recorded here as the founder's own starting hypothesis for this
+milestone's own comparison work, explicitly **not** a final or
+pre-approved provider decision. No provisioning or deployment against
+any item below is authorized by this record - only comparison and
+reporting are.
+
+- Railway web service for the current React/Python application.
+- A separate Railway background-worker service for long-running
+  analysis jobs.
+- Neon PostgreSQL for managed application data.
+- Cloudflare R2 for private document/object storage.
+- Clerk for production authentication.
+- GitHub Actions for CI/CD.
+- Sentry for error tracking.
+- Anthropic remains the initial AI provider behind the existing
+  `ai_client.py` abstraction - unchanged by this hypothesis.
+- Cloudflare may provide DNS/domain management.
+
+**Reasoning offered for this hypothesis** (a starting point for the
+comparison below to confirm, weaken, or overturn - not itself evidence
+that it is correct): the current application is a React/Vite frontend
+served alongside a substantial Python backend; AI analyses can run for
+many minutes and should not depend on one browser request remaining
+open; the existing mandate/job state should be preserved and executed
+by a separate long-running worker (the M12.2 durable-worker precedent
+this section already names); PostgreSQL is already the application
+database; uploaded documents should move from local filesystem storage
+to private object storage; development-only identity switching (surface
+#5) must be replaced with real authentication; a Vercel-only deployment
+is not currently assumed to fit the long-running Python/worker workload;
+splitting the frontend onto Vercel is optional and should occur only if
+it provides a demonstrated benefit over keeping frontend and backend on
+one platform.
+
+### Required comparison set
+
+M19 must compare the working hypothesis above against at least:
+
+- Railway with Railway PostgreSQL (i.e. the hypothesis's own compute
+  choice, but its own managed Postgres instead of Neon);
+- Render;
+- Fly.io;
+- a Vercel frontend combined with a separately hosted Python API/worker;
+- an appropriate AWS architecture;
+- any materially stronger option found during current research.
+
+Across, at minimum: compatibility with the existing code; migration
+effort; long-running worker support; document security; managed
+PostgreSQL; authentication integration; regional/data-residency
+options; operational complexity; backup/recovery; observability;
+estimated staging cost; estimated pilot cost; vendor lock-in; and path
+to Saudi/GCC regulated customers.
+
+### Required architecture decision report
+
+M19 must **begin** with an architecture decision report, written in
+plain English (not solely a table of vendor features), that recommends:
+
+1. The simplest safe private-staging architecture.
+2. The likely architecture for an early non-regulated pilot.
+3. The likely changes required for a Saudi residency-sensitive or
+   regulated customer.
+4. Expected monthly costs at: founder-only staging; one pilot customer;
+   several simultaneous pilot customers.
+5. Migration and rollback plans.
+
+**Do not provision or deploy anything until the founder approves the
+architecture recommendation and expected cost.** This applies to the
+working hypothesis above exactly as it would to any alternative the
+report ends up recommending instead - the hypothesis being recorded
+first does not make it the default if the comparison finds otherwise.
 
 ### Required implementation areas
 
@@ -327,12 +418,52 @@ Public launch; broad customer onboarding; billing automation unless
 essential for pilot controls; large-scale architecture without
 demonstrated need.
 
+## Post-M19 strategic pause (2026-09-27, D20) — a deliberate stop point, not a formality
+
+M19 is a **deliberate stop point**, not a rolling handoff into M20.
+Reaching M19's exit gate does not automatically begin M20 - this is
+recorded explicitly so a future session does not treat "M19 done" as
+license to keep moving on momentum alone.
+
+### Required formal review
+
+After M19's exit gate is satisfied, before any M20 work begins, conduct
+a formal review covering: product coherence; intelligence quality;
+backend maintainability; frontend quality; authorization and document
+security; infrastructure reliability; AI and infrastructure costs; the
+initial customer; the sellable first service; pricing; differentiation;
+legal and procurement obstacles; and founder capacity and available
+budget.
+
+### Required decision
+
+The review concludes with exactly one of:
+
+- **Proceed** to M20;
+- **Remediate** (fix specific, named problems the review found, then
+  re-review - not open-ended additional engineering);
+- **Narrow** the initial offer (a smaller, more defensible first service
+  than originally planned);
+- **Reposition** (a different segment, offer, or positioning than M20
+  was heading toward);
+- **Pause** (stop spending further effort for a stated reason, without
+  declaring the effort a failure);
+- **Stop**.
+
+**M20-M25 remain conditional future milestones. Only an explicit Proceed
+decision authorizes M20** - Remediate, Narrow, Reposition, Pause and Stop
+each end this roadmap's forward motion at this point until a further,
+separate founder decision reopens it (recorded as its own dated entry in
+`10-decisions.md` when it happens, not assumed from this document alone).
+
 ## M20 — Commercial Pilot Readiness
 
 **Purpose**: prepare the product, operating process and commercial offer
 for a first design partner.
 
-**Entry criteria**: M19 exit gate satisfied.
+**Entry criteria**: M19 exit gate satisfied, **and** the post-M19
+strategic pause above concluded with an explicit Proceed decision - not
+M19's exit gate alone.
 
 ### Required work
 
@@ -575,9 +706,17 @@ not close it.
 - Which historical deals are "authorized" and sufficiently complete for
   M18 Track B's blind cases (relates to `06-truth-register.md`'s O07).
 - M19's full architecture selection (hosting, database, storage, auth,
-  CI/CD, secrets, log/error tooling) — explicitly deferred to M19 itself,
-  not decided here.
+  CI/CD, secrets, log/error tooling) — a working hypothesis is recorded
+  (D20: Railway web+worker, Neon, Cloudflare R2, Clerk, GitHub Actions,
+  Sentry) but the actual decision is explicitly deferred to M19's own
+  required comparison and architecture decision report, not decided
+  here, and provisioning/deployment against the hypothesis is not
+  authorized by recording it.
 - M19's independent security review provider/method.
+- The post-M19 strategic-pause decision itself (Proceed/Remediate/
+  Narrow/Reposition/Pause/Stop) — deliberately not pre-decided; it is
+  the entire point of that review to decide it from M19's real evidence,
+  not in advance.
 - M20's initial customer segment, buyer title, pilot offer scope, pricing
   hypothesis and overage policy (`06-truth-register.md`'s existing open
   product decisions).
@@ -616,7 +755,11 @@ not close it.
 - A design-partner customer, its users and approver for M20 discovery and
   the M21 pilot itself.
 - A hosting/database/storage/auth provider, selected only at M19 per the
-  deferral above.
+  deferral above - the working hypothesis names candidates (Railway,
+  Neon, Cloudflare R2, Clerk, GitHub Actions, Sentry) but none is engaged
+  or committed to by this record; the comparison set names further
+  candidates (Render, Fly.io, an AWS architecture) to evaluate alongside
+  them.
 
 ## Explicit non-goals through M25
 

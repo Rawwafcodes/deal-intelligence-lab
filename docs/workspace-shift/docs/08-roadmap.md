@@ -212,11 +212,23 @@ completion does not certify production safety and is not itself
 commercial validation.
 
 ## M19 — Secure Online Foundation
-Entry: M18 exit gate satisfied. Hosting/database/storage/auth/CI-CD
-provider selection is deliberately open until this milestone's own
-architecture-decision task - no earlier document's provider mention is a
-decision. Preserves the existing mandate runtime, findings register,
-assertion ledger and `authz.py` policy through the migration; this is a
+Entry: M18 exit gate satisfied. Must **begin** with a plain-English
+architecture decision report (simplest safe staging architecture; likely
+non-regulated-pilot architecture; likely Saudi-residency/regulated
+changes; costs at founder-only/one-pilot/several-pilot scale; migration/
+rollback plan) before any provisioning. A working hypothesis is recorded
+(D20: Railway web+worker, Neon Postgres, Cloudflare R2, Clerk, GitHub
+Actions, Sentry, Anthropic unchanged, Cloudflare DNS optional) - not a
+pre-approved decision; compare it against Railway+Railway Postgres,
+Render, Fly.io, a Vercel-frontend/separately-hosted-API split, an AWS
+architecture, and any stronger option found in current research, across
+compatibility, migration effort, worker support, document security,
+managed Postgres, auth integration, data residency, operational
+complexity, backup/recovery, observability, cost at three scales,
+lock-in, and the Saudi/GCC regulated-customer path. **Do not provision
+or deploy anything until the founder approves the report and its cost.**
+Preserves the existing mandate runtime, findings register, assertion
+ledger and `authz.py` policy through the migration; this is a
 hosting/security migration, not a rewrite. Covers canonical surface #5
 (Sign in - a real production sign-in replacing the dev-only identity
 switcher) and the private-staging minimum of #23-24 (Team and Access,
@@ -230,8 +242,23 @@ backup/restore, logging/alerting and an independent security review -
 real customer data remains prohibited until formally approved beyond
 this gate.
 
+## Post-M19 strategic pause (D20)
+A deliberate stop point, not a rolling handoff. Reaching M19's exit gate
+does **not** automatically begin M20. Requires a formal review (product
+coherence, intelligence quality, backend/frontend maintainability,
+authorization/document security, infrastructure reliability, AI/
+infrastructure cost, the initial customer, the sellable first service,
+pricing, differentiation, legal/procurement obstacles, founder capacity
+and budget) concluding in exactly one of: Proceed, Remediate, Narrow,
+Reposition, Pause, Stop. Full framing: `docs/13-post-m17-roadmap.md`.
+Outcome: **only an explicit Proceed decision authorizes M20** - every
+other outcome ends this roadmap's forward motion here until a further,
+separately recorded founder decision reopens it.
+
 ## M20 — Commercial Pilot Readiness
-Entry: M19 exit gate satisfied. Defines segment, buyer, one bounded paid
+Entry: M19 exit gate satisfied **and** the post-M19 strategic pause
+concluded with an explicit Proceed decision - not M19's exit gate alone.
+Defines segment, buyer, one bounded paid
 pilot offer, pricing hypothesis, legal/privacy/DPA/pilot-agreement
 material and support/onboarding process. Covers canonical surface #6
 (Invitation/onboarding - confirmed to have no invite/token flow at all)

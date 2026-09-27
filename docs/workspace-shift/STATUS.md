@@ -6388,3 +6388,68 @@ session can complete alone.
 **Permissions needed**: whether/when to actually execute the scripted
 walkthrough, and whether to push this task's own commit, are both for
 the founder to decide next.
+
+## 2026-09-27 — M19 working architecture hypothesis and post-M19 strategic pause recorded (D20)
+
+**Scope**: documentation and planning only, per explicit founder
+instruction. No provisioning, deployment, account creation, spend, code,
+schema or dependency change. Recorded two things directly into the
+roadmap: (1) a working architecture hypothesis for M19 - Railway
+web+worker services, Neon PostgreSQL, Cloudflare R2, Clerk, GitHub
+Actions, Sentry, Anthropic unchanged behind `ai_client.py`, optional
+Cloudflare DNS - explicitly a starting hypothesis to evaluate, not a
+pre-approved decision; and (2) a new **post-M19 strategic pause**: M19's
+exit gate no longer flows automatically into M20 - a formal review and
+an explicit Proceed decision are now required first.
+
+**M19 additions**: a required comparison set (the hypothesis vs. Railway
++Railway Postgres, Render, Fly.io, a Vercel-frontend/separately-hosted-
+API split, an AWS architecture, and any stronger option found in current
+research) across 14 named dimensions (compatibility, migration effort,
+worker support, document security, managed Postgres, auth integration,
+data residency, operational complexity, backup/recovery, observability,
+staging cost, pilot cost, lock-in, Saudi/GCC path); and a required
+architecture decision report M19 must *begin* with, in plain English,
+recommending the simplest safe staging architecture, the likely
+non-regulated-pilot architecture, likely Saudi-residency/regulated
+changes, costs at three customer-count tiers, and migration/rollback
+plans. Explicit, repeated: no provisioning or deployment until the
+founder approves that report and its cost - applying equally to the
+recorded hypothesis and to whatever the report ends up recommending
+instead.
+
+**Post-M19 pause**: a formal review (product coherence, intelligence
+quality, backend/frontend maintainability, authorization/document
+security, infrastructure reliability, AI/infrastructure cost, initial
+customer, sellable first service, pricing, differentiation, legal/
+procurement obstacles, founder capacity/budget) must conclude in exactly
+one of Proceed/Remediate/Narrow/Reposition/Pause/Stop before M20 begins.
+M20's own entry criteria in both roadmap documents were updated to
+require this Proceed decision explicitly, not M19's exit gate alone.
+
+**Files changed**: `docs/workspace-shift/docs/13-post-m17-roadmap.md`
+(new working-hypothesis/comparison-set/architecture-report subsections
+under M19; new "Post-M19 strategic pause" section; M20's entry criteria
+updated; open-decisions and external-dependencies registers extended;
+top-of-file supersession note and planning-principles bullet updated);
+`docs/workspace-shift/docs/08-roadmap.md` (M19's short entry extended;
+new post-M19-pause short entry; M20's entry criteria updated);
+`docs/10-decisions.md` (new D20); this file.
+
+**Decisions**: D20 (`docs/10-decisions.md`) - the hypothesis and the
+post-M19 pause, recorded as the founder's own direct instruction.
+
+**Founder decisions left open**: M19's actual architecture selection
+(the hypothesis vs. the comparison set, decided only after the required
+report); the post-M19 pause's own eventual Proceed/Remediate/Narrow/
+Reposition/Pause/Stop outcome (deliberately not pre-decided - that
+review's whole purpose is to decide it from real M19 evidence).
+
+**Verification**: ran `python3 docs/workspace-shift/scripts/
+check_spec.py` - passed.
+
+**Blockers**: none for this task's own scope.
+
+**Permissions needed**: none for the documentation change itself; not
+pushed without separate authorization, per this repository's standing
+rule.
