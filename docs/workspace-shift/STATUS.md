@@ -6910,3 +6910,9 @@ the product's 23.5 MB per-request PDF cap with no chunking path.
 in the Validation Lab (or name an evaluator); write and lock a الكعكية key
 (the offer-evaluation deck may be it - unopened); decide whether to build
 Validation Lab support for Integrity Review cases and a large-PDF path.
+
+## 2026-09-27 — Track B thresholds approved (D23)
+
+Founder approved the provisional thresholds in `tasks/18.3-track-b-plan.md`
+unchanged; recorded as D23 before any Track B run was human-scored. Next:
+founder scores the three Universal Logic blind runs in the Validation Lab.

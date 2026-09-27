@@ -509,6 +509,27 @@ logic"**:
    `answer_keys.py`'s own blindness guarantee; the implications are set
    out in `tasks/18.3-track-b-plan.md`.
 
+D23 (added 2026-09-27, Task 18.3) **Track B provisional thresholds
+approved** by the founder ("i approve it"), recorded before any scoring of
+any Track B run, as `13-post-m17-roadmap.md` requires:
+
+| Metric | Provisional threshold |
+|---|---|
+| Critical expected-issue recall | ≥ 80% |
+| High-severity expected-issue recall | ≥ 60% |
+| Reviewed-finding precision (correct ÷ findings rated) | ≥ 70% |
+| Citation locator validity | ≥ 95% |
+| Quoted-value accuracy | ≥ 95% |
+| Unsupported-claim rate | ≤ 10% |
+| Repeatability (critical issues found in every run) | ≥ 2 of 3 runs |
+
+Scope: every Track B case (Universal Logic now; الكعكية once it can run).
+They set a stated pass/fail bar for M18's intelligence evidence, not a
+claim about commercial readiness. Changing them after scoring has started
+requires a new, dated decision that says so and keeps these on record.
+Status at approval: no Track B run had been human-scored (the one
+evaluation record, for run `417bb2df`, was incomplete).
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,
