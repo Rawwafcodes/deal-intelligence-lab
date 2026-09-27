@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { RequestDialog } from "@/components/RequestDialog"
@@ -227,6 +227,8 @@ export function Findings() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Findings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {bundle ? `${bundle.summary.total_findings} finding${bundle.summary.total_findings === 1 ? "" : "s"}` : " "}
+            {" · "}
+            <Link to={`/projects/${projectId}/decision-package`} className="underline">Decision package</Link>
           </p>
         </div>
         {workspaces.length > 1 && (

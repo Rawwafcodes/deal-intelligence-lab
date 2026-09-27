@@ -8,8 +8,9 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. Task 17.1 (Information Requests in React) is complete;
-**the current task is 17.2 (Decision Packages in React)**. This
+for the full plan. Tasks 17.1 (Information Requests) and 17.2 (Decision
+Packages), both in React, are complete; **the current task is 17.3
+(Readiness in React)**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5055,3 +5056,57 @@ unless a stop condition in that directive is hit.
 **Permissions needed**: none identified yet for 17.2; will disclose if
 Phase D's assertion-ledger/reconciler analysis (later) surfaces a
 founder decision, per the directive's own procedure.
+
+## 2026-09-27 — Task 17.2 executed (Decision Packages in React)
+
+Full detail in `docs/workspace-shift/tasks/17.2-decision-packages.md`.
+Summary: new deep route `/projects/:projectId/decision-package`
+(`DecisionPackage.tsx`, nested under `DealShell`, not a seventh primary
+tab - the target route inventory lists this as a deep page), reusing
+`deliverables.py`'s existing `list_deliverable_versions`/
+`get_deliverable_version`/`approve_deliverable_version` and their
+existing routes verbatim - zero new backend code. Each drafted version
+shows its real content sections, status, staleness (already computed by
+`version_dependencies.get_staleness`, previously fetched by the backend
+but never rendered anywhere), and lineage; a deal-lead-only Approve
+button (role read via the existing `/memberships` route, matched
+against the current session's own user id - no new backend permission
+logic, the server independently re-enforces the same `deal_lead` check
+regardless of what the client shows). Linked from `Findings.tsx`'s
+header.
+
+Disclosed, not silently dropped: the real backend has no "return" or
+"reject" action on a deliverable (only `draft`/`approved`/`superseded`,
+and nothing ever sets `superseded` either) and no create route (a new
+version is only ever produced by the `decision_package.produce_draft`
+mandate capability) - so this screen is honestly view/approve only; a
+"start a decision package" action belongs to Phase C's unified composer,
+not invented here.
+
+**Verification**: `tsc -b`/`oxlint`/`npm run build` clean (no new lint
+category); `node --test tests/frontend/*.test.mjs` 5/5; full backend
+suite 858 tests with one pre-existing timing-flaky worker test
+(`test_cancel_run_while_queued_...`, confirmed flaky by 3x isolated
+reruns, unrelated to this frontend-only change - no backend file
+touched by this task). Live Playwright check against a synthetic seeded
+`DeliverableVersion` (`SYNTHETIC`-labelled, no real data, via
+`deliverables.create_deliverable_version` directly - no Anthropic call):
+navigated from Findings, confirmed content/status rendering, approved as
+the auto-assigned deal-lead identity, confirmed the status badge updated
+and the button disappeared, and independently confirmed via a direct
+second `POST .../approve` that the server still returns its own 409
+"already approved" rejection.
+
+**Files changed**: `frontend/src/lib/api.ts` (new `Deliverable`/
+`DeliverableStaleness`/`DealMembership` types and
+`listDeliverables`/`getDeliverable`/`approveDeliverable`/
+`listDealMemberships` functions), new `frontend/src/routes/
+DecisionPackage.tsx`, `frontend/src/App.tsx` (new route),
+`frontend/src/routes/Findings.tsx` (one link). No backend file changed.
+
+**Decisions**: none - reuse of already-decided backend behavior.
+
+**Blockers**: none. **Next task**: 17.3 (Readiness in React), per
+`17.0`'s tracker. Continuing automatically.
+
+**Permissions needed**: none identified yet for 17.3.

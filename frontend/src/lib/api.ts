@@ -181,6 +181,75 @@ export async function createRequest(
   return jsonOrThrow(res, "Could not create the request.")
 }
 
+// Matches deliverables.py's DeliverableVersion.to_dict() exactly, plus
+// the `staleness` field _handle_get_deliverable adds for the single-item
+// route only (list stays without it - matches the backend precisely).
+export interface Deliverable {
+  id: string
+  project_id: string
+  workspace_id: string
+  version_number: number
+  status: "draft" | "approved" | "superseded"
+  mandate_id: string | null
+  run_id: string | null
+  attempt_id: string | null
+  title: string
+  executive_summary: string
+  recommendation: string
+  key_evidence_and_findings: string
+  outstanding_and_unresolved_matters: string
+  risks_and_limitations: string
+  emphasis: string
+  source_finding_ids: string[]
+  source_request_ids: string[]
+  model: string
+  draft_template_version: string
+  input_tokens: number | null
+  output_tokens: number | null
+  created_at: string
+  approved_by: string | null
+  approved_at: string | null
+}
+
+export interface DeliverableStaleness {
+  reason: string
+  superseded_source_type: string
+  superseded_source_id: string
+  superseded_version_id: string
+  first_marked_at: string
+  last_marked_at: string
+}
+
+export async function listDeliverables(projectId: string, workspaceId: string): Promise<Deliverable[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/deliverables`
+  )
+  return jsonOrThrow(res, "Could not load decision packages.")
+}
+
+export async function getDeliverable(
+  projectId: string,
+  workspaceId: string,
+  deliverableId: string
+): Promise<Deliverable & { staleness: DeliverableStaleness | null }> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/deliverables/${encodeURIComponent(deliverableId)}`
+  )
+  return jsonOrThrow(res, "Could not load this decision package.")
+}
+
+export async function approveDeliverable(
+  projectId: string,
+  workspaceId: string,
+  deliverableId: string
+): Promise<Deliverable> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/deliverables/${encodeURIComponent(deliverableId)}/approve`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }) }
+  )
+  return jsonOrThrow(res, "Could not approve this decision package.")
+}
+
 export async function updateRequest(
   projectId: string,
   workspaceId: string,
@@ -197,6 +266,20 @@ export async function updateRequest(
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) }
   )
   return jsonOrThrow(res, "Could not update the request.")
+}
+
+export interface DealMembership {
+  id: string
+  project_id: string
+  user_id: string
+  role: string
+  created_at: string
+  revoked_at: string | null
+}
+
+export async function listDealMemberships(projectId: string): Promise<DealMembership[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships`)
+  return jsonOrThrow(res, "Could not load this deal's memberships.")
 }
 
 export interface IdentityUser {
