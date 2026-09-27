@@ -58,6 +58,24 @@ export async function uploadDocuments(
   return jsonOrThrow(res, "Could not upload documents.")
 }
 
+// Task 11.4's explicit "replace this document's content" action - a
+// separate route from bulk upload, which never infers a version from a
+// filename. A new version marks dependent workspaces potentially stale
+// (Task 15.1) server-side. A 409 means the file is identical to the
+// current version.
+export async function uploadDocumentVersion(
+  projectId: string, documentId: string, file: File
+): Promise<{ status: string; document: ProjectDocument | null; message?: string }> {
+  const form = new FormData()
+  form.append("file", file)
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/versions`,
+    { method: "POST", body: form }
+  )
+  if (res.status === 409) throw new Error("That file is identical to the current version - nothing changed.")
+  return jsonOrThrow(res, "Could not upload the new version.")
+}
+
 // Unifying the workspace frontend: a Workspace is created once per
 // completed cross-format reconciliation run (or, separately, per M14.2
 // Integrity Review - see `integrity_review_id` below) - a project can
@@ -152,6 +170,44 @@ export async function getWorkspaceBundle(projectId: string, workspaceId: string)
     `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}`
   )
   return jsonOrThrow(res, "Could not load this workspace's findings.")
+}
+
+// Matches workspaces.py's REVIEW_STATUSES/SEVERITIES/RESOLUTION_STATUSES -
+// the server re-validates against the same sets.
+export const REVIEW_STATUSES = ["unreviewed", "accepted", "partially_accepted", "rejected", "unverifiable"] as const
+export const FINDING_SEVERITIES = ["critical", "high", "medium", "low", "informational"] as const
+export const RESOLUTION_STATUSES = [
+  "open", "awaiting_information", "management_responded", "resolved", "accepted_risk",
+] as const
+
+export type FindingWorkflowUpdate = Partial<
+  Pick<Finding, "review_status" | "adjusted_severity" | "resolution_status" | "assigned_owner" | "reviewer_notes">
+>
+
+// A 409 from the finding workflow route: someone else saved first. Carries
+// the finding's real current state so the UI can show what changed instead
+// of silently overwriting it (Task 11.5's expected-revision contract).
+export class FindingConflictError extends Error {
+  current: Finding
+  constructor(message: string, current: Finding) {
+    super(message)
+    this.current = current
+  }
+}
+
+export async function updateFindingWorkflow(
+  projectId: string, workspaceId: string, findingId: string, updates: FindingWorkflowUpdate, revision: number
+): Promise<Finding> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}` +
+      `/findings/${encodeURIComponent(findingId)}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...updates, revision }) }
+  )
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}))
+    throw new FindingConflictError(body.error || "This finding was updated by someone else.", body.current)
+  }
+  return jsonOrThrow(res, "Could not save this finding.")
 }
 
 // Matches workspaces.py's REQUEST_PRIORITIES/REQUEST_STATUSES exactly -

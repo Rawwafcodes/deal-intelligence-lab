@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { FindingDetail } from "@/components/FindingDetail"
 import { RequestDialog } from "@/components/RequestDialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -19,6 +20,8 @@ import {
   type WorkspaceBundle,
   type WorkspaceRequest,
 } from "@/lib/api"
+import { useCapability } from "@/lib/dealAccess"
+import { labelFor, pinnedVersionsFromAnalysis } from "@/lib/findingDisplay"
 
 // Unifying the workspace frontend: the real findings register, in React,
 // wired to the same GET .../workspaces/<id> bundle the static workspace.html
@@ -158,6 +161,15 @@ export function Findings() {
   const [severityFilter, setSeverityFilter] = useState("all")
   const [requests, setRequests] = useState<WorkspaceRequest[]>([])
   const [requestDialogOpen, setRequestDialogOpen] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const canManageFindings = useCapability("manage_findings")
+  const pinned = useMemo(() => pinnedVersionsFromAnalysis(bundle?.analysis ?? null), [bundle])
+
+  function replaceFinding(updated: Finding) {
+    setBundle((current) =>
+      current ? { ...current, findings: current.findings.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)) } : current
+    )
+  }
 
   useEffect(() => {
     if (!projectId) return
@@ -334,13 +346,36 @@ export function Findings() {
           </Card>
 
           <Card className="divide-y divide-border p-0">
-            {filtered.map((finding) => (
-              <div key={finding.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                <SeverityBadge severity={finding.effective_severity} />
-                <span className="min-w-0 flex-1 truncate text-foreground">{finding.title}</span>
-                <span className="text-xs text-muted-foreground">{finding.review_status || "unreviewed"}</span>
-              </div>
-            ))}
+            {filtered.map((finding) => {
+              const expanded = expandedId === finding.id
+              return (
+                <div key={finding.id}>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={`finding-detail-${finding.id}`}
+                    onClick={() => setExpandedId(expanded ? null : finding.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-surface-2/60 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <SeverityBadge severity={finding.effective_severity} />
+                    <span className={`min-w-0 flex-1 text-foreground ${expanded ? "" : "truncate"}`}>{finding.title}</span>
+                    <span className="text-xs text-muted-foreground">{labelFor(finding.review_status || "unreviewed")}</span>
+                    <span aria-hidden="true" className="text-xs text-muted-foreground">{expanded ? "▾" : "▸"}</span>
+                  </button>
+                  {expanded && projectId && (
+                    <div id={`finding-detail-${finding.id}`}>
+                      <FindingDetail
+                        finding={finding}
+                        projectId={projectId}
+                        pinned={pinned}
+                        canManage={canManageFindings}
+                        onSaved={replaceFinding}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             {filtered.length === 0 && (
               <p className="px-4 py-6 text-center text-sm text-muted-foreground">No findings match these filters.</p>
             )}

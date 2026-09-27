@@ -18,9 +18,15 @@ interface DocumentUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUploaded: () => void
+  // Filenames already in the deal. Bulk upload never treats a same-named
+  // file as a new version (documents.save_uploaded_file), so warn before
+  // it silently creates a second document with the same name.
+  existingFilenames?: string[]
 }
 
-export function DocumentUploadDialog({ projectId, open, onOpenChange, onUploaded }: DocumentUploadDialogProps) {
+export function DocumentUploadDialog({
+  projectId, open, onOpenChange, onUploaded, existingFilenames = [],
+}: DocumentUploadDialogProps) {
   const [files, setFiles] = useState<File[]>([])
   const [results, setResults] = useState<UploadResult[]>([])
   const [uploading, setUploading] = useState(false)
@@ -89,6 +95,17 @@ export function DocumentUploadDialog({ projectId, open, onOpenChange, onUploaded
               PDF, DOCX, XLSX, XLS, PPTX, TXT and common image formats. Up to 200 files per upload.
             </p>
           </div>
+
+          {(() => {
+            const clashes = files.filter((f) => existingFilenames.includes(f.name)).map((f) => f.name)
+            return clashes.length > 0 && results.length === 0 ? (
+              <p role="alert" className="rounded-md border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-300">
+                {clashes.join(", ")} {clashes.length === 1 ? "has" : "have"} the same name as an existing document.
+                Uploading here adds a separate document. To replace it and keep its history, close this and use
+                “New version” on that document instead.
+              </p>
+            ) : null
+          })()}
 
           {files.length > 0 ? (
             <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-foreground">

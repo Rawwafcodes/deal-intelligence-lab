@@ -17,6 +17,7 @@ import {
   listDocuments,
   listMandateTemplates,
   listTasksWithWorkProducts,
+  listWorkspaces,
   listWorkstreams,
   NON_TERMINAL_RUN_STATUSES,
   proposePlan,
@@ -29,6 +30,7 @@ import {
   type IntegrityReview,
   type Mandate,
   type MandateTemplate,
+  type Workspace,
   type PlanProposalOutcome,
   type ProjectDocument,
   type TaskWithWorkProducts,
@@ -52,6 +54,18 @@ const CAPABILITIES_NEEDING_DOCUMENT_SELECTION = new Set(["reconciliation.cross_f
 // one above, since its stage input shape is not "a list of document ids"
 // at all.
 const INTEGRITY_REVIEW_CAPABILITY = "integrity.review_work_product"
+
+// Task 18.1 follow-up: capabilities whose stage input is one existing
+// findings workspace (mandates.py's _default_input_for_stage requires
+// `workspace_id` for each). Without this picker the composer offered these
+// templates but every proposal failed with a raw schema error.
+const WORKSPACE_SCOPED_CAPABILITIES: Record<string, string> = {
+  "readiness.assess_scope": "A deterministic checklist against the workspace you select below - no AI call.",
+  "decision_package.produce_draft":
+    "A real, paid Claude call drafting a decision package from the reviewed findings and requests in the workspace you select below. No document bytes are sent.",
+  "reassessment.compare_versions":
+    "A real, paid Claude call comparing the old and new source versions behind the stale workspace you select below.",
+}
 
 // Task 12.2: a run now spends real time in these statuses while the
 // durable worker (a background thread independent of this page) actually
@@ -303,6 +317,8 @@ export function MandateDetail() {
   const [includeBrief, setIncludeBrief] = useState(false)
   const [selectedWorkstreamId, setSelectedWorkstreamId] = useState("")
   const [reviewScope, setReviewScope] = useState("")
+  const [workspaceList, setWorkspaceList] = useState<Workspace[]>([])
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("")
   const reloadingRef = useRef(false)
   const composerHandledRef = useRef(false)
 
@@ -310,13 +326,14 @@ export function MandateDetail() {
     if (!projectId || !mandateId || reloadingRef.current) return
     reloadingRef.current = true
     try {
-      const [loaded, templateList, documentList, taskList, workstreamList, brief] = await Promise.all([
+      const [loaded, templateList, documentList, taskList, workstreamList, brief, workspaceItems] = await Promise.all([
         getMandate(projectId, mandateId),
         listMandateTemplates(),
         listDocuments(projectId),
         listTasksWithWorkProducts(projectId),
         listWorkstreams(projectId),
         getCurrentBriefVersion(projectId),
+        listWorkspaces(projectId),
       ])
       setMandate(loaded)
       setTemplates(templateList)
@@ -324,6 +341,9 @@ export function MandateDetail() {
       setTasksWithWorkProducts(taskList)
       setWorkstreams(workstreamList)
       setCurrentBrief(brief)
+      const sortedWorkspaces = [...workspaceItems].sort((a, b) => b.created_at.localeCompare(a.created_at))
+      setWorkspaceList(sortedWorkspaces)
+      setSelectedWorkspaceId((current) => current || sortedWorkspaces[0]?.id || "")
       if (!selectedTemplate && templateList.length > 0) {
         const preferred = composerTemplate && templateList.some((t) => t.key === composerTemplate)
           ? composerTemplate
@@ -453,7 +473,14 @@ export function MandateDetail() {
   const peerCandidates = pdfWorkProducts.filter((wp) => wp.id !== targetWorkProductId)
   const integrityReviewSelectionValid = Boolean(targetWorkProductId) && selectedDocumentIds.size >= 1
 
-  const canProposePlan = isReconciliation
+  const workspaceStage = selectedTemplateObject?.stages.find(
+    (stage) => stage.capability && stage.capability in WORKSPACE_SCOPED_CAPABILITIES
+  )
+  const isWorkspaceScoped = Boolean(workspaceStage)
+
+  const canProposePlan = isWorkspaceScoped
+    ? Boolean(selectedWorkspaceId)
+    : isReconciliation
     ? reconciliationSelectionValid
     : isIntegrityReview
       ? integrityReviewSelectionValid
@@ -551,7 +578,9 @@ export function MandateDetail() {
                 ? "A real, paid Claude call reconciling the documents you select below against each other - not a fixture."
                 : isIntegrityReview
                   ? "A real, paid Claude call reviewing the submission you select below against the evidence and any peer submissions you also select - exact versions, never “whatever is current.”"
-                  : "A deterministic fixture planner only, for now - no AI call. Pick a template."}
+                  : workspaceStage?.capability
+                    ? WORKSPACE_SCOPED_CAPABILITIES[workspaceStage.capability]
+                    : "A deterministic fixture planner only, for now - no AI call. Pick a template."}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <select
@@ -569,12 +598,47 @@ export function MandateDetail() {
               {!isReconciliation && !isIntegrityReview && (
                 <Button
                   disabled={busy || !canProposePlan}
-                  onClick={() => withBusy(() => proposePlan(projectId, mandateId, selectedTemplate).then(() => {}))}
+                  onClick={() =>
+                    withBusy(() =>
+                      proposePlan(
+                        projectId,
+                        mandateId,
+                        selectedTemplate,
+                        workspaceStage ? { [workspaceStage.id]: { workspace_id: selectedWorkspaceId } } : undefined
+                      ).then(() => {})
+                    )
+                  }
                 >
                   Propose plan
                 </Button>
               )}
             </div>
+
+            {isWorkspaceScoped && (
+              <div className="mt-4">
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Findings workspace
+                  <select
+                    aria-label="Findings workspace"
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                    value={selectedWorkspaceId}
+                    onChange={(event) => setSelectedWorkspaceId(event.target.value)}
+                  >
+                    {workspaceList.length === 0 && <option value="">No workspaces yet</option>}
+                    {workspaceList.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.cross_format_analysis_id ? "Reconciliation" : "Integrity review"} — {new Date(w.created_at).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {workspaceList.length === 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Run a reconciliation or integrity review first - this template works on the findings it produces.
+                  </p>
+                )}
+              </div>
+            )}
 
             {isIntegrityReview && (
               <div className="mt-4 space-y-4">

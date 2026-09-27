@@ -6,7 +6,7 @@ import { DocumentUploadDialog } from "@/components/DocumentUploadDialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { BACKEND_ORIGIN, listDocuments, type ProjectDocument } from "@/lib/api"
+import { BACKEND_ORIGIN, listDocuments, uploadDocumentVersion, type ProjectDocument } from "@/lib/api"
 
 // Unifying the workspace frontend: the real document register, in React,
 // wired to the same GET .../documents endpoint the static project.html
@@ -37,6 +37,24 @@ export function Documents() {
   const [folder, setFolder] = useState("all")
   const [type, setType] = useState("all")
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [versioningId, setVersioningId] = useState<string | null>(null)
+
+  async function uploadNewVersion(doc: ProjectDocument, file: File | undefined) {
+    if (!projectId || !file) return
+    setVersioningId(doc.id)
+    try {
+      const result = await uploadDocumentVersion(projectId, doc.id, file)
+      toast.success(
+        `${doc.original_filename} is now version ${result.document?.version_number ?? doc.version_number + 1}. ` +
+          "Findings based on the previous version are flagged for reassessment."
+      )
+      await reload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload the new version.")
+    } finally {
+      setVersioningId(null)
+    }
+  }
 
   async function reload() {
     if (!projectId) return
@@ -123,6 +141,8 @@ export function Documents() {
               <th className="px-4 py-2 font-medium">Folder</th>
               <th className="px-4 py-2 font-medium">Type</th>
               <th className="px-4 py-2 font-medium">Size</th>
+              <th className="px-4 py-2 font-medium">Version</th>
+              <th className="px-4 py-2 font-medium"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -141,11 +161,29 @@ export function Documents() {
                 <td className="px-4 py-2 text-muted-foreground">{folderOf(doc)}</td>
                 <td className="px-4 py-2 text-muted-foreground">{doc.extension.replace(/^\./, "").toUpperCase()}</td>
                 <td className="px-4 py-2 text-muted-foreground">{formatBytes(doc.size_bytes)}</td>
+                <td className="px-4 py-2 text-muted-foreground">v{doc.version_number}</td>
+                <td className="px-4 py-2 text-right">
+                  <label
+                    className={`cursor-pointer text-xs text-muted-foreground underline hover:text-foreground ${versioningId === doc.id ? "pointer-events-none opacity-50" : ""}`}
+                  >
+                    {versioningId === doc.id ? "Uploading…" : "New version"}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      aria-label={`Upload a new version of ${doc.original_filename}`}
+                      disabled={versioningId !== null}
+                      onChange={(event) => {
+                        uploadNewVersion(doc, event.target.files?.[0])
+                        event.target.value = ""
+                      }}
+                    />
+                  </label>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
                   No documents match these filters.
                 </td>
               </tr>
@@ -159,6 +197,7 @@ export function Documents() {
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         onUploaded={reload}
+        existingFilenames={(documents ?? []).map((d) => d.original_filename)}
       />
     </div>
   )
