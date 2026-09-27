@@ -1,4 +1,4 @@
-import { FolderKanban, LayoutDashboard, ShieldCheck } from "lucide-react"
+import { BriefcaseBusiness, FolderKanban, LayoutDashboard, ShieldCheck } from "lucide-react"
 import { Link, useLocation, useParams } from "react-router-dom"
 
 import { IdentityFooter } from "@/components/IdentityFooter"
@@ -42,6 +42,12 @@ export function AppSidebar() {
             icon={<FolderKanban className="h-4 w-4" />}
             label="Deals"
             active={location.pathname === "/deals"}
+          />
+          <SidebarLink
+            to="/mandates"
+            icon={<BriefcaseBusiness className="h-4 w-4" />}
+            label="Mandates"
+            active={location.pathname === "/mandates"}
           />
 
           {projectId ? (

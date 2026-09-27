@@ -1,4 +1,7 @@
-import { NavLink, Outlet, useLocation, useParams } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom"
+
+import { getDealOverview } from "@/lib/api"
 
 // Unifying the workspace frontend: a single, in-app tab strip for every
 // deal-scoped destination (Overview / Documents / Findings / Mandates /
@@ -25,11 +28,30 @@ export function DealShell() {
   const { projectId } = useParams<{ projectId: string }>()
   const location = useLocation()
   const overviewChildActive = location.pathname.endsWith("/work")
+  // Task 17.8 (nav-clarity pass): docs/product/02's own requirement that
+  // "Documents, Findings and Activity must make the selected deal
+  // obvious" was not true before this - every deal-scoped page's own
+  // header just said "Documents"/"Findings"/etc, never which deal.
+  // Fetched once here, at the shell every deal-scoped route already
+  // renders inside, rather than duplicating a fetch in each of those
+  // five page components.
+  const [dealName, setDealName] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!projectId) return
+    setDealName(null)
+    getDealOverview(projectId).then((overview) => setDealName(overview.project.name)).catch(() => undefined)
+  }, [projectId])
 
   return (
     <div className="flex min-h-full flex-col">
       <div className="border-b border-border">
-        <nav className="flex gap-1 overflow-x-auto px-6 pt-3" aria-label="Deal sections">
+        <div className="flex items-center gap-2 px-6 pt-3 text-xs text-muted-foreground">
+          <Link to="/deals" className="hover:underline">Deals</Link>
+          <span aria-hidden="true">/</span>
+          <span className="truncate font-medium text-foreground">{dealName ?? "…"}</span>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-6 pt-2" aria-label="Deal sections">
           {TABS.map((tab) => (
             <NavLink
               key={tab.label}

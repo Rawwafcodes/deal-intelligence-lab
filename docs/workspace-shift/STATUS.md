@@ -8,9 +8,10 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phase A (17.1-17.5) and Tasks 17.6-17.7 (Overview,
-Deals) are complete**; **the current task is 17.8, org-wide Mandates +
-the final nav-clarity pass** - the last Phase B item. This
+for the full plan. **Phase A and Phase B (17.1-17.8) are complete** -
+the six primary destinations are all real, reachable, top-level routes
+with clear deal context throughout; **the current task is Phase C, the
+unified Mandates composer**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5386,3 +5387,69 @@ plus the final navigation-clarity pass, closing Phase B. Continuing
 automatically.
 
 **Permissions needed**: none identified yet for 17.8.
+
+## 2026-09-27 — Task 17.8 executed (org-wide Mandates + nav-clarity pass; closes Phase B)
+
+Full detail in `docs/workspace-shift/tasks/17.8-org-wide-mandates.md`.
+Summary: one new backend route, `GET /api/mandates`
+(`_org_wide_mandates`), the "smallest aggregation" docs/product/02's own
+B3 spec anticipates - iterates `identity.list_accessible_project_ids`
+exactly like `_workspace_overview` already does and calls the same
+`mandates.list_mandates` the per-project route already calls, tagging
+each result with its project. New `/mandates` destination
+(`MandatesHome.tsx`) lists every mandate across every deal with a
+status filter, linking to the existing deal-scoped Mandate Detail page
+- no duplicate detail view, no new domain logic.
+
+**Real gap closed, not just a new feature**: `DealShell.tsx` - the
+shell every one of Documents/Findings/Mandates/Activity/Work already
+renders inside - never showed which deal you were in, anywhere.
+docs/product/02's own B4 spec named this exact requirement
+("Documents, Findings and Activity must make the selected deal
+obvious"); confirmed false by direct inspection before this task. Fixed
+once, in the shell itself, rather than editing five page components
+separately: a small "Deals / <deal name>" breadcrumb now renders above
+the tab strip, fetched via the already-existing `getDealOverview` (no
+new backend call). `AppSidebar.tsx` also gained the real "Mandates" top
+-level link, completing the Overview/Deals/Mandates set 17.6/17.7
+started.
+
+**Caught proactively this time**: extended `server.py`'s SPA-fallback
+rule to also cover `/mandates` (the same class of bug 17.7 found live
+for `/deals`) - added to `tests/test_server.py`'s existing route-
+coverage test *before* the live check this time, not discovered by a
+failing hard-load.
+
+**Verification**: two new backend tests (org-wide mandates span every
+accessible project and are correctly tagged; status changes reflect
+correctly); full suite 865 tests OK; mypy clean; `tsc -b`/`oxlint`/
+`npm run build` clean; `node --test tests/frontend/*.test.mjs` 5/5. Live
+Playwright check (hard page load for `/mandates`): real mandate/deal
+name/status render correctly; sidebar "Mandates" link present; the new
+deal-context breadcrumb confirmed rendering correctly on both Findings
+and Documents, not only Deal Overview.
+
+**Files changed**: `server.py` (`_org_wide_mandates`, SPA-fallback
+extension), `tests/test_mandate_endpoints.py` (2 new tests),
+`tests/test_server.py` (route list extended), `frontend/src/lib/api.ts`
+(new `OrgWideMandate` type, `listAllMandates`), new
+`frontend/src/routes/MandatesHome.tsx`, `frontend/src/App.tsx` (new
+route), `frontend/src/components/AppSidebar.tsx` (Mandates link),
+`frontend/src/components/DealShell.tsx` (deal-name breadcrumb).
+
+**Decisions**: none - the aggregation-route choice follows directly
+from the spec's own explicit allowance, not a new product decision.
+
+**This closes Phase B.** All three sub-tasks (Overview, Deals, org-wide
+Mandates + nav clarity) are complete. Combined with Phase A, every
+backend-complete workflow the 2026-09-27 audit found unreachable now
+has a React-native path, and all six primary destinations (Overview,
+Deals, Mandates, Documents, Findings, Activity) are real, top-level,
+reachable routes with clear organization/deal context throughout.
+
+**Blockers**: none. **Next task**: Phase C, the unified Mandates
+composer (Flexible/Review/Pipeline/Monitoring as one composer over the
+existing template/capability registry) - its own task file will be
+written immediately before it starts. Continuing automatically.
+
+**Permissions needed**: none identified yet for Phase C.

@@ -61,7 +61,7 @@ class ServerTests(unittest.TestCase):
         on any real React route works, matching what App.tsx actually
         registers."""
         real_react_paths = [
-            "/", "/deals",
+            "/", "/deals", "/mandates",
             "/projects/some-id", "/projects/some-id/documents", "/projects/some-id/findings",
             "/projects/some-id/mandates", "/projects/some-id/mandates/some-mandate-id",
             "/projects/some-id/work", "/projects/some-id/activity",

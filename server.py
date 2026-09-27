@@ -156,6 +156,7 @@ _MEMBERSHIPS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/memberships$")
 _MEMBERSHIP_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/memberships/([^/]+)$")
 
 _WORKSPACE_OVERVIEW_RE = re.compile(r"^/api/overview$")
+_ORG_MANDATES_RE = re.compile(r"^/api/mandates$")
 _DEAL_OVERVIEW_RE = re.compile(r"^/api/projects/([^/]+)/overview$")
 
 _TASKS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/tasks$")
@@ -555,6 +556,31 @@ class Handler(BaseHTTPRequestHandler):
         material_changes = overview.build_activity_feed(material_change_events, limit=20)
         return {"my_attention": my_attention, "engagements": engagements, "material_changes": material_changes}
 
+    def _org_wide_mandates(self) -> list[dict]:
+        """Task 17.8: docs/product/02's organization-wide Mandates
+        destination - "reuse existing per-deal mandate data; add only the
+        smallest backend aggregation route if the frontend cannot
+        retrieve the data safely and efficiently through existing APIs."
+        A client-side fan-out (one /mandates call per accessible project)
+        would work but doesn't scale cleanly as deal count grows, and the
+        existing per-project route returns no project context to tag
+        results with - so this is exactly that smallest aggregation:
+        the same `mandates.list_mandates` call `_MANDATES_COLLECTION_RE`
+        already makes, across every accessible project, each mandate
+        tagged with its own project (the same "attach project" pattern
+        `_workspace_overview`'s own `my_attention` already uses) -
+        zero new persisted state, zero new domain logic."""
+        accessible_ids = identity.list_accessible_project_ids(self.current_user_id)
+        projects = [p for p in store.list_projects() if p.id in accessible_ids]
+        out: list[dict] = []
+        for project in projects:
+            for mandate in mandates.list_mandates(project.id):
+                row = mandate.to_dict()
+                row["project"] = project.to_dict()
+                out.append(row)
+        out.sort(key=lambda m: m["updated_at"], reverse=True)
+        return out
+
     # -- mandates (Task 12.1) --------------------------------------------
 
     def _mandate_with_plans(self, mandate: mandates.Mandate) -> dict:
@@ -773,10 +799,11 @@ class Handler(BaseHTTPRequestHandler):
         # React ever loads. The built JS/CSS bundle itself
         # (static/assets/...) and /favicon.svg /icons.svg are served by
         # the existing generic static-file fallback lower down - nothing
-        # new needed for those. Task 17.7 added /deals as a real top-
-        # level route outside /projects/... - needs the exact same
-        # fallback, or a hard refresh there 404s before React loads.
-        if path == "/" or path == "/deals" or path == "/projects" or path.startswith("/projects/"):
+        # new needed for those. Tasks 17.7/17.8 added /deals and
+        # /mandates as real top-level routes outside /projects/... - each
+        # needs the exact same fallback, or a hard refresh there 404s
+        # before React loads.
+        if path in ("/", "/deals", "/mandates") or path == "/projects" or path.startswith("/projects/"):
             self._send_static_file("index.html")
             return
 
@@ -828,6 +855,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if _WORKSPACE_OVERVIEW_RE.match(path):
             self._send_json(200, self._workspace_overview())
+            return
+
+        if _ORG_MANDATES_RE.match(path):
+            self._send_json(200, self._org_wide_mandates())
             return
 
         deal_overview_match = _DEAL_OVERVIEW_RE.match(path)

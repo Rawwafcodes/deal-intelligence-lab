@@ -660,6 +660,18 @@ export async function listMandates(projectId: string): Promise<Mandate[]> {
   return jsonOrThrow(res, "Could not load mandates.")
 }
 
+// Task 17.8: the organization-wide Mandates destination. Same shape as
+// Mandate, plus the real project each one belongs to - server.py's
+// _org_wide_mandates tags each row itself, no client-side guessing.
+export interface OrgWideMandate extends Mandate {
+  project: Project
+}
+
+export async function listAllMandates(): Promise<OrgWideMandate[]> {
+  const res = await fetch("/api/mandates")
+  return jsonOrThrow(res, "Could not load mandates.")
+}
+
 export async function getMandate(projectId: string, mandateId: string): Promise<Mandate> {
   const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/mandates/${encodeURIComponent(mandateId)}`)
   return jsonOrThrow(res, "Could not load the mandate.")

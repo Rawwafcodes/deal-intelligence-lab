@@ -142,6 +142,27 @@ class MandateEndpointTests(unittest.TestCase):
         status, _ = self._get("/api/projects/does-not-exist/mandates")
         self.assertEqual(status, 404)
 
+    # -- org-wide mandates (Task 17.8) -------------------------------------
+
+    def test_org_wide_mandates_spans_every_accessible_project_tagged_with_it(self):
+        other_project = store.create_project("Other Deal", "")
+        _, mine = self._post(self._mandates_url(), {"objective": "Assess the Acme deal"})
+        _, other = self._post(f"/api/projects/{other_project.id}/mandates", {"objective": "Assess the other deal"})
+
+        status, listed = self._get("/api/mandates")
+        self.assertEqual(status, 200)
+        by_id = {m["id"]: m for m in listed}
+        self.assertIn(mine["id"], by_id)
+        self.assertIn(other["id"], by_id)
+        self.assertEqual(by_id[mine["id"]]["project"]["id"], self.project.id)
+        self.assertEqual(by_id[other["id"]]["project"]["id"], other_project.id)
+
+    def test_org_wide_mandates_reflects_status_changes(self):
+        _, mandate = self._post(self._mandates_url(), {"objective": "Assess the Acme deal"})
+        status, listed = self._get("/api/mandates")
+        self.assertEqual(status, 200)
+        self.assertEqual(next(m for m in listed if m["id"] == mandate["id"])["status"], "draft")
+
     def test_mandate_from_wrong_project_is_not_found(self):
         other = store.create_project("Other Deal", "")
         _, mandate = self._post(self._mandates_url(), {"objective": "Acme only"})
