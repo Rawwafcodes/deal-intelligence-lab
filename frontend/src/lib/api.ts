@@ -140,6 +140,65 @@ export async function getWorkspaceBundle(projectId: string, workspaceId: string)
   return jsonOrThrow(res, "Could not load this workspace's findings.")
 }
 
+// Matches workspaces.py's REQUEST_PRIORITIES/REQUEST_STATUSES exactly -
+// the server independently re-validates against these same sets, so this
+// is a UI convenience, not the source of truth.
+export const REQUEST_PRIORITIES = ["low", "medium", "high"] as const
+export const REQUEST_STATUSES = ["draft", "sent", "answered", "closed"] as const
+export type RequestPriority = (typeof REQUEST_PRIORITIES)[number]
+export type RequestStatus = (typeof REQUEST_STATUSES)[number]
+
+export interface WorkspaceRequest {
+  id: string
+  workspace_id: string
+  question: string
+  related_finding_ids: string[]
+  priority: RequestPriority
+  assigned_recipient: string
+  status: RequestStatus
+  management_response: string
+  reviewer_followup: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listRequests(projectId: string, workspaceId: string): Promise<WorkspaceRequest[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/requests`
+  )
+  return jsonOrThrow(res, "Could not load requests.")
+}
+
+export async function createRequest(
+  projectId: string,
+  workspaceId: string,
+  data: { question: string; priority: RequestPriority; assigned_recipient?: string; related_finding_ids?: string[] }
+): Promise<WorkspaceRequest> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/requests`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }
+  )
+  return jsonOrThrow(res, "Could not create the request.")
+}
+
+export async function updateRequest(
+  projectId: string,
+  workspaceId: string,
+  requestId: string,
+  updates: Partial<
+    Pick<
+      WorkspaceRequest,
+      "question" | "priority" | "status" | "assigned_recipient" | "management_response" | "reviewer_followup" | "related_finding_ids"
+    >
+  >
+): Promise<WorkspaceRequest> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/requests/${encodeURIComponent(requestId)}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) }
+  )
+  return jsonOrThrow(res, "Could not update the request.")
+}
+
 export interface IdentityUser {
   id: string
   email: string

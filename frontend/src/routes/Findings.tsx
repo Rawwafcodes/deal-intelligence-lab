@@ -2,9 +2,23 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { RequestDialog } from "@/components/RequestDialog"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { getWorkspaceBundle, listWorkspaces, type Finding, type Workspace, type WorkspaceBundle } from "@/lib/api"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  getWorkspaceBundle,
+  listRequests,
+  listWorkspaces,
+  REQUEST_STATUSES,
+  updateRequest,
+  type Finding,
+  type RequestStatus,
+  type Workspace,
+  type WorkspaceBundle,
+  type WorkspaceRequest,
+} from "@/lib/api"
 
 // Unifying the workspace frontend: the real findings register, in React,
 // wired to the same GET .../workspaces/<id> bundle the static workspace.html
@@ -44,6 +58,98 @@ function SeverityBadge({ severity }: { severity: string | null }) {
   )
 }
 
+const REQUEST_PRIORITY_LABELS: Record<string, string> = { low: "Low", medium: "Medium", high: "High" }
+const REQUEST_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft", sent: "Sent", answered: "Answered", closed: "Closed",
+}
+
+function RequestRow({
+  request,
+  findings,
+  projectId,
+  workspaceId,
+  onChanged,
+}: {
+  request: WorkspaceRequest
+  findings: Finding[]
+  projectId: string
+  workspaceId: string
+  onChanged: () => void
+}) {
+  const [responseDraft, setResponseDraft] = useState(request.management_response)
+  const [savingResponse, setSavingResponse] = useState(false)
+  const relatedTitles = request.related_finding_ids
+    .map((id) => findings.find((f) => f.id === id)?.title)
+    .filter((title): title is string => Boolean(title))
+
+  async function changeStatus(status: RequestStatus) {
+    try {
+      await updateRequest(projectId, workspaceId, request.id, { status })
+      onChanged()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the request's status.")
+    }
+  }
+
+  async function saveResponse() {
+    setSavingResponse(true)
+    try {
+      await updateRequest(projectId, workspaceId, request.id, { management_response: responseDraft })
+      toast.success("Response saved.")
+      onChanged()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the response.")
+    } finally {
+      setSavingResponse(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-foreground">{request.question}</p>
+          {relatedTitles.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">Related: {relatedTitles.join(", ")}</p>
+          )}
+          {request.assigned_recipient && (
+            <p className="mt-1 text-xs text-muted-foreground">Assigned to: {request.assigned_recipient}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}</span>
+          <select
+            value={request.status}
+            onChange={(event) => changeStatus(event.target.value as RequestStatus)}
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+          >
+            {REQUEST_STATUSES.map((s) => (
+              <option key={s} value={s}>{REQUEST_STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        <Textarea
+          value={responseDraft}
+          placeholder="Management response…"
+          rows={2}
+          onChange={(event) => setResponseDraft(event.target.value)}
+          className="text-xs"
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={savingResponse || responseDraft === request.management_response}
+          onClick={saveResponse}
+        >
+          {savingResponse ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function Findings() {
   const { projectId } = useParams<{ projectId: string }>()
   const [workspaces, setWorkspacesList] = useState<Workspace[] | null>(null)
@@ -52,6 +158,8 @@ export function Findings() {
   const [bundleError, setBundleError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [severityFilter, setSeverityFilter] = useState("all")
+  const [requests, setRequests] = useState<WorkspaceRequest[]>([])
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!projectId) return
@@ -71,6 +179,19 @@ export function Findings() {
     getWorkspaceBundle(projectId, selectedId)
       .then(setBundle)
       .catch((err) => setBundleError(err instanceof Error ? err.message : "Could not load findings."))
+  }, [projectId, selectedId])
+
+  function reloadRequests() {
+    if (!projectId || !selectedId) return
+    listRequests(projectId, selectedId).then(setRequests).catch(() => toast.error("Could not load requests."))
+  }
+
+  useEffect(() => {
+    if (!projectId || !selectedId) {
+      setRequests([])
+      return
+    }
+    listRequests(projectId, selectedId).then(setRequests).catch(() => toast.error("Could not load requests."))
   }, [projectId, selectedId])
 
   const filtered: Finding[] = useMemo(() => {
@@ -122,6 +243,42 @@ export function Findings() {
           </select>
         )}
       </div>
+
+      {selected && (
+        <Card className="p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Information requests</h2>
+            <Button size="sm" onClick={() => setRequestDialogOpen(true)}>New request</Button>
+          </div>
+          {requests.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">No requests yet for this workspace.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {requests.map((request) => (
+                <RequestRow
+                  key={request.id}
+                  request={request}
+                  findings={bundle?.findings ?? []}
+                  projectId={projectId!}
+                  workspaceId={selected.id}
+                  onChanged={reloadRequests}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {selected && projectId && (
+        <RequestDialog
+          projectId={projectId}
+          workspaceId={selected.id}
+          findings={bundle?.findings ?? []}
+          open={requestDialogOpen}
+          onOpenChange={setRequestDialogOpen}
+          onCreated={reloadRequests}
+        />
+      )}
 
       {selected && !selected.cross_format_analysis_id ? (
         <Card className="p-6 text-sm text-muted-foreground">

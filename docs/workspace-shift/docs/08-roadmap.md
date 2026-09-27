@@ -147,6 +147,45 @@ parsing service, CRDT/Yjs collaborative editing, per-keystroke model
 evaluation, a universal controlled predicate vocabulary, and any employee
 scoring or analyst leaderboard.
 
+## M17 — Product-integration phase (founder-directed, 2026-09-27)
+Adopted from the 2026-09-27 re-entry audit (see STATUS.md's own dated
+entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
+for the full plan). The audit found the backend substantially complete
+through M16, but several backend-complete workflows became unreachable
+from the shipped React product when the legacy-page exit was removed
+(M16's own closing entries): Information Requests, Decision Packages,
+Readiness, targeted Reassessment, and Monitoring/Triggers have real,
+tested routes and tables but no React surface, or their old static home
+lost its navigation link. M17 is an integration and product-architecture
+phase, not a new backend: it reuses existing routes/schemas/domain logic
+throughout and does not rewrite the mandate runtime, the findings model,
+or the Python server framework. Full phase order, acceptance criteria,
+and status: `tasks/17.0-product-integration-program.md`.
+17.1 Information Requests — React surface over existing `workspaces.py` request routes.
+17.2 Decision Packages — React surface over existing `decision_package.py`/`deliverables.py` routes.
+17.3 Readiness — React surface over existing `readiness.py`/`readiness_assessments.py` read routes.
+17.4 Targeted Reassessment — React surface over existing `reassessments.py` routes.
+17.5 Monitoring/Triggers — the first React surface for `triggers.py` (previously backend-only).
+17.6 Six-destination product shell completion (Overview 5-component
+composition, distinct Deals destination, organization-wide Mandates view).
+17.7 Unified Mandates composer (Flexible/Review/Pipeline/Monitoring as
+one composer over the existing template/capability registry).
+17.8 Unified Findings register across origins, including the founder
+decision on whether/how to wire `assertion_ledger.py`/`reconciler.py`
+into any live path (currently zero callers — see 17.0's own section on
+this).
+17.9 Design-system consistency pass (Meridian) across the completed
+destinations — after structure, not before.
+17.10 Local collaborative proof — re-run the applicable T01-T20
+acceptance scenarios against the integrated product with synthetic
+identities/data.
+Outcome: every backend-complete capability through M16 is reachable and
+operable from the real six-destination React product, with no normal
+workflow requiring a hand-typed legacy URL. This milestone does not
+itself satisfy M16's own outstanding validation gates (independent
+scoring, recurring assertions, measured failure modes) and must not be
+read as doing so.
+
 ## Later: online-readiness gate
 Not a prerequisite for M11–16. Local completion does not certify production safety.
 Separate authority for deployment, external access, real-data transfer and provider spend.

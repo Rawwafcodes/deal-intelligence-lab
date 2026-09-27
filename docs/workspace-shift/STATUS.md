@@ -5,6 +5,15 @@ original package-version paragraph below is retained as historical provenance;
 use the newest dated entry and the actual checkout for current implementation
 state.
 
+**2026-09-27 update**: a founder-directed product-integration program (M17)
+is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
+entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
+for the full plan. Task 17.1 (Information Requests in React) is complete;
+**the current task is 17.2 (Decision Packages in React)**. This
+supersedes the "Current task"/"Next recommended" lines below as the
+up-to-date pointer; see this file's own newest dated entries (bottom)
+for full detail.
+
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
 dated entry below and docs/10-decisions.md's I01-I08)
@@ -4906,3 +4915,143 @@ genuinely one place to experience the whole app. Not started; awaiting
 founder direction.
 
 **Permissions needed**: founder direction on what to work on next.
+
+## 2026-09-27 — Re-entry audit (read-only) and M17 product-integration program begun
+
+**Context**: after roughly a week away, the founder asked for a
+read-only re-entry audit before any implementation, followed by a
+founder-directed integration program. This entry covers both: the audit
+itself (which produced no code changes) and the start of execution on
+the program it recommended.
+
+**Audit** (full report delivered in chat, not duplicated here in full):
+confirmed HEAD `53180a4` matched `origin/main` exactly, working tree
+clean, `SKILL (1).md` correctly absent from this cloud checkout (a
+local-only untracked file on the founder's own Mac, never committed).
+Backend/frontend capability inventory and Milestones 1-16 reconciliation
+found the backend substantially complete and tested through M16, but
+several backend-complete workflows (Information Requests, Decision
+Packages, Readiness, targeted Reassessment, Monitoring/Triggers) had
+become unreachable from the shipped React product - either no React
+route ever existed for them, or their old static home (`workspace.html`)
+lost its navigation link when the legacy-page exit was removed
+(`60b34e4`). `assertion_ledger.py`/`reconciler.py` were independently
+reconfirmed to have zero live callers anywhere (no route, no mandate
+wiring) - fully built and tested substrate, structurally orphaned.
+
+**Founder directive following the audit**: execute a bounded
+product-integration program (not a new backend) restoring reachability
+for the orphaned workflows, then completing the six-destination shell,
+a unified Mandates composer, a unified Findings register, a design pass,
+and a local collaborative proof - in that order, working autonomously
+within stated guardrails. Full plan recorded in
+`docs/workspace-shift/tasks/17.0-product-integration-program.md` and
+`docs/08-roadmap.md`'s new M17 entry, per the directive's own explicit
+requirement that the plan survive outside any one chat session.
+
+**Baseline verification and repair** (this program's own required first
+step, before any feature work): this cloud container had no `venv/`, no
+`frontend/node_modules/`, and no local Postgres - none of the founder's
+local Mac setup carries into this isolated container. Built the
+equivalent environment here rather than skip verification: `initdb`/
+`pg_ctl` (Postgres 16, already present as an OS package) run as the
+existing `postgres` system account against a repo-local `pgdata/`/
+`pgsocket/` (same layout `POSTGRES.md` documents, `DEAL_LAB_PG_USER=postgres`
+since no `rawwafa` OS user exists here), a fresh `venv/` with
+`requirements.txt` installed, `npm install` in `frontend/`.
+
+Running the full suite against this fresh Postgres surfaced **one real,
+reproducible bug**, not an environment artifact: `LlmPlanningEndpointTests`
+(`tests/test_mandate_endpoints.py`) and `ReconciliationWithReviewTests`
+(`tests/test_mandates.py`) both call code paths that reach
+`mandates.propose_plan_llm` -> `deal_briefs.get_current_version`, but
+neither fixture ever called `deal_briefs.init_deal_briefs_db()` - so the
+table never existed in their isolated Postgres schema, and the real
+HTTP handler crashed with `UndefinedTable`, surfacing to the test as
+`RemoteDisconnected`. This is exactly the kind of gap Postgres's
+per-test-schema isolation (M11.3a) would expose that a shared SQLite
+file might have papered over by accident. Fixed by adding the missing
+init call to both fixtures - the same pattern every other test class in
+both files already uses. Zero production code touched. Commit `149c4a0`.
+
+**Full baseline verification after the fix, all green**:
+```
+./venv/bin/python -m unittest discover -s tests   -> Ran 858 tests ... OK (skipped=5)
+./venv/bin/python -m mypy $(ls *.py) tests          -> Success: no issues found in 98 source files
+python3 docs/workspace-shift/scripts/check_spec.py  -> PASS
+cd frontend && npx tsc -b                            -> clean
+cd frontend && npm run lint                          -> only pre-existing warning categories
+cd frontend && npm run build                         -> clean production build
+node --test tests/frontend/*.test.mjs                -> 5/5 pass
+```
+Live server start + Playwright browser smoke test (this cloud
+environment's Chromium, since no human browser is reachable here) across
+Home, a deal's Overview/Documents/Work/Findings/Mandates/Activity: all
+seven routes returned HTTP 200 and rendered the real React shell with
+real session/org data. The only console activity anywhere was
+`net::ERR_CERT_AUTHORITY_INVALID` on the Google Fonts CSS import - this
+container's outbound-proxy TLS interception blocking an external font
+fetch, not an application defect (fonts fall back; nothing else failed).
+No mypy stub packages (`types-psycopg2`, `types-openpyxl`, `types-xlrd`)
+were present either - installed as dev-only stub packages (not runtime
+dependencies) to restore the historically-claimed "mypy clean" baseline;
+`requirements.txt` itself was not changed.
+
+**Task 17.1 (Information Requests in React) - complete**: full detail,
+reasoning, and every exclusion in
+`docs/workspace-shift/tasks/17.1-information-requests.md`. Summary:
+`Findings.tsx` (already the real per-deal workspace/findings screen)
+gained a "Requests" section reusing `workspaces.py`'s existing
+`list_requests`/`create_request`/`update_request` and their existing
+`_get_owned_workspace`-authorized routes verbatim - zero new backend
+code. New `frontend/src/components/RequestDialog.tsx` (creation, with
+optional related-finding checkboxes cross-referenced against the
+already-fetched findings bundle) and a `RequestRow` component inline in
+`Findings.tsx` (status change, management-response editing). Disclosed,
+not silently dropped: the directive's own A1 description asked for a
+due date, which does not exist as a field on the real
+`WorkspaceRequest` backend model - not invented here. Also disclosed:
+"reflected in Activity" is not yet true - `server.py`'s
+`_project_activity_feed` only merges task/work-product/review events,
+never `workspaces.list_audit_log` - recorded as separable follow-on work
+in `17.0`, not bundled into this UI-only change.
+
+**Live verification**: seeded one synthetic (`SYNTHETIC`-labelled, no
+real deal data) `CrossFormatAnalysis`/`Workspace`/finding via
+`workspaces.get_or_create_workspace` directly (no Anthropic call,
+mirrors `tests/test_workspace_endpoints.py`'s own fixture pattern) into
+the real local dev database, then via Playwright against the real
+running server: created a request, confirmed it lists and persists
+across a full reload, changed its status and confirmed persistence,
+checked a related-finding box and confirmed the created request renders
+"Related: <finding title>". All full-suite/build/lint checks above were
+re-run after this change with identical results (858 tests OK; frontend
+clean).
+
+**Files changed**: `tests/test_mandate_endpoints.py`,
+`tests/test_mandates.py` (baseline fix, commit `149c4a0`);
+`frontend/src/lib/api.ts` (new `WorkspaceRequest` type +
+`listRequests`/`createRequest`/`updateRequest`), new
+`frontend/src/components/RequestDialog.tsx`, `frontend/src/routes/
+Findings.tsx` (new Requests section) for Task 17.1. New repository docs:
+`docs/workspace-shift/tasks/17.0-product-integration-program.md`,
+`docs/workspace-shift/tasks/17.1-information-requests.md`,
+`docs/workspace-shift/docs/08-roadmap.md`'s M17 entry.
+
+**Decisions**: none added to `docs/10-decisions.md` - this executes the
+founder's own already-given directive rather than opening a new product
+decision. The Phase A-before-Phase-C reordering the audit recommended
+was explicitly adopted by the founder's own directive, recorded in
+`17.0`, not re-litigated here.
+
+**Blockers**: none for 17.1 or the baseline. Flagged, not blocking:
+Activity-feed integration for requests (see above); the assertion-
+ledger/reconciler wiring decision remains open for Phase D as planned.
+
+**Next task**: 17.2 (Decision Packages in React), per `17.0`'s own
+tracker. Continuing automatically per the founder's standing directive
+unless a stop condition in that directive is hit.
+
+**Permissions needed**: none identified yet for 17.2; will disclose if
+Phase D's assertion-ledger/reconciler analysis (later) surfaces a
+founder decision, per the directive's own procedure.
