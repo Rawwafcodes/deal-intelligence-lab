@@ -183,6 +183,13 @@ evidence/screenshot; resolution status. Use the same discipline
 (exact commit/dirty state, real browser evidence, no claiming a check
 that was not actually run).
 
+A concrete, UI-grounded execution script for all 20 scenarios - roles,
+preconditions, exact steps, and the known gaps each scenario will
+confirm rather than "discover" - is scoped in `docs/workspace-shift/
+tasks/18.1-track-a-walkthrough-script.md`. That task produces the script
+only; it does not execute the walkthrough, record actual results, or
+constitute founder acceptance.
+
 Required product outputs: accepted terminology; accepted navigation;
 accepted end-to-end workflow; usability issue register; accessibility
 check; performance observations; founder acceptance decision.

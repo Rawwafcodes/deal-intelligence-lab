@@ -6335,3 +6335,56 @@ since `origin/main` already matched `70f03ca`.
 **Permissions needed**: none for the documentation change itself. Per
 this task's own explicit instruction, the resulting commit is not pushed
 until separately authorized.
+
+## 2026-09-27 — Pushed the M18-M25 roadmap-adoption commits; scoped the M18 Track A walkthrough script (Task 18.1)
+
+**Push**: the founder authorized pushing the three roadmap-adoption
+commits (`09af1e9`, `d7a967b`, `adbe5ba`) sitting on
+`claude/gifted-turing-79cs5r`. Pushed with `git push -u origin
+claude/gifted-turing-79cs5r`; confirmed afterward via a fresh
+`git fetch`/`git rev-parse origin/claude/gifted-turing-79cs5r` that the
+remote branch now points to `adbe5ba`, matching local exactly.
+`origin/main` remains at `70f03ca` (M17), untouched - these are
+documentation commits on the feature branch, not a merge to main.
+
+**Task 18.1 scoped**: the founder then chose to scope M18 Track A's
+founder-acceptance walkthrough next (of three options offered). New
+`docs/workspace-shift/tasks/18.1-track-a-walkthrough-script.md`: a
+concrete, UI-grounded, step-by-step script for all 20 S01-S20 scenarios
+(role, starting state, exact actions against real routes/components,
+expected result), built from `13-post-m17-roadmap.md`'s existing
+scenario list and `07-surface-reconciliation.md`'s already-confirmed
+gaps - so several scenarios (S01, S03, S06) are scripted to *confirm* a
+known gap (no organization-creation UI/route; no Team-and-Access UI;
+Document Detail's raw-file-link form) rather than "discover" it fresh
+during a live founder session. One fact checked directly rather than
+left to guesswork: `authz.py`'s own capability matrix confirms
+`reviewer`/`deal_lead` hold `REVIEW_WORK` and `analyst`/
+`external_executive` do not, used to make S09's script exact.
+
+**This task does not execute the walkthrough.** No browser session was
+driven, no scenario was actually run, no "actual result" was recorded,
+and no founder acceptance decision was made - all of that is explicitly
+out of this task's own scope, left to a later execution task once the
+founder is available to walk through it. No application code, schema,
+or dependency changed; no Anthropic call made.
+
+**Files changed**: new `docs/workspace-shift/tasks/
+18.1-track-a-walkthrough-script.md`; `docs/workspace-shift/docs/
+13-post-m17-roadmap.md` (one paragraph in the M18 Track A section
+pointing to the new script); this file.
+
+**Decisions**: none new - this task scopes an already-adopted roadmap
+section, it does not decide anything new.
+
+**Verification**: ran `python3 docs/workspace-shift/scripts/
+check_spec.py` - passed.
+
+**Blockers**: none for this task's own scope. Executing the actual
+walkthrough needs the founder's real participation (dev-identity
+switching, live decisions at S03/S09/S13/S18) - not something this
+session can complete alone.
+
+**Permissions needed**: whether/when to actually execute the scripted
+walkthrough, and whether to push this task's own commit, are both for
+the founder to decide next.
