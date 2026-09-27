@@ -6826,3 +6826,50 @@ founder decisions that remain.
 
 **Session paid-call total**: 6 calls, 64,327 input / 20,349 output tokens,
 all claude-sonnet-5.
+
+## 2026-09-27 — D21 recorded; O04/O05, stale-package notice and Document Detail built
+
+**Authorization**: founder answers to four options (recorded as D21 in
+`10-decisions.md`): push the Track A work; fix O04+O05 before accepting
+Track A; build Document Detail in M18; show external executives a notice
+when an approved package's sources change. Then "do what's left".
+
+**Commits**:
+- `c461cff` -
+  - **O04**: `GET .../workspaces` returns a readable `label` ("Reconciliation:
+    a.pdf vs b.xlsx", "Integrity review: <submission title>"). The Findings,
+    Readiness, Decision package and mandate pickers use it, and
+    `?workspace=` carries the choice between those pages.
+  - **O05**: a failed AI plan proposal stays inline on the mandate, with
+    the server's reason and a retry.
+  - **D21 stale notice**: the restricted Overview's approved package carries
+    `sources_changed_since_approval` (boolean only) and shows a plain notice.
+- `0de6090` - **Document Detail (surface #13)**: `/projects/:id/documents/
+  :documentId` with content preview, version history (open any version,
+  SHA-256), new-version upload, citation backlinks (every finding citing
+  the document, with the version its analysis read and the page/cell,
+  linking to that finding expanded) and recorded dependents with staleness.
+  New read-only `GET .../documents/<id>` and `.../documents/<id>/usage`. The
+  Documents list now links here instead of the raw file.
+- This commit: D21 in `10-decisions.md`; `07-surface-reconciliation.md`
+  row 13 → complete, and row 15 annotated with a correction (it read
+  "complete" before `6ffc4e9` built it); the matching open-decision lines
+  in `13-post-m17-roadmap.md` annotated as resolved; acceptance pack
+  (`tasks/18.2`) updated - register now 13 fixed, 5 open (O01/O02 already
+  milestone-assigned; O07-O09 low-severity polish).
+
+**Verification** (real UI, Playwright, synthetic deal): picker options read
+"Integrity review: Kestrel valuation memo v1" and "Reconciliation:
+kestrel-term-sheet.pdf vs kestrel-model.xlsx"; choosing the reconciliation
+workspace on Findings carried `?workspace=` into Readiness; uploading
+term-sheet v3 made the approved package v2 stale and the external
+executive saw the notice; a server started with a deliberately invalid key
+showed the inline planner failure ("The configured API key was rejected…")
+still visible after 14 s (no charge); Document Detail for the term sheet
+listed v1-v3 and six citing findings, each with the version it cites (v1 for
+reconciliation findings, v2 for integrity-review candidates) and page.
+Backend suite OK (≈ 920 tests); `tsc -b` clean; no new oxlint warnings.
+No paid calls in this step.
+
+**Open**: founder acceptance of Track A (D21's precondition is met); the
+four non-canonical surfaces; Track B inputs.

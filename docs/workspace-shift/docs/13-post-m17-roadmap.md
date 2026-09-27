@@ -265,7 +265,8 @@ M18 closes only when:
   reconciliation's own milestone assignment; the Document Detail gap and
   the four non-canonical surfaces remain open founder decisions per the
   section above, and must be closed (either direction) before this gate
-  is satisfied;
+  is satisfied (*2026-09-27: Document Detail closed by D21 - built in M18;
+  the four non-canonical surfaces remain open*);
 - the founders make an explicit proceed/remediate/stop decision.
 
 ### M18 exclusions
@@ -731,7 +732,7 @@ not close it.
   disclosed exception instead.
 - Whether Document Detail's current raw-file-link form (canonical
   surface #13) is sufficient for M18 founder acceptance, or must gain
-  in-app version-history/citation-backlink context before M18 closes.
+  in-app version-history/citation-backlink context before M18 closes. *Resolved 2026-09-27 by D21: built in M18.*
 - M24's actual trigger: which named customer requirement, if any, first
   makes enterprise identity/compliance/isolated-deployment work
   necessary (not decided in advance of a real requirement).

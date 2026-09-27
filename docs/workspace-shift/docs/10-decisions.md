@@ -448,6 +448,42 @@ it. M20's own entry criteria in `13-post-m17-roadmap.md` and
 `08-roadmap.md` were updated to require this Proceed decision, not M19's
 exit gate alone.
 
+D21 (added 2026-09-27, Task 18.1 follow-up / Task 18.2) Founder decisions
+on the M18 Track A acceptance pack
+(`docs/workspace-shift/tasks/18.2-track-a-acceptance-pack.md`), chosen
+directly from options presented with a recommendation:
+
+1. **Document Detail (surface #13): build it in M18** (options: build in
+   M18, or an explicit deferral to M20 - the latter was recommended; the
+   founder chose to build). Resolves the S06b open decision recorded by
+   `07-surface-reconciliation.md` and D18. Implemented in `0de6090`: a
+   deal-scoped deep page (`/projects/:id/documents/:documentId`) with
+   content preview, version history, new-version upload and citation
+   backlinks (citing findings with the exact version and location, plus
+   recorded dependents and staleness). Read-only apart from version upload;
+   deletion is deliberately not exposed there.
+2. **Stale approved positions for external executives: show a notice**
+   (options: show a notice - recommended - or keep staleness internal).
+   The restricted Overview carries a yes/no "sources changed since
+   approval" flag per approved decision package and shows a plain notice;
+   no internal reason, document or version detail is exposed
+   (`c461cff`).
+3. **Track A closes by fixing O04 and O05 first, then founder acceptance**
+   (options: fix O04+O05 then accept - recommended; accept as-is; fix every
+   open item). O04 (ambiguous workspace picker / newest-workspace default)
+   and O05 (AI-plan failures shown only as a vanishing toast) were fixed in
+   `c461cff`. The low-severity polish items (O07-O09) are carried, not
+   blocking. **Founder acceptance of Track A itself is still to be
+   recorded** - this decision sets the condition, it is not the acceptance.
+4. **Push authorization** for the Track A fixes and acceptance pack to
+   `origin/claude/gifted-turing-79cs5r` (branch only, not `main`).
+
+Still open after D21: founder acceptance of Track A; the four
+non-canonical surfaces (Readiness, Reassessments, Assertions, Triggers) -
+now all exercised end to end with real content, which is new evidence for
+that decision but not a decision; Track B, which needs founder-supplied
+authorized historical deals and locked answer keys before it can start.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

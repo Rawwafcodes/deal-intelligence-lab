@@ -99,9 +99,9 @@ target milestone, and acceptance test.
 | 10 | `/mandates` (`MandatesHome.tsx`) + `/projects/:id/mandates` (`MandateList.tsx`) | Complete, two contextual instances of one canonical surface (Task 17.8/17.9) | real, unified composer/registry | complete | complete |
 | 11 | `/projects/:id/mandates/:mandateId` (`MandateDetail.tsx`) | Complete | real (plan/approval/run/checkpoint) | complete | complete |
 | 12 | `/projects/:id/documents` (`Documents.tsx`) | Complete (upload, list, filter) | real | complete | complete |
-| 13 | none dedicated - `href` opens the raw file inline (`.../documents/<id>/download?inline=1`) | Only a raw browser file view; no in-app version history/citation-backlink panel | version storage exists, no detail endpoint | raw file view only | **partial** |
+| 13 | `/projects/:id/documents/:documentId` (`DocumentDetail.tsx`) - built 2026-09-27 per D21 (`0de6090`); previously the list's `href` opened the raw file inline | Content preview, version history, new-version upload, citation backlinks (citing findings with exact version/location) and dependents with staleness | real (`GET .../documents/<id>`, `.../usage`, `.../versions`) | complete | complete |
 | 14 | `/projects/:id/findings` (`Findings.tsx`) | Complete, unified across cross-format and Integrity Review origins (Task 17.11) | real | complete | complete |
-| 15 | inline expansion inside `Findings.tsx`, not a separate route | Complete as a component - correctly not a standalone route | real | complete | complete |
+| 15 | inline expansion inside `Findings.tsx`, not a separate route | Complete as a component (`6ffc4e9`, 2026-09-27). **Correction**: this row previously read "complete" but no expansion, evidence or review control existed until then - found live in the Task 18.1 follow-up (`STATUS.md`) | real | complete | complete |
 | 16 | `/projects/:id/work` (`Work.tsx`) | Complete | real | complete | complete |
 | 17 | inside `Work.tsx`'s `WorkProductItem`, not a separate route | Complete as a component within Work | real (approve/return, capability-gated) | complete | complete |
 | 18 | `RequestDialog` modal launched from `Findings.tsx`, not a separate route | Complete as a modal dialog | real (`workspaces.py` request routes, Task 17.1) | complete | complete |
@@ -129,7 +129,7 @@ target milestone, and acceptance test.
 | 10 | none | M18 | S10 (create and execute mandates); S11 (starting structures) |
 | 11 | none | M18 | S10 |
 | 12 | none | M18 | S06 (upload documents and document versions) |
-| 13 | Founder decision on whether a real detail view is essential before M18 acceptance | M18 (open decision) | S06 |
+| 13 | Resolved by D21 - built in M18 | M18 (done) | S06 |
 | 14 | none | M18 | S12 (findings and evidence) |
 | 15 | none | M18 | S12 |
 | 16 | none | M18 | S05 (workstreams/assignments); S07 (tasks/comments) |
@@ -262,7 +262,8 @@ Per M18's exit-gate requirement (`docs/workspace-shift/docs/
 either pass founder acceptance or receive an explicit approved later
 milestone, the founder must decide on:
 
-1. **Document Detail (#13)** - is a raw inline file view sufficient for
+1. **Document Detail (#13)** - *resolved 2026-09-27 by D21: built in M18
+   (`0de6090`).* Original question: is a raw inline file view sufficient for
    local-product acceptance, or does citation-backlink/version-history
    context belong in M18 before founder acceptance? Recommendation: this
    is a genuine usability gap surfaced by Track A's own S06 scenario
