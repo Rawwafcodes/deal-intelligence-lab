@@ -506,6 +506,10 @@ export interface AssertionLedgerEntry {
   source_document_ids: string[]
   source_version_ids: string[]
   assertion_text: string
+  // What the reviewer's verdict says about the claim - "refuted" for every
+  // entry the current Integrity Review pipeline promotes.
+  claim_verdict: "refuted"
+  evidence_summary: string
   language: string
   pdf_citations: PdfCitation[]
   excel_citations: ExcelCitation[]
@@ -1379,6 +1383,20 @@ export interface ApprovedDeliverable {
   approved_at: string | null
 }
 
+// The workspace's current approved decision package, content only - see
+// server.py's _deal_overview_restricted for what is deliberately left out.
+export interface ApprovedDecisionPackage {
+  id: string
+  title: string
+  version_number: number
+  approved_at: string | null
+  executive_summary: string
+  recommendation: string
+  key_evidence_and_findings: string
+  outstanding_and_unresolved_matters: string
+  risks_and_limitations: string
+}
+
 export interface RestrictedDealOverview {
   project: Project
   restricted: true
@@ -1386,6 +1404,7 @@ export interface RestrictedDealOverview {
   capabilities: DealCapabilities
   brief: Record<string, unknown> | null
   approved_deliverables: ApprovedDeliverable[]
+  approved_decision_packages: ApprovedDecisionPackage[]
   requests: WorkspaceRequest[]
 }
 

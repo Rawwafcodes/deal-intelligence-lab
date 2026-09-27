@@ -153,6 +153,43 @@ class AssertionLedgerTests(unittest.TestCase):
         self.assertEqual(entry.normalized_fields, {"amount": 50_000_000, "currency": "USD"})
         self.assertEqual(entry.language, "fr")
 
+    def test_promoted_entry_records_the_claim_as_refuted_with_its_evidence(self):
+        # An accepted Integrity Review candidate is an accepted *challenge*:
+        # the ledger must never present the challenged claim as verified.
+        review, candidate = self._make_review_and_candidate()
+        entry = assertion_ledger.promote_candidate(self.project.id, review.id, candidate.id)
+        self.assertEqual(entry.claim_verdict, "refuted")
+        self.assertEqual(entry.evidence_summary, "Term sheet says $50M, workbook says $52M.")
+        self.assertEqual(entry.to_dict()["claim_verdict"], "refuted")
+        self.assertEqual(assertion_ledger.get_entry(entry.entry_key).claim_verdict, "refuted")
+
+    def test_dispute_and_reconfirm_act_on_the_verdict_not_the_claim(self):
+        review, candidate = self._make_review_and_candidate()
+        original = assertion_ledger.promote_candidate(self.project.id, review.id, candidate.id)
+        disputed = assertion_ledger.dispute_entry(
+            original.entry_key, disputed_by="lead@local.dev", reason="The $50M figure was later confirmed."
+        )
+        self.assertEqual(disputed.claim_verdict, "refuted")
+        self.assertEqual(disputed.evidence_summary, original.evidence_summary)
+        reconfirmed = assertion_ledger.confirm_entry(original.entry_key, confirmed_by="reviewer@local.dev")
+        self.assertEqual(reconfirmed.claim_verdict, "refuted")
+
+    def test_rows_written_before_the_verdict_columns_existed_read_as_refuted(self):
+        review, candidate = self._make_review_and_candidate()
+        entry = assertion_ledger.promote_candidate(self.project.id, review.id, candidate.id)
+        conn = store.get_connection()
+        try:
+            conn.execute("ALTER TABLE assertion_ledger_entries DROP COLUMN claim_verdict")
+            conn.execute("ALTER TABLE assertion_ledger_entries DROP COLUMN evidence_summary")
+            conn.commit()
+        finally:
+            conn.close()
+        assertion_ledger.init_assertion_ledger_db()
+        legacy = assertion_ledger.get_entry(entry.entry_key)
+        self.assertEqual(legacy.claim_verdict, "refuted")
+        # Empty stored summary falls back to the source candidate's evidence.
+        self.assertEqual(legacy.evidence_summary, "Term sheet says $50M, workbook says $52M.")
+
     def test_dispute_creates_new_version_and_retires_old(self):
         review, candidate = self._make_review_and_candidate()
         original = assertion_ledger.promote_candidate(self.project.id, review.id, candidate.id)

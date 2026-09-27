@@ -21,14 +21,18 @@ import {
 // Integrity Review, with their own supersession/dispute history and
 // staleness lineage, kept deliberately distinct from the reconciliation/
 // human/AI findings register (Findings.tsx) rather than merged into it.
-// An assertion is a claim a human confirmed once; a finding is an open
+// Task 18.1 follow-up: every entry is a claim from submitted work that an
+// accepted Integrity Review challenge found unsupported - shown as the
+// claim, the verdict ("Refuted") and the evidence, never as a verified
+// claim. Dispute/reinstate act on the reviewer's verdict, not the claim.
+// An assertion is a claim a human reviewed once; a finding is an open
 // matter under review - collapsing them would flatten a real distinction
 // docs/03-domain-model.md itself draws (locator-valid vs. quoted-value-
 // checked vs. calculation-reproduced vs. human-confirmed are different
 // verification states, never one green check).
 
 const MODALITY_LABELS: Record<string, string> = {
-  firm: "Firm", hedged: "Hedged", speculative: "Speculative",
+  firm: "Firm", conditional: "Conditional", uncertain: "Uncertain",
 }
 
 function EntryCard({
@@ -50,18 +54,18 @@ function EntryCard({
 
   async function submitDispute() {
     if (!reason.trim()) {
-      toast.error("A reason is required to dispute an assertion.")
+      toast.error("A reason is required to dispute this verdict.")
       return
     }
     setBusy(true)
     try {
       await disputeAssertion(projectId, entry.entry_key, reason.trim())
-      toast.success("Assertion disputed.")
+      toast.success("Verdict disputed.")
       setDisputing(false)
       setReason("")
       onChanged()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not dispute this assertion.")
+      toast.error(error instanceof Error ? error.message : "Could not dispute this verdict.")
     } finally {
       setBusy(false)
     }
@@ -71,31 +75,43 @@ function EntryCard({
     setBusy(true)
     try {
       await confirmAssertion(projectId, entry.entry_key)
-      toast.success("Assertion confirmed.")
+      toast.success("Verdict reinstated.")
       onChanged()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not confirm this assertion.")
+      toast.error(error instanceof Error ? error.message : "Could not reinstate this verdict.")
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Card className="space-y-2 p-4">
+    <Card className="space-y-3 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 text-sm text-foreground">{entry.assertion_text}</p>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${
-            entry.verification_status === "confirmed"
-              ? "border-emerald-900 bg-emerald-950/60 text-emerald-300"
-              : "border-red-900 bg-red-950/60 text-red-300"
-          }`}
-        >
-          {entry.verification_status === "confirmed" ? "Confirmed" : "Disputed"}
-        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground">Claim in {workProductTitle || "a work product"}</p>
+          <p className="mt-0.5 text-sm text-foreground">“{entry.assertion_text}”</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          {entry.claim_verdict === "refuted" && (
+            <span className="rounded-full border border-red-900 bg-red-950/60 px-2 py-0.5 text-xs font-semibold text-red-300">
+              Refuted by review
+            </span>
+          )}
+          {entry.verification_status === "disputed" && (
+            <span className="rounded-full border border-amber-900 bg-amber-950/60 px-2 py-0.5 text-xs font-semibold text-amber-300">
+              Verdict disputed
+            </span>
+          )}
+        </div>
       </div>
+      {entry.evidence_summary && (
+        <div>
+          <p className="text-xs text-muted-foreground">What the evidence shows</p>
+          <p className="mt-0.5 text-sm text-foreground">{entry.evidence_summary}</p>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
-        From {workProductTitle || "a work product"} · Modality: {MODALITY_LABELS[entry.modality] ?? entry.modality}
+        Modality: {MODALITY_LABELS[entry.modality] ?? entry.modality}
         {documentNames.length > 0 && ` · Evidence: ${documentNames.join(", ")}`}
       </p>
       {entry.verification_status === "disputed" && entry.dispute_reason && (
@@ -114,7 +130,7 @@ function EntryCard({
             <div className="flex w-full items-start gap-2">
               <Textarea
                 value={reason}
-                placeholder="Why is this assertion no longer supported?"
+                placeholder="Why doesn't this verdict hold?"
                 rows={2}
                 onChange={(event) => setReason(event.target.value)}
                 className="text-xs"
@@ -123,10 +139,10 @@ function EntryCard({
               <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDisputing(false)}>Cancel</Button>
             </div>
           ) : (
-            <Button size="sm" variant="secondary" onClick={() => setDisputing(true)}>Dispute</Button>
+            <Button size="sm" variant="secondary" onClick={() => setDisputing(true)}>Dispute verdict</Button>
           )
         ) : (
-          <Button size="sm" disabled={busy} onClick={submitConfirm}>{busy ? "Confirming…" : "Re-confirm"}</Button>
+          <Button size="sm" disabled={busy} onClick={submitConfirm}>{busy ? "Reinstating…" : "Reinstate verdict"}</Button>
         )}
       </div>
     </Card>
@@ -175,15 +191,16 @@ export function Assertions() {
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Assertions</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Claims confirmed through Integrity Review, kept distinct from open findings.{" "}
+          Claims from submitted work that Integrity Review checked against the evidence, with the reviewer’s
+          verdict. Kept distinct from open findings.{" "}
           <Link to={`/projects/${projectId}/findings`} className="underline">Back to findings</Link>
         </p>
       </div>
 
       {entries.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
-          No assertion has been promoted for this deal yet. An assertion is created when an Integrity Review
-          candidate is accepted - not created directly from this screen.
+          No claims have been checked for this deal yet. An entry is created when a reviewer accepts an
+          Integrity Review challenge - not created directly from this screen.
         </Card>
       ) : (
         entries.map((entry) => (

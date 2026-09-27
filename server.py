@@ -560,10 +560,32 @@ class Handler(BaseHTTPRequestHandler):
                     "approved_at": decision.created_at if decision is not None else None,
                 })
         visible_requests = []
+        # Task 18.1 follow-up: approved decision packages, which this role
+        # holds view_decision_packages for but could not reach - the
+        # Decision Package page first lists workspaces (view_findings).
+        # Only the workspace's current position - its latest version, and
+        # only if that version is approved (the same rule approved work
+        # products follow above; older approved versions stay "approved" on
+        # their rows forever) - and only the package content itself, no
+        # internal lineage (source finding ids, mandate/run ids, model usage).
+        approved_decision_packages = []
         for ws in workspaces.list_workspaces(project_id):
             for request in workspaces.list_requests(ws.id):
                 if authz.request_visible_to(role, request.status):
                     visible_requests.append(request.to_dict())
+            version = deliverables.latest_deliverable_version(ws.id)
+            if version is not None and version.status == "approved" and authz.deliverable_visible_to(role, version.status):
+                approved_decision_packages.append({
+                    "id": version.id,
+                    "title": version.title,
+                    "version_number": version.version_number,
+                    "approved_at": version.approved_at,
+                    "executive_summary": version.executive_summary,
+                    "recommendation": version.recommendation,
+                    "key_evidence_and_findings": version.key_evidence_and_findings,
+                    "outstanding_and_unresolved_matters": version.outstanding_and_unresolved_matters,
+                    "risks_and_limitations": version.risks_and_limitations,
+                })
         return {
             "project": project.to_dict(),
             "restricted": True,
@@ -571,6 +593,7 @@ class Handler(BaseHTTPRequestHandler):
             "capabilities": authz.capabilities_for(role),
             "brief": brief.to_dict() if brief is not None else None,
             "approved_deliverables": approved_deliverables,
+            "approved_decision_packages": approved_decision_packages,
             "requests": visible_requests,
         }
 
@@ -3595,6 +3618,12 @@ class Handler(BaseHTTPRequestHandler):
                     {"error": "an external participant may only set management_response on this request"},
                 )
                 return
+            # The external participant can't set status themselves, so the
+            # server records that a sent request has now been answered -
+            # otherwise it stayed "Sent" after the response (Task 18.1
+            # follow-up). A later edit to an answer leaves status alone.
+            if existing.status == "sent" and str(data.get("management_response") or "").strip():
+                data = {**data, "status": "answered"}
         else:
             self._send_json(403, {"error": "your role on this deal does not permit this action (respond_as_external)"})
             return

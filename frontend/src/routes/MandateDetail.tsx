@@ -178,7 +178,7 @@ function IntegrityReviewPanel({ projectId, reviewId }: { projectId: string; revi
             {candidate.deterministic_or_judgment || "unspecified"}
           </p>
           <div className="mt-2 space-y-1 text-xs text-foreground">
-            <p><span className="font-medium">Assertion:</span> {candidate.assertion}</p>
+            <p><span className="font-medium">Claim in submission:</span> {candidate.assertion}</p>
             <p><span className="font-medium">Conflicting/missing evidence:</span> {candidate.conflicting_or_missing_evidence}</p>
             <p className="text-muted-foreground"><span className="font-medium">Why it matters:</span> {candidate.why_it_matters}</p>
             <p className="text-muted-foreground"><span className="font-medium">Uncertainty:</span> {candidate.uncertainty}</p>

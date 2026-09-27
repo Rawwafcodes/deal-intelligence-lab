@@ -60,7 +60,19 @@ import store
 import version_dependencies
 
 MODALITIES = ("firm", "conditional", "uncertain")
+# `verification_status` is the state of the *reviewer's verdict* on the
+# claim, not of the claim itself: "confirmed" means a human stands behind
+# the verdict, "disputed" means someone has since challenged it.
 VERIFICATION_STATUSES = ("confirmed", "disputed")
+
+# Task 18.1 follow-up: what the verdict says about the claim. Every
+# Integrity Review candidate is a *challenge* to a claim in the submission
+# (its `assertion` is the claim, `conflicting_or_missing_evidence` is why it
+# does not hold), so an accepted candidate means the claim was refuted.
+# Recording the claim as "confirmed" without this made a refuted claim read
+# as verified. "refuted" is the only verdict the current pipeline produces;
+# no other value is invented ahead of a capability that could produce it.
+CLAIM_VERDICT_REFUTED = "refuted"
 
 
 class AssertionLedgerError(Exception):
@@ -93,6 +105,8 @@ class AssertionLedgerEntry:
     source_document_ids: list[str]
     source_version_ids: list[str]
     assertion_text: str
+    claim_verdict: str
+    evidence_summary: str
     language: str
     pdf_citations: list[dict[str, Any]]
     excel_citations: list[dict[str, Any]]
@@ -123,6 +137,8 @@ class AssertionLedgerEntry:
             "source_document_ids": self.source_document_ids,
             "source_version_ids": self.source_version_ids,
             "assertion_text": self.assertion_text,
+            "claim_verdict": self.claim_verdict,
+            "evidence_summary": self.evidence_summary,
             "language": self.language,
             "pdf_citations": self.pdf_citations,
             "excel_citations": self.excel_citations,
@@ -159,6 +175,8 @@ def init_assertion_ledger_db() -> None:
                 source_document_ids_json TEXT NOT NULL,
                 source_version_ids_json TEXT NOT NULL,
                 assertion_text TEXT NOT NULL,
+                claim_verdict TEXT NOT NULL DEFAULT 'refuted',
+                evidence_summary TEXT NOT NULL DEFAULT '',
                 language TEXT NOT NULL DEFAULT 'en',
                 pdf_citations_json TEXT NOT NULL DEFAULT '[]',
                 excel_citations_json TEXT NOT NULL DEFAULT '[]',
@@ -187,9 +205,28 @@ def init_assertion_ledger_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_assertion_ledger_candidate "
             "ON assertion_ledger_entries(source_candidate_id)"
         )
+        # Additive only. 'refuted' is the correct verdict for every existing
+        # row: only accepted Integrity Review challenges were ever promoted.
+        conn.execute(
+            "ALTER TABLE assertion_ledger_entries "
+            "ADD COLUMN IF NOT EXISTS claim_verdict TEXT NOT NULL DEFAULT 'refuted'"
+        )
+        conn.execute(
+            "ALTER TABLE assertion_ledger_entries ADD COLUMN IF NOT EXISTS evidence_summary TEXT NOT NULL DEFAULT ''"
+        )
         conn.commit()
     finally:
         conn.close()
+
+
+def _evidence_summary_for(row) -> str:
+    """Rows promoted before `evidence_summary` existed have it empty; read
+    it from the source candidate instead (read-time only - the stored row
+    is never rewritten)."""
+    if row["evidence_summary"]:
+        return row["evidence_summary"]
+    candidate = integrity_reviews.get_candidate(row["source_review_id"], row["source_candidate_id"])
+    return candidate.conflicting_or_missing_evidence if candidate is not None else ""
 
 
 def _row_to_entry(row) -> AssertionLedgerEntry:
@@ -206,6 +243,8 @@ def _row_to_entry(row) -> AssertionLedgerEntry:
         source_document_ids=json.loads(row["source_document_ids_json"]),
         source_version_ids=json.loads(row["source_version_ids_json"]),
         assertion_text=row["assertion_text"],
+        claim_verdict=row["claim_verdict"],
+        evidence_summary=_evidence_summary_for(row),
         language=row["language"],
         pdf_citations=json.loads(row["pdf_citations_json"]),
         excel_citations=json.loads(row["excel_citations_json"]),
@@ -232,16 +271,17 @@ def _insert(entry: AssertionLedgerEntry) -> None:
             INSERT INTO assertion_ledger_entries (
                 id, entry_key, version_number, status, project_id, source_review_id, source_candidate_id,
                 target_work_product_id, target_version_id, source_document_ids_json, source_version_ids_json,
-                assertion_text, language, pdf_citations_json, excel_citations_json, normalized_fields_json,
+                assertion_text, claim_verdict, evidence_summary, language, pdf_citations_json, excel_citations_json, normalized_fields_json,
                 modality, verification_status, confirmed_by, confirmed_at, disputed_by, disputed_at,
                 dispute_reason, extraction_model, extraction_prompt_version, published_finding_id, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 entry.id, entry.entry_key, entry.version_number, entry.status, entry.project_id,
                 entry.source_review_id, entry.source_candidate_id, entry.target_work_product_id,
                 entry.target_version_id, json.dumps(entry.source_document_ids),
-                json.dumps(entry.source_version_ids), entry.assertion_text, entry.language,
+                json.dumps(entry.source_version_ids), entry.assertion_text, entry.claim_verdict,
+                entry.evidence_summary, entry.language,
                 json.dumps(entry.pdf_citations), json.dumps(entry.excel_citations),
                 json.dumps(entry.normalized_fields) if entry.normalized_fields is not None else None,
                 entry.modality, entry.verification_status, entry.confirmed_by, entry.confirmed_at,
@@ -329,7 +369,10 @@ def promote_candidate(
     entry family (version 1). Requires `decision == "accepted"` - the same
     human act that publishes the candidate as a real shared finding - so
     every ledger entry traces back to an assertion a human has actually
-    confirmed, never a raw, undecided model proposal (I05). Raises
+    confirmed, never a raw, undecided model proposal (I05). The entry
+    records the claim as refuted (the candidate is a challenge the human
+    accepted), with the candidate's conflicting/missing evidence as the
+    reason; `verification_status="confirmed"` means that verdict stands. Raises
     AlreadyPromotedError if this exact candidate already has an active
     ledger entry, rather than silently creating a duplicate family.
 
@@ -370,6 +413,8 @@ def promote_candidate(
         source_document_ids=list(review.source_document_ids),
         source_version_ids=list(review.source_version_ids),
         assertion_text=candidate.assertion,
+        claim_verdict=CLAIM_VERDICT_REFUTED,
+        evidence_summary=candidate.conflicting_or_missing_evidence,
         language=language,
         pdf_citations=list(candidate.pdf_citations),
         excel_citations=list(candidate.excel_citations),
@@ -412,9 +457,10 @@ def _retire_and_insert(current: AssertionLedgerEntry, new_version: AssertionLedg
 
 
 def dispute_entry(entry_key: str, *, disputed_by: str, reason: str) -> AssertionLedgerEntry:
-    """Records a human dispute against a currently-confirmed ledger entry -
-    a later reviewer or reassessment concluding the assertion is wrong,
-    stale, or no longer supported. A reason is required, the same
+    """Records a human dispute against a currently-confirmed ledger entry's
+    verdict - a later reviewer or reassessment concluding the refutation
+    itself is wrong, stale, or no longer supported (e.g. the claim turns out
+    to hold after all). A reason is required, the same
     "no unexplained negative decision" rule reviews.py's own
     `record_decision` enforces for a return."""
     reason = reason.strip()
@@ -441,8 +487,8 @@ def dispute_entry(entry_key: str, *, disputed_by: str, reason: str) -> Assertion
 
 
 def confirm_entry(entry_key: str, *, confirmed_by: str) -> AssertionLedgerEntry:
-    """Re-confirms an entry - most commonly after a prior dispute is
-    resolved in the assertion's favor. Clears the prior dispute fields on
+    """Re-confirms an entry's verdict - most commonly after a prior dispute
+    is resolved and the refutation stands. Clears the prior dispute fields on
     the new current version; the disputed version itself remains fully
     readable via get_entry_history."""
     current = get_entry(entry_key)

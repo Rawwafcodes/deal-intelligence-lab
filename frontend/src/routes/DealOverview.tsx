@@ -102,7 +102,7 @@ function RequestResponseRow({
 function RestrictedDealOverviewView({
   overview, projectId, onReload,
 }: { overview: RestrictedDealOverview; projectId: string; onReload: () => void }) {
-  const { project, brief, approved_deliverables, requests } = overview
+  const { project, brief, approved_deliverables, approved_decision_packages, requests } = overview
   return (
     <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 space-y-6">
       <div>
@@ -145,6 +145,54 @@ function RestrictedDealOverviewView({
               </li>
             ))}
           </ul>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="font-heading text-lg font-semibold text-foreground">Decision package</h2>
+        {approved_decision_packages.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">No decision package is currently approved for sharing.</p>
+        ) : (
+          <div className="mt-3 space-y-5">
+            {approved_decision_packages.map((pkg) => (
+              <article key={pkg.id} className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Version {pkg.version_number}
+                  {pkg.approved_at ? ` · approved ${formatDate(pkg.approved_at)}` : ""}
+                </p>
+                {[
+                  ["Executive summary", pkg.executive_summary],
+                  ["Recommendation", pkg.recommendation],
+                ].map(([label, text]) =>
+                  text ? (
+                    <div key={label}>
+                      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</h3>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+                    </div>
+                  ) : null
+                )}
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-xs text-muted-foreground underline">
+                    Evidence, open matters and risks
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {[
+                      ["Key evidence and findings", pkg.key_evidence_and_findings],
+                      ["Outstanding and unresolved matters", pkg.outstanding_and_unresolved_matters],
+                      ["Risks and limitations", pkg.risks_and_limitations],
+                    ].map(([label, text]) =>
+                      text ? (
+                        <div key={label}>
+                          <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</h3>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                </details>
+              </article>
+            ))}
+          </div>
         )}
       </Card>
 

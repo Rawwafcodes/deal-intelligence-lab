@@ -446,6 +446,18 @@ class AuthorizationMatrixTests(unittest.TestCase):
         request_ids = {r["id"] for r in body["requests"]}
         self.assertIn(self.sent_request.id, request_ids)
         self.assertNotIn(self.draft_request.id, request_ids)
+        # Task 18.1 follow-up: the approved decision package reaches the
+        # external executive here; the unapproved draft does not, and no
+        # internal lineage rides along.
+        # Only the latest version, and only once approved - v1 was approved
+        # but v2 now exists, so v1 is no longer the current position. (Another
+        # test in this class may approve v2; either outcome is checked.)
+        packages = body["approved_decision_packages"]
+        self.assertNotIn(self.approved_deliverable_id, {p["id"] for p in packages})
+        v2_approved = deliverables.is_current_version_approved(self.workspace.id, self.draft_deliverable_2.id)
+        self.assertEqual([p["id"] for p in packages], [self.draft_deliverable_2.id] if v2_approved else [])
+        for package in packages:
+            self.assertFalse({"source_finding_ids", "mandate_id", "model", "input_tokens"} & set(package))
 
     # -- 18: membership administration ---------------------------------------
 

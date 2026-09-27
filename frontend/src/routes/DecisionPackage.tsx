@@ -15,6 +15,7 @@ import {
   type StalenessFlag,
   type Workspace,
 } from "@/lib/api"
+import { useDealAccess } from "@/lib/dealAccess"
 
 // Deep page (not a sixth primary tab, per docs/product/02's own target
 // route inventory - "Decision Package" is listed as a deep page, like
@@ -136,9 +137,14 @@ export function DecisionPackage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [deliverables, setDeliverablesList] = useState<Deliverable[] | null>(null)
   const [canApprove, setCanApprove] = useState(false)
+  // An external executive may view the approved package but not list
+  // workspaces (view_findings), so this page can't load for them - their
+  // restricted Deal Overview carries the approved package instead.
+  const { role } = useDealAccess()
+  const isExternal = role === "external_executive"
 
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId || role === null || isExternal) return
     listWorkspaces(projectId)
       .then((list) => {
         const sorted = [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -146,7 +152,7 @@ export function DecisionPackage() {
         setSelectedId(sorted[0]?.id ?? null)
       })
       .catch(() => toast.error("Could not load this deal's workspaces."))
-  }, [projectId])
+  }, [projectId, role, isExternal])
 
   useEffect(() => {
     if (!projectId) return
@@ -164,6 +170,17 @@ export function DecisionPackage() {
   }
 
   useEffect(reload, [projectId, selectedId])
+
+  if (isExternal) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 pt-8 pb-20">
+        <Card className="p-6 text-sm text-muted-foreground">
+          The approved decision package for this deal is shown on the{" "}
+          <Link to={`/projects/${projectId}`} className="underline">deal overview</Link>.
+        </Card>
+      </div>
+    )
+  }
 
   if (!workspacesList) {
     return <div className="mx-auto max-w-4xl px-6 pt-8 pb-20 text-sm text-muted-foreground">Loading…</div>

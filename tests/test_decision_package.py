@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -126,6 +127,31 @@ class ValidateSelectionTests(unittest.TestCase):
     def test_one_reviewed_finding_passes(self):
         digest = decision_package.build_digest("ws", [self._finding(), self._finding(review_status="accepted")], [])
         self.assertIsNone(decision_package.validate_selection(digest))
+
+    def _request(self, management_response="", status="sent"):
+        return SimpleNamespace(
+            id=uuid.uuid4().hex, question="Confirm FY2025 EBITDA?", priority="high",
+            status=status, management_response=management_response,
+        )
+
+    def test_digest_carries_management_response_marked_unverified(self):
+        # Task 18.1 follow-up: the draft previously said no response had been
+        # received because the digest dropped it.
+        digest = decision_package.build_digest(
+            "ws", [self._finding(review_status="accepted")], [self._request("EBITDA is GBP 3.1m.", "answered")]
+        )
+        text = decision_package._digest_text(digest)
+        self.assertIn("Management response (unverified): EBITDA is GBP 3.1m.", text)
+        self.assertIn("status: answered", text)
+
+    def test_digest_says_when_no_response_received(self):
+        digest = decision_package.build_digest("ws", [self._finding(review_status="accepted")], [self._request()])
+        self.assertIn("Management response: (none received)", decision_package._digest_text(digest))
+
+    def test_long_management_response_is_capped(self):
+        long_response = "x" * (decision_package.MAX_RESPONSE_CHARS_IN_DIGEST + 500)
+        digest = decision_package.build_digest("ws", [self._finding(review_status="accepted")], [self._request(long_response)])
+        self.assertEqual(len(digest.requests[0].management_response), decision_package.MAX_RESPONSE_CHARS_IN_DIGEST)
 
 
 class DecisionPackageCapabilityTests(unittest.TestCase):
