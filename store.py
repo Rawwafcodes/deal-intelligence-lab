@@ -49,6 +49,12 @@ def _connect(**kwargs: Any) -> "psycopg2.extensions.connection":
 # pointing at a fresh temp file.
 SCHEMA = "public"
 
+# Set only by the test package (tests/__init__.py): any connection opened
+# while SCHEMA is still "public" is then an isolation bug - a test that never
+# switched to its own schema, or work still running after a test class put
+# SCHEMA back - and would touch the real database, so it raises instead.
+REFUSE_PUBLIC_SCHEMA = False
+
 
 class _ConnectionWrapper:
     """See module docstring: makes a psycopg2 connection support the same
@@ -93,9 +99,17 @@ class Project:
 
 
 def get_connection() -> _ConnectionWrapper:
+    if REFUSE_PUBLIC_SCHEMA and SCHEMA == "public":
+        raise RuntimeError("store.get_connection() called with SCHEMA='public' under tests; set store.SCHEMA to an isolated test schema first")
     conn = _connect(cursor_factory=psycopg2.extras.RealDictCursor)
     with conn.cursor() as cur:
-        cur.execute(f'SET search_path TO "{SCHEMA}", public')
+        if SCHEMA == "public":
+            cur.execute('SET search_path TO "public", public')
+        else:
+            # An isolated (test) schema gets no `public` fallback: a table
+            # the test forgot to create must fail loudly here instead of
+            # silently reading/writing the real app's `public` tables.
+            cur.execute(f'SET search_path TO "{SCHEMA}"')
     return _ConnectionWrapper(conn)
 
 

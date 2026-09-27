@@ -222,10 +222,17 @@ class MandateEndpointTests(unittest.TestCase):
         status, mandate_mid_run = self._get(self._mandates_url(f"/{mandate_id}"))
         self.assertEqual(mandate_mid_run["status"], "active")
 
-        status, resumed = self._post(
-            self._mandates_url(f"/{mandate_id}/runs/{run['id']}/resume"),
-            {"stage_id": "review", "decision": "approved by reviewer"},
-        )
+        # Hold the worker while resuming: at a 0.02s poll it can otherwise
+        # claim the run (-> "running") before the handler reads it back for
+        # the response, making the "queued" assertion below a timing race.
+        self.worker.stop()
+        try:
+            status, resumed = self._post(
+                self._mandates_url(f"/{mandate_id}/runs/{run['id']}/resume"),
+                {"stage_id": "review", "decision": "approved by reviewer"},
+            )
+        finally:
+            self.worker.start()
         self.assertEqual(status, 200)
         self.assertEqual(resumed["status"], "queued")  # handed back to the worker, not finished inline
 
@@ -261,24 +268,31 @@ class MandateEndpointTests(unittest.TestCase):
         # test_cancel_run_while_queued_is_never_dispatched, which uses
         # poll_once() precisely because a real background thread's poll
         # tick and a real HTTP round trip race each other in wall-clock
-        # time - fixture.echo is near-instant, so either outcome
-        # (cancelled before dispatch, or it finishes first) is a
-        # legitimate real-world interleaving here, not a bug either way.
+        # time. Left racing, this test was intermittently flaky: a cancel
+        # landing between the worker reading the run as "queued" and
+        # writing "running" is overwritten (the race Worker's docstring
+        # discloses), so the cancel response itself could read "running".
+        # The worker is therefore held across start + cancel so the run is
+        # genuinely still queued, then restarted so the real background
+        # thread is what finalizes the cancel.
         _, mandate = self._post(self._mandates_url(), {"objective": "Assess the deal"})
         mandate_id = mandate["id"]
         _, plan = self._post(self._mandates_url(f"/{mandate_id}/plan"), {"template_key": "fixture-echo"})
         self._post(self._mandates_url(f"/{mandate_id}/plan/approve"), {"plan_id": plan["id"]})
 
-        status, run = self._post(self._mandates_url(f"/{mandate_id}/runs"))
-        self.assertEqual(run["status"], "queued")
-        status, cancel_response = self._post(self._mandates_url(f"/{mandate_id}/runs/{run['id']}/cancel"))
+        self.worker.stop()
+        try:
+            status, run = self._post(self._mandates_url(f"/{mandate_id}/runs"))
+            self.assertEqual(run["status"], "queued")
+            status, cancel_response = self._post(self._mandates_url(f"/{mandate_id}/runs/{run['id']}/cancel"))
+        finally:
+            self.worker.start()
         self.assertEqual(status, 200)
-        self.assertIn(cancel_response["status"], ("cancel_requested", "cancelled"))
+        self.assertEqual(cancel_response["status"], "cancel_requested")
 
         final = self._wait_for_terminal_run(mandate_id, run["id"])
-        self.assertIn(final["status"], ("cancelled", "succeeded"))
-        if final["status"] == "cancelled":
-            self.assertEqual(final["attempts"], [])  # the echo stage never ran
+        self.assertEqual(final["status"], "cancelled")
+        self.assertEqual(final["attempts"], [])  # the echo stage never ran
 
     def test_budget_limit_is_enforced_over_http(self):
         _, mandate = self._post(self._mandates_url(), {"objective": "Assess the deal"})
