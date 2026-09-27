@@ -229,6 +229,8 @@ export function Findings() {
             {bundle ? `${bundle.summary.total_findings} finding${bundle.summary.total_findings === 1 ? "" : "s"}` : " "}
             {" · "}
             <Link to={`/projects/${projectId}/decision-package`} className="underline">Decision package</Link>
+            {" · "}
+            <Link to={`/projects/${projectId}/readiness`} className="underline">Readiness</Link>
           </p>
         </div>
         {workspaces.length > 1 && (

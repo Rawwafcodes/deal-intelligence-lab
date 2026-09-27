@@ -250,6 +250,37 @@ export async function approveDeliverable(
   return jsonOrThrow(res, "Could not approve this decision package.")
 }
 
+// Matches readiness.py's ChecklistItem/ReadinessAssessment and
+// readiness_assessments.py's ReadinessAssessmentRecord exactly. No
+// percentage anywhere on the real backend - only a boolean `ready` plus
+// six named, explicit items - so none is added here either.
+export interface ChecklistItem {
+  key: string
+  label: string
+  met: boolean
+  detail: string
+}
+
+export interface ReadinessAssessment {
+  id: string
+  project_id: string
+  workspace_id: string
+  mandate_id: string | null
+  run_id: string | null
+  attempt_id: string | null
+  ready: boolean
+  scope_description: string
+  items: ChecklistItem[]
+  created_at: string
+}
+
+export async function listReadinessAssessments(projectId: string, workspaceId: string): Promise<ReadinessAssessment[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/readiness`
+  )
+  return jsonOrThrow(res, "Could not load readiness assessments.")
+}
+
 export async function updateRequest(
   projectId: string,
   workspaceId: string,

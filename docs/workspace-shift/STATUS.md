@@ -8,9 +8,9 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. Tasks 17.1 (Information Requests) and 17.2 (Decision
-Packages), both in React, are complete; **the current task is 17.3
-(Readiness in React)**. This
+for the full plan. Tasks 17.1 (Information Requests), 17.2 (Decision
+Packages) and 17.3 (Readiness), all in React, are complete; **the
+current task is 17.4 (Targeted Reassessment in React)**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5110,3 +5110,42 @@ DecisionPackage.tsx`, `frontend/src/App.tsx` (new route),
 `17.0`'s tracker. Continuing automatically.
 
 **Permissions needed**: none identified yet for 17.3.
+
+## 2026-09-27 — Task 17.3 executed (Readiness in React)
+
+Full detail in `docs/workspace-shift/tasks/17.3-readiness.md`. Summary:
+new deep route `/projects/:projectId/readiness` (`Readiness.tsx`, same
+workspace-picker pattern as `DecisionPackage.tsx`), reusing
+`readiness_assessments.py`'s existing list route verbatim - zero new
+backend code. Renders every assessment's real `ready` boolean, its
+verbatim `scope_description`, and all six named checklist items with
+their actual met/unmet state and detail text - **no percentage, health
+meter, or synthesized score anywhere**, matching the directive's own
+explicit instruction and `readiness.py`'s own deliberately narrow scope.
+Unmet items get a generic pointer to Findings (where Requests also now
+live, since 17.1) rather than a fabricated per-item deep link the
+checklist data doesn't carry.
+
+**Verification**: `tsc -b`/`oxlint`/`npm run build` clean, no new
+warnings; `node --test tests/frontend/*.test.mjs` 5/5; full backend
+suite 858 tests OK (the 17.2 entry's disclosed worker-timing flake did
+not reproduce this run). Live Playwright check against a synthetic
+seeded assessment (`readiness.assess_readiness`/`readiness_assessments.
+create_readiness_assessment` called directly with deliberately mixed
+met/unmet inputs - no Anthropic call): confirmed via a full page
+body-text dump that the "Not yet ready" verdict, the scope description,
+all six items' real detail text (e.g. the exact open-finding title), and
+the "close the remaining 4 items" pointer all render correctly.
+
+**Files changed**: `frontend/src/lib/api.ts` (new
+`ChecklistItem`/`ReadinessAssessment` types and
+`listReadinessAssessments`), new `frontend/src/routes/Readiness.tsx`,
+`frontend/src/App.tsx` (new route), `frontend/src/routes/Findings.tsx`
+(one more link). No backend file changed.
+
+**Decisions**: none - reuse of already-decided backend behavior.
+
+**Blockers**: none. **Next task**: 17.4 (Targeted Reassessment in
+React), per `17.0`'s tracker. Continuing automatically.
+
+**Permissions needed**: none identified yet for 17.4.

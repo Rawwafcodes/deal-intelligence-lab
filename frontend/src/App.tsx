@@ -11,6 +11,7 @@ import { Findings } from "@/routes/Findings"
 import { Home } from "@/routes/Home"
 import { MandateDetail } from "@/routes/MandateDetail"
 import { MandateList } from "@/routes/MandateList"
+import { Readiness } from "@/routes/Readiness"
 import { Work } from "@/routes/Work"
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="findings" element={<Findings />} />
             <Route path="decision-package" element={<DecisionPackage />} />
+            <Route path="readiness" element={<Readiness />} />
             <Route path="mandates" element={<MandateList />} />
             <Route path="mandates/:mandateId" element={<MandateDetail />} />
             <Route path="work" element={<Work />} />
