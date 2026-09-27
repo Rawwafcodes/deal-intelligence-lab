@@ -3299,12 +3299,28 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(201 if created else 200, workspace.to_dict())
 
     def _handle_get_workspace(self, project_id: str, workspace_id: str) -> None:
+        """Task 17.11: unlike this class's other `_get_workspace_analysis`
+        callers (memo/export/etc, genuinely reconciliation-specific
+        business logic left untouched), this route's own findings/
+        summary composition never actually needed a CrossFormatAnalysis -
+        `workspaces.list_findings`/`compute_summary` already treat
+        `analysis` as optional and don't read its content for finding
+        data (see `list_findings`'s own docstring: "genuinely optional -
+        an integrity-review-backed workspace has no CrossFormatAnalysis
+        at all"). The only thing that ever required one here was this
+        handler's own now-removed hard 400 - not any real data
+        dependency. An integrity-review-backed workspace now returns the
+        exact same shape with `analysis: null`; the frontend already has
+        `workspace.integrity_review_id` to tell origins apart."""
         workspace = self._get_owned_workspace(project_id, workspace_id)
         if workspace is None:
             return
-        analysis = self._get_workspace_analysis(workspace)
-        if analysis is None:
-            return
+        analysis: cross_format_analyses.CrossFormatAnalysis | None = None
+        if workspace.cross_format_analysis_id is not None:
+            analysis = cross_format_analyses.get_cross_format_analysis(project_id, workspace.cross_format_analysis_id)
+            if analysis is None:
+                self._send_json(404, {"error": "the analysis linked to this workspace no longer exists"})
+                return
         findings = workspaces.list_findings(workspace, analysis)
         request_list = workspaces.list_requests(workspace_id)
         summary = workspaces.compute_summary(workspace, analysis, request_list)
@@ -3313,7 +3329,7 @@ class Handler(BaseHTTPRequestHandler):
             200,
             {
                 "workspace": workspace.to_dict(),
-                "analysis": analysis.to_dict(),
+                "analysis": analysis.to_dict() if analysis else None,
                 "findings": findings,
                 "summary": summary,
                 "staleness": staleness.to_dict() if staleness else None,

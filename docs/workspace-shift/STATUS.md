@@ -8,10 +8,11 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phases A, B, C and D1 (17.1-17.10) are complete**;
+for the full plan. **Phases A, B, C and D (17.1-17.11) are complete**;
 the founder decided D15 (`docs/10-decisions.md`) on the assertion-
-ledger/reconciler question; **the current task is D2 (17.11), unifying
-Findings display across workspace origins**. This
+ledger/reconciler question; Task 17.11 closed the last Phase D gap
+(Findings display unified across workspace origins). **Phase E
+(design-system pass) is next**. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5599,3 +5600,66 @@ across cross-format and Integrity-Review workspace origins (the
 automatically.
 
 **Permissions needed**: none identified yet for 17.11.
+
+## 2026-09-27 — Task 17.11 executed (unified Findings display across workspace origins) - closes Phase D
+
+Closed the gap reconfirmed live during 17.10's own verification:
+navigating Findings for a deal whose most-recent workspace is
+Integrity-Review-backed hit a 400 (`_get_workspace_analysis` requiring
+a `CrossFormatAnalysis` that doesn't exist for that origin), even though
+`workspaces.list_findings`/`compute_summary` had already been written
+to treat `analysis` as optional. Rewrote `server.py`'s
+`_handle_get_workspace` to fetch a `CrossFormatAnalysis` only when
+`workspace.cross_format_analysis_id is not None`, returning
+`"analysis": null` otherwise instead of 400ing. Left
+`_get_workspace_analysis` itself untouched - the memo/export handlers
+still correctly require a real analysis and keep 400ing when absent.
+
+**Real bug found while writing the verifying test, not assumed away**:
+running a new Integrity-Review-backed-workspace test crashed the server
+(`RemoteDisconnected`) - `workspaces.compute_summary` was still
+unconditionally accessing `analysis.pdf_document_ids`/`analysis.model`/
+`analysis.input_tokens`/`analysis.output_tokens`/`analysis.created_at`,
+an `AttributeError` on `analysis=None`. Fixed by making every
+analysis-derived summary field conditional, falling back to honest
+`0`/`None` values rather than fabricating them.
+
+Frontend: removed `Findings.tsx`'s placeholder branch ("this screen
+doesn't yet render that kind of workspace's findings") entirely - both
+origins now render through the same register unconditionally. Widened
+`api.ts`'s `WorkspaceBundle.analysis` type to `Record<string,
+unknown> | null` to match the real contract.
+
+**Verification**: new test
+`test_get_workspace_for_an_integrity_review_backed_workspace_no_
+longer_400s` (via a new `_open_integrity_review_workspace()` helper -
+real task/work-product/Integrity-Review records, no Anthropic call)
+asserts 200, `analysis: null`, the real finding present, and a correct
+summary. All 31 tests in `WorkspaceEndpointTests` pass. Full suite: 870
+tests, one pre-existing already-disclosed flaky worker-timing test
+reconfirmed unrelated via 3 isolated reruns, everything else green.
+mypy clean (98 files); frontend `tsc -b`/`oxlint`/`npm run build`
+clean; `node --test tests/frontend/*.test.mjs` 5/5. Live check: seeded
+a real Integrity Review workspace directly, confirmed via `curl` that
+the real HTTP endpoint now returns 200 with the actual finding and
+honest null/zero summary fields (not fabricated); then ran Playwright
+against the live running app - the placeholder text is gone, the real
+finding title and its severity badge render, the findings count is
+correct, and there are zero new browser console errors.
+
+**Files changed**: `server.py` (`_handle_get_workspace` rewritten),
+`workspaces.py` (`compute_summary`'s analysis-derived fields made
+conditional), `frontend/src/routes/Findings.tsx` (placeholder branch
+removed), `frontend/src/lib/api.ts` (`WorkspaceBundle.analysis` widened
+to nullable), `tests/test_workspace_endpoints.py` (new helper + test).
+
+**Decisions**: none required - pure bug fix connecting an
+already-correct backend capability to its HTTP handler, within this
+program's existing Phase D authorization.
+
+**Blockers**: none. **Phases A, B, C and D (17.1-17.11) are now
+complete.** **Next task**: Phase E - a design-system consistency pass
+across the six-destination shell, per the original directive's
+sequencing. Continuing automatically.
+
+**Permissions needed**: none identified yet for Phase E.

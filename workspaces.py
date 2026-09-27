@@ -1540,7 +1540,7 @@ def approve_memo(workspace_id: str, approver: str) -> WorkspaceMemo:
 
 
 def compute_summary(
-    workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis, requests: list[WorkspaceRequest]
+    workspace: Workspace, analysis: cross_format_analyses.CrossFormatAnalysis | None, requests: list[WorkspaceRequest]
 ) -> dict[str, Any]:
     all_findings = list_findings(workspace, analysis)
     findings = [f for f in all_findings if not f["is_duplicate"]]
@@ -1573,12 +1573,16 @@ def compute_summary(
         "by_origin": origin_breakdown,
         "open_critical_high_count": len(open_critical_high),
         "awaiting_management_response_count": len(awaiting_response) + len(awaiting_requests),
-        "document_count": len(analysis.pdf_document_ids) + len(analysis.excel_document_ids),
-        "pdf_document_count": len(analysis.pdf_document_ids),
-        "excel_document_count": len(analysis.excel_document_ids),
-        "model": analysis.model,
-        "input_tokens": analysis.input_tokens,
-        "output_tokens": analysis.output_tokens,
-        "analysis_created_at": analysis.created_at,
+        # Task 17.11: an integrity-review-backed workspace has no
+        # CrossFormatAnalysis at all - these fields report that honestly
+        # (None/0) rather than fabricating a document count or model name
+        # that was never true for this kind of workspace.
+        "document_count": (len(analysis.pdf_document_ids) + len(analysis.excel_document_ids)) if analysis else 0,
+        "pdf_document_count": len(analysis.pdf_document_ids) if analysis else 0,
+        "excel_document_count": len(analysis.excel_document_ids) if analysis else 0,
+        "model": analysis.model if analysis else None,
+        "input_tokens": analysis.input_tokens if analysis else None,
+        "output_tokens": analysis.output_tokens if analysis else None,
+        "analysis_created_at": analysis.created_at if analysis else None,
         "request_count": len(requests),
     }

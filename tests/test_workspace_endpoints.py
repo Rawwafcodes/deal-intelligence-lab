@@ -27,9 +27,12 @@ from openpyxl import load_workbook
 import cross_format_analyses
 import documents
 import identity
+import integrity_reviews
 import server
 import store
+import tasks
 import version_dependencies
+import work_products
 import workspaces
 
 FAKE_SECRET = "sk-ant-api03-WORKSPACE-ENDPOINT-TEST-FAKE-SECRET-DO-NOT-LEAK"
@@ -99,12 +102,16 @@ class WorkspaceEndpointTests(unittest.TestCase):
         store.ensure_schema(cls._schema)
         store.SCHEMA = cls._schema
         documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
+        work_products.DATA_DIR = documents.DATA_DIR
         store.init_db()
         identity.init_identity_db()
         documents.init_documents_db()
         cross_format_analyses.init_cross_format_analyses_db()
         workspaces.init_workspaces_db()
         version_dependencies.init_version_dependencies_db()
+        tasks.init_tasks_db()
+        work_products.init_work_products_db()
+        integrity_reviews.init_integrity_reviews_db()
 
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
@@ -200,6 +207,31 @@ class WorkspaceEndpointTests(unittest.TestCase):
         workspace = json.loads(body)
         return analysis, workspace
 
+    def _open_integrity_review_workspace(self):
+        """Task 17.11: a workspace backed by an IntegrityReview, not a
+        CrossFormatAnalysis - built directly (no HTTP route creates one on
+        its own; it's a real side effect of the candidate-decision flow,
+        already covered end to end in test_integrity_review_endpoints.py).
+        This test file's own job is only the workspace-get route's
+        origin-agnostic contract, not re-proving that flow."""
+        task = tasks.create_task(self.project.id, "Draft the memo")
+        wp = work_products.create_work_product(
+            self.project.id, task.id, "Memo", "memo.pdf", PDF_BYTES, created_by="analyst-1"
+        ).work_product
+        review = integrity_reviews.create_integrity_review(
+            project_id=self.project.id, mandate_id=None, run_id=None, attempt_id=None,
+            target_work_product_id=wp.id, target_version_id=wp.current_version_id,
+            source_document_ids=[self.pdf_doc.id], source_version_ids=[self.pdf_doc.current_version_id],
+            peer_work_product_ids=[], peer_version_ids=[], brief_version_id=None, workstream_id=None,
+            review_scope="", status="success", transmitted=True, analysis_seconds=1.0, model="claude-opus-5",
+            review_template_version="1", stop_reason="end_turn", input_tokens=100, output_tokens=50,
+            code_execution_requests=0, error_type=None, error_message=None,
+            materials_reviewed_text="Submission Under Review: memo.pdf", tool_trace=None,
+            excel_cleanup=None, excel_verification=None,
+        )
+        workspace, _ = workspaces.get_or_create_workspace_for_integrity_review(self.project.id, review.id)
+        return workspace
+
     def _finding_id(self, workspace_id: str, title: str) -> str:
         """Task 11.2: finding ids are now minted UUIDs (`ai-<uuid>`), not
         `ai-<index>`, so tests look a finding up by its known title instead
@@ -215,6 +247,20 @@ class WorkspaceEndpointTests(unittest.TestCase):
         status2, body2 = self._post_json(f"/api/projects/{self.project.id}/cross-format-analyses/{analysis.id}/workspace")
         self.assertEqual(status2, 200)
         self.assertEqual(json.loads(body2)["id"], workspace["id"])
+
+    def test_get_workspace_for_an_integrity_review_backed_workspace_no_longer_400s(self):
+        """Task 17.11: this route used to hard-require a CrossFormatAnalysis
+        and 400 otherwise, even though workspaces.list_findings/
+        compute_summary never actually needed one - the only real
+        dependency was this handler's own removed check."""
+        workspace = self._open_integrity_review_workspace()
+        status, body, _ = self._get(f"/api/projects/{self.project.id}/workspaces/{workspace.id}")
+        self.assertEqual(status, 200)
+        parsed = json.loads(body)
+        self.assertIsNone(parsed["analysis"])
+        self.assertEqual(parsed["findings"], [])
+        self.assertEqual(parsed["summary"]["total_findings"], 0)
+        self.assertEqual(parsed["workspace"]["integrity_review_id"], workspace.integrity_review_id)
 
     def test_list_workspaces_for_project(self):
         # Task: unify workspace navigation - a Findings screen in the

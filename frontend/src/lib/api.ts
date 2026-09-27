@@ -141,7 +141,7 @@ export interface StalenessFlag {
 
 export interface WorkspaceBundle {
   workspace: Workspace
-  analysis: Record<string, unknown>
+  analysis: Record<string, unknown> | null
   findings: Finding[]
   summary: FindingsSummary
   staleness: StalenessFlag | null

@@ -295,13 +295,7 @@ export function Findings() {
         />
       )}
 
-      {selected && !selected.cross_format_analysis_id ? (
-        <Card className="p-6 text-sm text-muted-foreground">
-          This workspace is backed by an Integrity Review, not a cross-format reconciliation - this screen doesn't
-          yet render that kind of workspace's findings (a real backend boundary, not a bug: server.py's own
-          workspace-bundle endpoint only serves reconciliation-backed workspaces today).
-        </Card>
-      ) : bundleError ? (
+      {bundleError ? (
         <Card className="p-6 text-sm text-muted-foreground">{bundleError}</Card>
       ) : !bundle ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
