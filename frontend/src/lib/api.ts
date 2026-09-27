@@ -647,6 +647,57 @@ export async function listDealMemberships(projectId: string): Promise<DealMember
   return jsonOrThrow(res, "Could not load this deal's memberships.")
 }
 
+// Task 19.5 (M19): deal access management (surface #23) - the server
+// returns every membership with the member's details inline.
+export type DealMembershipWithUser = DealMembership & { user: IdentityUser | null }
+
+export const DEAL_ROLES = ["deal_lead", "reviewer", "analyst", "external_executive"] as const
+
+export async function listDealMembers(projectId: string): Promise<DealMembershipWithUser[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships`)
+  return jsonOrThrow(res, "Could not load who has access to this deal.")
+}
+
+export async function grantDealAccess(projectId: string, userId: string, role: string): Promise<DealMembershipWithUser[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId, role }),
+  })
+  return jsonOrThrow(res, "Could not give this person access.")
+}
+
+export async function revokeDealAccess(projectId: string, userId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/memberships/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  })
+  await jsonOrThrow(res, "Could not remove this person's access.")
+}
+
+// Task 19.5 (M19): organization administration (surfaces #23-24).
+export interface OrganizationDetails {
+  organization: { id: string; name: string; created_at: string } | null
+  role: string
+  members: { user: IdentityUser; role: string }[]
+}
+
+export async function getOrganization(): Promise<OrganizationDetails> {
+  return jsonOrThrow(await fetch("/api/organization"), "Could not load your organization.")
+}
+
+export async function renameOrganization(name: string): Promise<OrganizationDetails> {
+  const res = await fetch("/api/organization", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  })
+  return jsonOrThrow(res, "Could not rename the organization.")
+}
+
+export async function inviteMember(email: string, displayName: string, role: string): Promise<OrganizationDetails> {
+  const res = await fetch("/api/organization/members", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, display_name: displayName, role }),
+  })
+  return jsonOrThrow(res, "Could not invite this person.")
+}
+
 export interface IdentityUser {
   id: string
   email: string

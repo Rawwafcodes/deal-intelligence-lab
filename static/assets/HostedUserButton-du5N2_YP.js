@@ -1,0 +1,1 @@
+import{n as e,o as t}from"./index-D6RAb65j.js";import{i as n}from"./dist-CFoh6oOU.js";var r=t(e(),1);function i(){return(0,r.jsx)(n,{})}export{i as default};

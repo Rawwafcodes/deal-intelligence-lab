@@ -439,6 +439,78 @@ def list_organization_memberships_for_user(user_id: str) -> list[OrganizationMem
     return [OrganizationMembership(r["id"], r["organization_id"], r["user_id"], r["role"], r["created_at"]) for r in rows]
 
 
+# -- organization administration (Task 19.5, M19: surfaces #23-24) ----------
+
+
+def get_organization_role(organization_id: str, user_id: str) -> str | None:
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT role FROM organization_memberships WHERE organization_id = %s AND user_id = %s",
+            (organization_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row["role"] if row else None
+
+
+def list_organization_members(organization_id: str) -> list[tuple[User, str]]:
+    conn = store.get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT u.id, u.email, u.display_name, u.created_at, m.role
+            FROM organization_memberships m JOIN users u ON u.id = m.user_id
+            WHERE m.organization_id = %s ORDER BY lower(u.display_name)
+            """,
+            (organization_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [(User(r["id"], r["email"], r["display_name"], r["created_at"]), r["role"]) for r in rows]
+
+
+def invite_to_organization(organization_id: str, email: str, display_name: str, role: str) -> User:
+    """Adds a person to an organization - reusing the existing user with this
+    email (case-insensitive) or creating one. In hosted mode this is what
+    lets them sign in: sign-in links to an existing user by email and
+    otherwise refuses (resolve_signed_in_user)."""
+    email = email.strip()
+    if "@" not in email or len(email) > 320:
+        raise ValueError("a valid email address is required")
+    if role not in ORG_ROLES:
+        raise ValueError(f"invalid organization role: {role!r}")
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, email, display_name, created_at FROM users WHERE lower(email) = lower(%s)", (email,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is not None:
+        user = User(row["id"], row["email"], row["display_name"], row["created_at"])
+    else:
+        name = display_name.strip() or email.split("@")[0]
+        user = create_user(email, name[:200])
+    add_organization_membership(organization_id, user.id, role)
+    return user
+
+
+def rename_organization(organization_id: str, name: str) -> Organization:
+    name = name.strip()
+    if not name or len(name) > 200:
+        raise ValueError("organization name must be 1-200 characters")
+    conn = store.get_connection()
+    try:
+        conn.execute("UPDATE organizations SET name = %s WHERE id = %s", (name, organization_id))
+        conn.commit()
+    finally:
+        conn.close()
+    org = get_organization(organization_id)
+    assert org is not None
+    return org
+
+
 # -- project <-> organization -----------------------------------------------
 
 

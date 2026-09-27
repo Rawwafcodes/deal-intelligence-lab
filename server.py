@@ -390,6 +390,68 @@ class Handler(BaseHTTPRequestHandler):
                 organizations.append({"organization": org.to_dict(), "role": membership.role})
         return {"user": user.to_dict(), "organizations": organizations}
 
+    # -- organization administration (Task 19.5, M19: surfaces #23-24) -------
+
+    def _caller_organization(self) -> tuple[str, str] | None:
+        """(organization id, the caller's org role) for the caller's
+        organization - one per user in this product today."""
+        memberships = identity.list_organization_memberships_for_user(self.current_user_id)
+        return (memberships[0].organization_id, memberships[0].role) if memberships else None
+
+    def _organization_payload(self, org_id: str, role: str) -> dict:
+        org = identity.get_organization(org_id)
+        return {
+            "organization": org.to_dict() if org else None,
+            "role": role,
+            "members": [
+                {"user": user.to_dict(), "role": member_role}
+                for user, member_role in identity.list_organization_members(org_id)
+            ],
+        }
+
+    def _handle_get_organization(self) -> None:
+        caller = self._caller_organization()
+        if caller is None:
+            self._send_json(404, {"error": "you are not a member of any organization"})
+            return
+        self._send_json(200, self._organization_payload(*caller))
+
+    def _handle_update_organization(self) -> None:
+        caller = self._caller_organization()
+        if caller is None or caller[1] != "admin":
+            self._send_json(403, {"error": "only an organization admin may change organization settings"})
+            return
+        data = self._read_json_body()
+        if data is None or not isinstance(data.get("name"), str):
+            self._send_json(400, {"error": "name is required"})
+            return
+        try:
+            identity.rename_organization(caller[0], data["name"])
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, self._organization_payload(*caller))
+
+    def _handle_invite_member(self) -> None:
+        caller = self._caller_organization()
+        if caller is None or caller[1] != "admin":
+            self._send_json(403, {"error": "only an organization admin may invite people"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        email, name, role = data.get("email"), data.get("display_name", ""), data.get("role", "member")
+        if not isinstance(email, str) or not isinstance(name, str) or not isinstance(role, str):
+            self._send_json(400, {"error": "email, display_name and role must be strings"})
+            return
+        try:
+            identity.invite_to_organization(caller[0], email, name, role)
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, self._organization_payload(*caller))
+
     def _handle_get_session(self) -> None:
         self._send_json(200, self._session_dict(self.current_user_id))
 
@@ -1050,6 +1112,10 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_get_session()
             return
 
+        if path == "/api/organization":
+            self._handle_get_organization()
+            return
+
         if path == "/api/dev/identities":
             self._handle_list_dev_identities()
             return
@@ -1069,7 +1135,7 @@ class Handler(BaseHTTPRequestHandler):
         # /mandates as real top-level routes outside /projects/... - each
         # needs the exact same fallback, or a hard refresh there 404s
         # before React loads.
-        if path in ("/", "/deals", "/mandates") or path == "/projects" or path.startswith("/projects/"):
+        if path in ("/", "/deals", "/mandates", "/team") or path == "/projects" or path.startswith("/projects/"):
             self._send_static_file("index.html")
             return
 
@@ -1690,6 +1756,14 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_dev_session_login()
             return
 
+        if path == "/api/organization":
+            self._handle_update_organization()
+            return
+
+        if path == "/api/organization/members":
+            self._handle_invite_member()
+            return
+
         if path == "/api/dev/session/clear":
             self._handle_dev_session_clear()
             return
@@ -2281,18 +2355,42 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(user_id, str) or identity.get_user(user_id) is None:
             self._send_json(400, {"error": "user_id must be an existing user id"})
             return
+        # Task 19.5 (M19): tenant isolation - deal access only for members of
+        # the deal's own organization, never an arbitrary user id.
+        org_id = identity.get_project_organization_id(project_id)
+        if org_id is None or identity.get_organization_role(org_id, user_id) is None:
+            self._send_json(400, {"error": "that person is not a member of this deal's organization"})
+            return
         role = data.get("role")
         if not isinstance(role, str) or role not in identity.DEAL_ROLES:
             self._send_json(400, {"error": f"role must be one of {list(identity.DEAL_ROLES)}"})
             return
+        if role != "deal_lead" and self._would_leave_no_deal_lead(project_id, user_id):
+            self._send_json(400, {"error": "a deal must keep at least one deal lead - add another lead first"})
+            return
         identity.add_deal_membership(project_id, user_id, role)
         self._send_json(201, self._memberships_with_users(project_id))
+
+    def _would_leave_no_deal_lead(self, project_id: str, user_id: str) -> bool:
+        """Task 19.5: a deal must always keep at least one deal lead - the
+        only role that can manage its membership. True when `user_id` is the
+        sole active deal lead."""
+        if identity.get_deal_role(project_id, user_id) != "deal_lead":
+            return False
+        leads = [
+            m for m in identity.list_deal_memberships_for_project(project_id)
+            if m.revoked_at is None and m.role == "deal_lead"
+        ]
+        return len(leads) <= 1
 
     def _handle_revoke_membership(self, project_id: str, user_id: str) -> None:
         if self._require_capability(project_id, authz.MANAGE_MEMBERSHIP) is None:
             return
         if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
             self._send_json(403, {"error": "only a deal lead may revoke deal membership"})
+            return
+        if self._would_leave_no_deal_lead(project_id, user_id):
+            self._send_json(400, {"error": "a deal must keep at least one deal lead - add another lead first"})
             return
         revoked = identity.revoke_deal_membership(project_id, user_id)
         if not revoked:

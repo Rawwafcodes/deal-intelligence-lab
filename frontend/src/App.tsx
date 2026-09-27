@@ -10,6 +10,7 @@ import { Deals } from "@/routes/Deals"
 import { DecisionPackage } from "@/routes/DecisionPackage"
 import { DocumentDetail } from "@/routes/DocumentDetail"
 import { Documents } from "@/routes/Documents"
+import { Team } from "@/routes/Team"
 import { Findings } from "@/routes/Findings"
 import { Home } from "@/routes/Home"
 import { MandateDetail } from "@/routes/MandateDetail"
@@ -30,6 +31,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/deals" element={<Deals />} />
           <Route path="/mandates" element={<MandatesHome />} />
+          <Route path="/team" element={<Team />} />
           <Route path="/projects/:projectId" element={<DealShell />}>
             <Route index element={<DealOverview />} />
             <Route

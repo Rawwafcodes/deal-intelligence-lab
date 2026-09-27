@@ -490,7 +490,12 @@ class AuthorizationMatrixTests(unittest.TestCase):
     # -- 20: membership revocation takes effect immediately ------------------
 
     def test_20_membership_revocation_is_immediate(self):
-        temp_user = identity.create_user(f"temp-{uuid.uuid4().hex}@local.dev", "Temp Revoke Test")
+        # Task 19.5: deal access is only grantable to members of the deal's
+        # own organization, so the temporary user joins it first.
+        temp_user = identity.invite_to_organization(
+            identity.get_project_organization_id(self.project_id),
+            f"temp-{uuid.uuid4().hex}@local.dev", "Temp Revoke Test", "member",
+        )
         self.lead.post(f"/api/projects/{self.project_id}/memberships", {"user_id": temp_user.id, "role": "analyst"})
         temp_client = _Client(self.port)
         temp_client.login(temp_user.id)
@@ -500,6 +505,32 @@ class AuthorizationMatrixTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, _ = temp_client.get(f"/api/projects/{self.project_id}")
         self.assertEqual(status, 404)
+
+    def test_20b_deal_access_cannot_be_granted_outside_the_organization(self):
+        # Task 19.5 (M19): tenant isolation on deal grants.
+        outsider = identity.create_user(f"outsider-{uuid.uuid4().hex}@elsewhere.test", "Outsider")
+        status, body = self.lead.post(
+            f"/api/projects/{self.project_id}/memberships", {"user_id": outsider.id, "role": "analyst"}
+        )
+        self.assertEqual(status, 400)
+        self.assertIsNone(identity.get_deal_role(self.project_id, outsider.id))
+
+    def test_20c_the_last_deal_lead_cannot_be_removed_or_downgraded(self):
+        # Task 19.5 (M19): the deal must never be left without a lead.
+        lead_id = identity.get_default_user_id()
+        if identity.get_deal_role(self.project_id, lead_id) != "deal_lead":
+            self.skipTest("fixture lead is not the deal lead")
+        others = [
+            m for m in identity.list_deal_memberships_for_project(self.project_id)
+            if m.revoked_at is None and m.role == "deal_lead" and m.user_id != lead_id
+        ]
+        if others:
+            self.skipTest("fixture has more than one deal lead")
+        status, _ = self.lead.delete(f"/api/projects/{self.project_id}/memberships/{lead_id}", None)
+        self.assertEqual(status, 400)
+        status, _ = self.lead.post(f"/api/projects/{self.project_id}/memberships", {"user_id": lead_id, "role": "analyst"})
+        self.assertEqual(status, 400)
+        self.assertEqual(identity.get_deal_role(self.project_id, lead_id), "deal_lead")
 
     # -- 21: organization-wide aggregate filtering ----------------------------
 

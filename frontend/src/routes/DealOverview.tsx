@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { BriefEditorDialog } from "@/components/BriefEditorDialog"
+import { DealPeopleCard } from "@/components/DealPeopleCard"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -369,6 +370,8 @@ export function DealOverview() {
           {documents.count === 1 ? "" : "s"}
         </p>
       </Card>
+
+      <DealPeopleCard projectId={projectId} />
 
       <BriefEditorDialog
         projectId={projectId}

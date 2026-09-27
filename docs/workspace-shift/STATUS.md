@@ -7095,3 +7095,39 @@ founder's Clerk application (publishable key, JWKS/issuer URLs, and the
 
 Still to do in § 3.3: the minimal organization and team screens (#23-24) for
 inviting the pilot users; § 3.4 (environment-only configuration).
+
+## 2026-09-27 — M19: minimal Team and Organization surfaces (Task 19.5)
+
+Completes report § 3.3 (hosted sign-in is invite-only, so pilots need a way
+to invite people and grant deal access).
+
+- **Backend**: `GET /api/organization` (the caller's organization, their org
+  role, members); `POST /api/organization` (rename; admin only);
+  `POST /api/organization/members` (invite by email with org role, admin
+  only - reuses an existing user by case-insensitive email, never
+  duplicates). New `identity` functions: `get_organization_role`,
+  `list_organization_members`, `invite_to_organization`,
+  `rename_organization`.
+- **Tenant isolation (new rule)**: deal access can only be granted to members
+  of the deal's own organization - previously any existing user id was
+  accepted.
+- **New rule**: a deal must always keep at least one deal lead - removing or
+  downgrading the last one is refused (400), since only a deal lead can
+  manage membership.
+- **Frontend**: a **Team** page (`/team`, sidebar link): members, invite form
+  and organization name for admins; read-only list for members. A **People on
+  this deal** card on the deal overview: everyone with access and their role;
+  add (organization members only) and remove for the deal lead.
+
+**Verification**: 6 new tests (`tests/test_organization_endpoints.py`: member
+view, admin invite + re-invite reuses the user, non-admin cannot invite or
+rename, invalid invites rejected, rename; plus tenant-isolation and
+last-deal-lead tests in `test_authorization_matrix`); the existing revocation
+test updated to put its temporary user in the organization first (it had
+been granting access across organizations). Full backend suite OK; mypy
+clean; `tsc -b` clean; no new lint warnings. Live in the browser (disposable
+database): admin invited a new person on Team, added them to a deal as
+Reviewer, removed them; an analyst saw neither admin control; axe WCAG 2.1
+A/AA: no violations on Team or the deal overview. A server SPA-route gap
+(`/team` returned the API 404) was found live and fixed, with the SPA-route
+test extended.
