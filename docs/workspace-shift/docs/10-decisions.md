@@ -571,6 +571,33 @@ A retrospective key written now for Universal Logic would not count as
 blind. الكعكية remains the candidate for the next genuinely blind case
 (key written before any run).
 
+D25 (added 2026-09-27, Task 19.1) Founder decisions on the M19 architecture
+decision report (`tasks/19.1-architecture-decision-report.md`): "hypothesis
+stack is approved, costs for staging are approved. regions are confirmed for
+now. 4 confirmed but not explicit or given that matter as the product is
+somehow international. youre allowed to start".
+
+1. **Stack approved**: the D20 working hypothesis as refined in the report -
+   Railway (web service + separate worker service), Neon Postgres,
+   Cloudflare R2, Clerk, GitHub Actions, Sentry; Anthropic unchanged.
+2. **Staging costs approved** as proposed: ≈ $20-45/month infrastructure,
+   with AI testing spend capped (report § 8 suggested $100/month).
+3. **EU regions confirmed for now** (Railway EU West / Neon Frankfurt / R2
+   EU jurisdiction) - revisitable.
+4. **Saudi in-Kingdom residency is not a current requirement.** The founder
+   frames the product as international rather than Saudi-specific, so
+   in-Kingdom hosting and inference are not a design constraint now; they
+   remain a per-customer qualification question, not a stated positioning.
+5. **Authorized to start** the report's § 3 provider-independent code
+   changes (worker split, document storage abstraction, real sign-in,
+   environment-only configuration), locally.
+
+Not authorized by this decision: creating provider accounts, provisioning,
+deploying, or any real customer data in a hosted environment (the latter
+still needs its own formal approval, per the M19 exit gate). Account
+creation is the founder's to do; the agent cannot create accounts or
+handle credentials.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,
