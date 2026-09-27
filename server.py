@@ -773,8 +773,10 @@ class Handler(BaseHTTPRequestHandler):
         # React ever loads. The built JS/CSS bundle itself
         # (static/assets/...) and /favicon.svg /icons.svg are served by
         # the existing generic static-file fallback lower down - nothing
-        # new needed for those.
-        if path == "/" or path == "/projects" or path.startswith("/projects/"):
+        # new needed for those. Task 17.7 added /deals as a real top-
+        # level route outside /projects/... - needs the exact same
+        # fallback, or a hard refresh there 404s before React loads.
+        if path == "/" or path == "/deals" or path == "/projects" or path.startswith("/projects/"):
             self._send_static_file("index.html")
             return
 

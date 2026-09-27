@@ -5,6 +5,7 @@ import { Layout } from "@/components/Layout"
 import { Toaster } from "@/components/ui/sonner"
 import { Activity } from "@/routes/Activity"
 import { DealOverview } from "@/routes/DealOverview"
+import { Deals } from "@/routes/Deals"
 import { DecisionPackage } from "@/routes/DecisionPackage"
 import { Documents } from "@/routes/Documents"
 import { Findings } from "@/routes/Findings"
@@ -23,6 +24,7 @@ function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/deals" element={<Deals />} />
           <Route path="/projects/:projectId" element={<DealShell />}>
             <Route index element={<DealOverview />} />
             <Route path="documents" element={<Documents />} />

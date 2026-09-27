@@ -52,6 +52,33 @@ class ServerTests(unittest.TestCase):
             body = res.read().decode()
             self.assertIn("Deal Intelligence Lab", body)
 
+    def test_spa_fallback_covers_every_real_top_level_and_deep_react_route(self):
+        """The 2026-09-27 re-entry audit disclosed this rule had no
+        dedicated test - only manual/live verification. Task 17.7 also
+        found it live, the hard way: /deals 404'd on a fresh page load
+        until this rule was extended. Every path here must serve the
+        same built index.html (never a 404) so a hard refresh/typed URL
+        on any real React route works, matching what App.tsx actually
+        registers."""
+        real_react_paths = [
+            "/", "/deals",
+            "/projects/some-id", "/projects/some-id/documents", "/projects/some-id/findings",
+            "/projects/some-id/mandates", "/projects/some-id/mandates/some-mandate-id",
+            "/projects/some-id/work", "/projects/some-id/activity",
+            "/projects/some-id/decision-package", "/projects/some-id/readiness",
+            "/projects/some-id/reassessments", "/projects/some-id/triggers",
+        ]
+        for path in real_react_paths:
+            with self.subTest(path=path):
+                with urllib.request.urlopen(self._url(path)) as res:
+                    self.assertEqual(res.status, 200)
+                    self.assertIn("Deal Intelligence Lab", res.read().decode())
+
+    def test_spa_fallback_does_not_swallow_a_genuinely_unknown_path(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(self._url("/this-route-does-not-exist"))
+        self.assertEqual(ctx.exception.code, 404)
+
     def test_create_and_list_project_roundtrip(self):
         payload = json.dumps({"name": "Project Falcon", "description": "Target: Falcon Industries"}).encode()
         req = urllib.request.Request(

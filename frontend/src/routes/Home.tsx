@@ -8,27 +8,8 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  createProject,
-  getWorkspaceOverview,
-  listProjects,
-  type MaterialChangeEvent,
-  type Project,
-  type WorkspaceOverview,
-  type WorkspaceOverviewTask,
-} from "@/lib/api"
+import { getWorkspaceOverview, type MaterialChangeEvent, type WorkspaceOverview, type WorkspaceOverviewTask } from "@/lib/api"
 import { MANDATE_STATUS_LABELS } from "@/lib/mandateStatus"
 
 const TASK_STATUS_LABELS: Record<string, string> = {
@@ -40,6 +21,11 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 // distinction MandateList.tsx's own status labels already draw, applied
 // across every accessible deal instead of one.
 const MANDATE_ACTIVE_STATUSES = ["draft", "planning", "awaiting_approval", "active", "under_review"]
+
+// Overview shows only the most recently created deals; the full,
+// searchable list lives at /deals (Task 17.7) - see this file's own
+// "See all deals" link below.
+const RECENT_ENGAGEMENTS_LIMIT = 5
 
 function formatDate(isoString: string) {
   return new Date(isoString).toLocaleDateString(undefined, {
@@ -148,25 +134,14 @@ function MaterialChangesCard({ events }: { events: MaterialChangeEvent[] }) {
 }
 
 export function Home() {
-  const [projects, setProjects] = useState<Project[] | null>(null)
   const [overview, setOverview] = useState<WorkspaceOverview | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [formError, setFormError] = useState("")
-  const [submitting, setSubmitting] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
 
   async function reload() {
     try {
-      setProjects(await listProjects())
-    } catch {
-      toast.error("Could not load projects.")
-      setProjects([])
-    }
-    try {
       setOverview(await getWorkspaceOverview())
     } catch {
+      toast.error("Could not load the overview.")
       setOverview({ my_attention: [], engagements: [], material_changes: [] })
     }
   }
@@ -175,9 +150,16 @@ export function Home() {
     reload()
   }, [])
 
+  const recentEngagements = useMemo(() => {
+    if (!overview) return []
+    return [...overview.engagements]
+      .sort((a, b) => b.project.created_at.localeCompare(a.project.created_at))
+      .slice(0, RECENT_ENGAGEMENTS_LIMIT)
+  }, [overview])
+
   useGSAP(
     () => {
-      if (!projects || projects.length === 0) return
+      if (recentEngagements.length === 0) return
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
       gsap.from(".project-card", {
         opacity: 0,
@@ -187,200 +169,121 @@ export function Home() {
         stagger: 0.045,
       })
     },
-    { dependencies: [projects], scope: listRef },
+    { dependencies: [recentEngagements], scope: listRef },
   )
-
-  function openDialog() {
-    setName("")
-    setDescription("")
-    setFormError("")
-    setDialogOpen(true)
-  }
-
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault()
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      setFormError("Project name is required.")
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      await createProject(trimmedName, description.trim())
-      setDialogOpen(false)
-      toast.success("Project created.")
-      await reload()
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Something went wrong.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   // Quick actions' own disclosed simplification (see 17.6's task file):
   // jump to the most recently created accessible deal rather than
   // presenting a deal picker - fine at this product's current scale.
-  const mostRecentProjectId = useMemo(() => {
-    if (!projects || projects.length === 0) return null
-    return [...projects].sort((a, b) => b.created_at.localeCompare(a.created_at))[0].id
-  }, [projects])
+  const mostRecentProjectId = recentEngagements[0]?.project.id ?? null
 
   return (
-    <>
-      <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 space-y-6">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Overview</h1>
-          <p className="text-sm text-muted-foreground">What requires attention, and what could affect a decision.</p>
-        </div>
+    <div className="mx-auto max-w-3xl px-6 pt-8 pb-20 space-y-6">
+      <div>
+        <h1 className="font-heading text-2xl font-semibold text-foreground">Overview</h1>
+        <p className="text-sm text-muted-foreground">What requires attention, and what could affect a decision.</p>
+      </div>
 
-        {overview && overview.my_attention.length > 0 && (
-          <Card className="p-6">
-            <h2 className="font-heading text-lg font-semibold text-foreground">My attention</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Tasks assigned to you that need a review or a revision, across every deal.
-            </p>
-            <ul className="mt-3 space-y-2">
-              {overview.my_attention.map((task: WorkspaceOverviewTask) => (
-                <li key={task.id}>
-                  <Link
-                    to={`/projects/${task.project.id}`}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm hover:border-primary"
-                  >
-                    <span className="text-foreground">
-                      {task.title} <span className="text-muted-foreground">· {task.project.name}</span>
-                    </span>
-                    <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {TASK_STATUS_LABELS[task.status] ?? task.status}
-                    </span>
-                  </Link>
+      {overview && overview.my_attention.length > 0 && (
+        <Card className="p-6">
+          <h2 className="font-heading text-lg font-semibold text-foreground">My attention</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tasks assigned to you that need a review or a revision, across every deal.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {overview.my_attention.map((task: WorkspaceOverviewTask) => (
+              <li key={task.id}>
+                <Link
+                  to={`/projects/${task.project.id}`}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm hover:border-primary"
+                >
+                  <span className="text-foreground">
+                    {task.title} <span className="text-muted-foreground">· {task.project.name}</span>
+                  </span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                    {TASK_STATUS_LABELS[task.status] ?? task.status}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {overview && <MandatesSummaryCard overview={overview} />}
+
+      <Card className="p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-heading text-lg font-semibold text-foreground">Active engagements</h2>
+          <Link to="/deals" className="text-sm text-accent hover:underline">See all deals →</Link>
+        </div>
+        <div className="mt-3" ref={listRef}>
+          {overview === null ? (
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : recentEngagements.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center text-muted-foreground">
+              <div className="rounded-full bg-muted p-3">
+                <FolderOpen className="size-5" />
+              </div>
+              <p className="text-sm">No deals yet.</p>
+              <Button render={<Link to="/deals" />}>+ New deal</Button>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {recentEngagements.map((engagement) => (
+                <li key={engagement.project.id} className="project-card">
+                  <Card className="p-4 shadow-(--shadow-elevation-1) transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-(--shadow-elevation-2)">
+                    <Link to={`/projects/${engagement.project.id}`}>
+                      <div className="font-heading text-base font-semibold text-foreground">
+                        {engagement.project.name}
+                      </div>
+                      <div className="truncate text-sm text-muted-foreground">
+                        {engagement.project.description || "No description"}
+                      </div>
+                      <div className="mt-1.5 text-xs text-muted-foreground">
+                        Created {formatDate(engagement.project.created_at)}
+                      </div>
+                    </Link>
+                    <Link
+                      to={`/projects/${engagement.project.id}/mandates`}
+                      className="mt-2 inline-block text-xs text-accent hover:underline"
+                    >
+                      Mandates →
+                    </Link>
+                  </Card>
                 </li>
               ))}
             </ul>
-          </Card>
-        )}
+          )}
+        </div>
+      </Card>
 
-        {overview && <MandatesSummaryCard overview={overview} />}
+      <Card className="p-6">
+        <h2 className="font-heading text-lg font-semibold text-foreground">Quick actions</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button render={<Link to="/deals" />}>Create a deal</Button>
+          <Button
+            variant="secondary"
+            disabled={!mostRecentProjectId}
+            render={mostRecentProjectId ? <Link to={`/projects/${mostRecentProjectId}/mandates`} /> : undefined}
+          >
+            Create a mandate
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={!mostRecentProjectId}
+            render={mostRecentProjectId ? <Link to={`/projects/${mostRecentProjectId}/documents`} /> : undefined}
+          >
+            Upload evidence
+          </Button>
+        </div>
+      </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-heading text-lg font-semibold text-foreground">Active engagements</h2>
-            <Button onClick={openDialog}>+ New deal</Button>
-          </div>
-          <div className="mt-3" ref={listRef}>
-            {projects === null ? (
-              <div className="space-y-3">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-6 text-center text-muted-foreground">
-                <div className="rounded-full bg-muted p-3">
-                  <FolderOpen className="size-5" />
-                </div>
-                <p className="text-sm">No deals yet.</p>
-                <Button onClick={openDialog}>+ New deal</Button>
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {projects.map((project) => (
-                  <li key={project.id} className="project-card">
-                    <Card className="p-4 shadow-(--shadow-elevation-1) transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-(--shadow-elevation-2)">
-                      <Link to={`/projects/${project.id}`}>
-                        <div className="font-heading text-base font-semibold text-foreground">
-                          {project.name}
-                        </div>
-                        <div className="truncate text-sm text-muted-foreground">
-                          {project.description || "No description"}
-                        </div>
-                        <div className="mt-1.5 text-xs text-muted-foreground">
-                          Created {formatDate(project.created_at)}
-                        </div>
-                      </Link>
-                      <Link
-                        to={`/projects/${project.id}/mandates`}
-                        className="mt-2 inline-block text-xs text-accent hover:underline"
-                      >
-                        Mandates →
-                      </Link>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="font-heading text-lg font-semibold text-foreground">Quick actions</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={openDialog}>Create a deal</Button>
-            <Button
-              variant="secondary"
-              disabled={!mostRecentProjectId}
-              render={mostRecentProjectId ? <Link to={`/projects/${mostRecentProjectId}/mandates`} /> : undefined}
-            >
-              Create a mandate
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!mostRecentProjectId}
-              render={mostRecentProjectId ? <Link to={`/projects/${mostRecentProjectId}/documents`} /> : undefined}
-            >
-              Upload evidence
-            </Button>
-          </div>
-        </Card>
-
-        <MaterialChangesCard events={overview?.material_changes ?? []} />
-      </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <form onSubmit={handleSubmit}>
-            <DialogHeader>
-              <DialogTitle>New deal</DialogTitle>
-              <DialogDescription className="sr-only">
-                Create a new M&amp;A deal engagement.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="name">Deal name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  maxLength={200}
-                  autoFocus
-                  required
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  maxLength={5000}
-                />
-              </div>
-              {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating…" : "Create deal"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
+      <MaterialChangesCard events={overview?.material_changes ?? []} />
+    </div>
   )
 }

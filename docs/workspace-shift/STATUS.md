@@ -8,9 +8,9 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phase A (17.1-17.5) and Task 17.6 (Overview) are
-complete**; **the current task is 17.7, a distinct Deals destination**.
-This
+for the full plan. **Phase A (17.1-17.5) and Tasks 17.6-17.7 (Overview,
+Deals) are complete**; **the current task is 17.8, org-wide Mandates +
+the final nav-clarity pass** - the last Phase B item. This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
 for full detail.
@@ -5336,3 +5336,53 @@ decisions.
 separate from Overview). Continuing automatically.
 
 **Permissions needed**: none identified yet for 17.7.
+
+## 2026-09-27 — Task 17.7 executed (distinct Deals destination; a real SPA-fallback bug found and fixed)
+
+Full detail in `docs/workspace-shift/tasks/17.7-deals.md`. Summary: new
+top-level `/deals` route (`Deals.tsx`), separate from Overview, listing
+every accessible deal with real role information (from the existing
+`/memberships` route, same pattern `DecisionPackage.tsx`/`Triggers.tsx`
+already use), real task/mandate exposure counts (the honest stand-in
+for "current phase" - `store.Project` has no real phase field, so none
+was invented), the most recent material change per deal (derived from
+17.6's own already-fetched feed, zero new fetches), search, and the
+deal-creation dialog (moved here from `Home.tsx`, not duplicated).
+`Home.tsx`'s own Active Engagements now shows only the 5 most recent
+deals with a "See all deals" link, closing 17.6's own deferred trim.
+`AppSidebar.tsx` gained a real "Deals" link alongside a renamed
+"Overview" link (was "Projects").
+
+**Real bug found and fixed, not just a new feature**: hard-loading
+`/deals` 404'd - `server.py`'s SPA-fallback rule only ever matched `/`,
+`/projects`, and `/projects/...`, never a route outside that prefix.
+This is exactly the gap the 2026-09-27 re-entry audit flagged as having
+"no dedicated automated test yet... a real gap if this rule is ever
+changed carelessly." Fixed the rule and, this time, closed the test gap
+properly: two new tests in `tests/test_server.py` cover every real
+route `App.tsx` registers (including this task's own new one) and
+confirm a genuinely unknown path still 404s.
+
+**Verification**: full suite 863 tests OK; mypy clean; `tsc -b`/
+`oxlint`/`npm run build` clean; `node --test tests/frontend/*.test.mjs`
+5/5. Live Playwright check used a **hard page load** (not client
+navigation) specifically to exercise the SPA-fallback fix: `/deals`
+rendered the real deal with its real role badge/exposure count/latest-
+activity date; search filtered correctly; creating a second deal from
+`/deals` worked; Overview's trimmed section linked correctly back.
+
+**Files changed**: new `frontend/src/routes/Deals.tsx`,
+`frontend/src/App.tsx` (new route), `frontend/src/components/
+AppSidebar.tsx` (Deals link, Overview rename), `frontend/src/routes/
+Home.tsx` (trimmed, dialog removed), `server.py` (SPA-fallback fix),
+`tests/test_server.py` (2 new tests).
+
+**Decisions**: none - the phase-field omission and the deal-picker
+simplification both follow the program's own established honesty/
+disclosed-simplification conventions, not new product decisions.
+
+**Blockers**: none. **Next task**: 17.8 - org-wide Mandates destination
+plus the final navigation-clarity pass, closing Phase B. Continuing
+automatically.
+
+**Permissions needed**: none identified yet for 17.8.
