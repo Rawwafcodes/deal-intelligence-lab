@@ -1,5 +1,5 @@
 # Workspace Shift — portable build specification
-Version 1.1.0 · 17 September 2026 · Product direction baseline, extended with the Integrity Review integration (docs-only)
+Version 1.2.0 · 27 September 2026 · Product direction baseline, extended with the Integrity Review integration and the post-M17 validation/hosting/pilot roadmap (both docs-only)
 
 > Adoption status: this package is now part of the application repository.
 > Root `AGENTS.md` and `docs/product/README.md` are the current entry points.
@@ -38,6 +38,7 @@ senior decision-makers a live, traceable view of submitted work and conclusions.
 - [Acceptance and evaluation](docs/09-acceptance.md)
 - [Decisions and open questions](docs/10-decisions.md)
 - [Source provenance](docs/11-sources.md)
+- [Post-M17 roadmap: validation, secure hosting and commercial pilot (M18-M22)](docs/13-post-m17-roadmap.md)
 - [First agent assignment](tasks/000-adopt-and-audit.md)
 - [Reusable task contract](tasks/TEMPLATE.md)
 - [Illustrative mandate template](examples/reconciliation-template.json)

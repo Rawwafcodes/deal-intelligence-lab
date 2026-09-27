@@ -186,9 +186,60 @@ itself satisfy M16's own outstanding validation gates (independent
 scoring, recurring assertions, measured failure modes) and must not be
 read as doing so.
 
-## Later: online-readiness gate
-Not a prerequisite for M11–16. Local completion does not certify production safety.
-Separate authority for deployment, external access, real-data transfer and provider spend.
+## M18 — Product and Intelligence Validation (founder-directed, adopted 2026-09-27)
+Entry: M17 complete and on `origin/main` (satisfied, `70f03ca`). Full
+entry/exit criteria, required scenarios and measurement list:
+`docs/13-post-m17-roadmap.md`. Two tracks, both required.
+Track A: end-to-end product acceptance (S01-S20) across the integrated
+six-destination product with synthetic and authorized-historical data -
+additive to, not a replacement of, `09-acceptance.md`'s existing T01-T20.
+Track B: closes M16's outstanding validation gates (independent scoring,
+recurring reusable assertions, measured failure modes) with genuinely
+blind cases and locked answer keys - not the retrospective self-scoring
+already disclosed as a limitation. Provisional pass thresholds require
+founder approval before scoring starts; none are set in advance.
+Outcome: an explicit founder proceed/remediate/stop decision on whether
+the local product justifies secure online pilot investment. Local
+completion does not certify production safety and is not itself
+commercial validation.
+
+## M19 — Secure Online Foundation
+Entry: M18 exit gate satisfied. Hosting/database/storage/auth/CI-CD
+provider selection is deliberately open until this milestone's own
+architecture-decision task - no earlier document's provider mention is a
+decision. Preserves the existing mandate runtime, findings register,
+assertion ledger and `authz.py` policy through the migration; this is a
+hosting/security migration, not a rewrite. Full required implementation
+areas and exit gate: `docs/13-post-m17-roadmap.md`.
+Outcome: a privately-accessible staging environment with tenant
+isolation, authenticated multi-user access, durable background jobs,
+backup/restore, logging/alerting and an independent security review -
+real customer data remains prohibited until formally approved beyond
+this gate.
+
+## M20 — Commercial Pilot Readiness
+Entry: M19 exit gate satisfied. Defines segment, buyer, one bounded paid
+pilot offer, pricing hypothesis, legal/privacy/DPA/pilot-agreement
+material and support/onboarding process. Full required work and exit
+gate: `docs/13-post-m17-roadmap.md`.
+Outcome: a founder go/no-go decision for customer outreach.
+
+## M21 — Live Design-Partner Pilot
+Entry: M20 exit gate satisfied (go decision). Runs one controlled real
+engagement under signed pilot terms and measures customer value, not
+mere usage. Full required evidence and exit gate: `docs/13-post-m17-
+roadmap.md`.
+Outcome: one explicit conclusion - proceed, remediate and repeat,
+reposition, or stop - supported by customer and usage evidence.
+
+## M22 — Repeatability and Early Scale
+Entry: M21 concludes proceed (or remediate-and-repeat after
+remediation). Turns one successful pilot into repeatable delivery:
+standardized onboarding, validated pricing, further paying customers,
+retention and margin tracking. Full required work and exit gate:
+`docs/13-post-m17-roadmap.md`.
+Outcome: evidence the product can be sold and delivered repeatedly, not
+merely once.
 
 ## Global acceptance/rollback
 Each task: preserve baseline tests; add unit/integration/UI tests appropriate to changes;

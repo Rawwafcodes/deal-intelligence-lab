@@ -1,4 +1,15 @@
 # Change history
+## 1.2.0 — 2026-09-27
+Adopted the post-M17 roadmap (M18 Product and Intelligence Validation,
+M19 Secure Online Foundation, M20 Commercial Pilot Readiness, M21 Live
+Design-Partner Pilot, M22 Repeatability and Early Scale) as documentation
+and planning only, following M17's confirmed completion and push to
+`origin/main` (`70f03ca`). New `docs/13-post-m17-roadmap.md`; `10-
+decisions.md` D17; `08-roadmap.md` M18-M22 pointer entries. M16's
+outstanding validation gates are incorporated into M18 Track B, not
+marked complete; provider/hosting selection remains deferred to M19. No
+code, schema, deployment or paid-call authorization changed.
+
 ## 1.1.0 — 2026-09-17
 Adopted the externally-supplied `workspace-integrity-integration` v1.0.0
 package as a documentation/roadmap integration (preserved in full at

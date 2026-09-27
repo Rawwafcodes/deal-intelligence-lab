@@ -222,6 +222,47 @@ requests already sent to them with real `management_response` controls
 needed to answer those requests," which had no frontend surface at all
 before this task despite the backend already supporting it.
 
+D17 (added 2026-09-27) Adopt the post-M17 roadmap (M18 Product and
+Intelligence Validation, M19 Secure Online Foundation, M20 Commercial
+Pilot Readiness, M21 Live Design-Partner Pilot, M22 Repeatability and
+Early Scale) as the approved path from the M17 local-integrated-product
+baseline to a validated, securely hosted and commercially pilotable
+product. Full detail, entry/exit criteria and measurement requirements:
+`docs/13-post-m17-roadmap.md`; short dependency-ordered pointers:
+`08-roadmap.md`'s own M18-M22 entries. Documentation and planning only -
+no M18 implementation, infrastructure provisioning, Anthropic API call,
+deployment, data migration or new dependency was introduced by this
+decision. Context and explicit carry-forwards, recorded here rather than
+left implicit:
+- Milestones are evidence gates, not calendar periods; engineering
+  completion is not commercial validation; local test success is not
+  production security; a deployed application is not automatically
+  pilot-ready; a pilot is not proof of repeatability - carried forward
+  from the founder's own stated planning principles, binding on every
+  M18-M22 task.
+- M16's outstanding validation gates (independent scoring, recurring
+  reusable assertions, measured failure modes - see this file's own O07
+  and `08-roadmap.md`'s M16 entry) are **incorporated into M18 Track B,
+  not marked complete** by this decision or by M17's own completion.
+  Proceeding past M16 in the milestone sequence did not and does not
+  close those gates.
+- Deployment/provider selection (hosting, database, storage, auth,
+  secrets, CI/CD) remains explicitly open until M19's own
+  architecture-decision task, per the same discipline O01/O03 already
+  applied to the frontend/database choices in M11-M13 - no earlier
+  document's mention of any provider is a decision, and this decision
+  does not select one.
+- Real customer data remains prohibited until M19's exit gate and M20's
+  legal/security work are satisfied; this decision does not authorize
+  any customer-data use.
+- `docs/13-post-m17-roadmap.md`'s own "Open founder decisions" and
+  "External dependencies" sections are a register, not a decision record
+  - each becomes its own dated D18+ entry here only when the founder
+  actually decides it.
+- All previous roadmap history (M10-M17), decisions (D01-D16) and status
+  entries are preserved unchanged; this is an additive extension, not a
+  competing planning system.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

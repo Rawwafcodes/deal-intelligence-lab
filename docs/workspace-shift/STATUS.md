@@ -5,21 +5,29 @@ original package-version paragraph below is retained as historical provenance;
 use the newest dated entry and the actual checkout for current implementation
 state.
 
-**2026-09-27 update**: a founder-directed product-integration program (M17)
-is now **complete - all six phases (A-F, Tasks 17.1-17.13)** - see
-`docs/workspace-shift/docs/08-roadmap.md`'s own M17 entry and
-`docs/workspace-shift/tasks/17.0-product-integration-program.md` for the
-full plan and closing state. The founder decided D15 (`docs/10-
-decisions.md`) on the assertion-ledger/reconciler question. Task 17.13's
-live two-identity verification (Phase F, final) found and disclosed two
-real gaps requiring a founder decision before any further work touches
-them: an expanded restricted-view boundary gap and a permission-unaware
-Approve/Return button in `Work.tsx` - see this file's own 2026-09-27
-Task 17.13 entry (bottom) for full detail. **This program's own final
-completion report follows this file's newest entries.** This supersedes
-the "Current task"/"Next recommended" lines below as the up-to-date
-pointer; see this file's own newest dated entries (bottom) for full
-detail.
+**2026-09-27 update (supersedes everything below in this header)**: the
+founder-directed product-integration program (M17) is **complete in its
+entirety - all six phases (A-F, Tasks 17.1-17.13) plus the Task 17.14
+authorization closeout (D16)** - see `docs/workspace-shift/docs/
+08-roadmap.md`'s own M17 entry, `docs/workspace-shift/tasks/
+17.0-product-integration-program.md` (Status: complete), and this file's
+own "M17 program - completion report addendum" (immediately after the
+Task 17.14 entry) for the full closing state. The founder decided D15 on
+the assertion-ledger/reconciler question and D16 on centralized
+role-based authorization, closing both gaps Task 17.13 disclosed. All
+M17-program commits through `70f03ca` are confirmed pushed to
+`origin/main`.
+
+A founder-directed post-M17 roadmap (M18 Product and Intelligence
+Validation, M19 Secure Online Foundation, M20 Commercial Pilot Readiness,
+M21 Live Design-Partner Pilot, M22 Repeatability and Early Scale) was
+then adopted as documentation/planning only (D17; full detail
+`docs/workspace-shift/docs/13-post-m17-roadmap.md`; short pointers
+`08-roadmap.md`'s own M18-M22 entries) - see this file's matching
+2026-09-27 "Post-M17 roadmap adopted" entry (bottom) for the full record.
+**M18 is next; no M18 implementation has begun.** This supersedes the
+"Current task"/"Next recommended" lines below as the up-to-date pointer;
+see this file's own newest dated entries (bottom) for full detail.
 
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
@@ -5953,3 +5961,126 @@ of the M17 program (`149c4a0` through this task's own commit) remain
 held locally per the program's standing "do not push without separate
 explicit approval" instruction - unchanged by this task, and this
 task's own directive explicitly repeated "do not push."
+
+## M17 program — completion report addendum
+
+Referenced by the two entries directly above and by this file's own
+"Continuation state" header. This addendum does not add new verification
+claims beyond what the Task 17.13/17.14 entries above already record; it
+is the consolidated closing summary those entries pointed to.
+
+**Final state**: all six phases (A-F, Tasks 17.1-17.13) plus the Task
+17.14 security closeout are complete. The six-destination React product
+(Overview, Deals, Mandates, Documents, Findings, Activity) reaches every
+backend-complete capability through M16 with no normal workflow
+requiring a hand-typed legacy URL, per this program's own acceptance
+criteria in `tasks/17.0-product-integration-program.md`. Centralized,
+backend-enforced, capability-based authorization (`authz.py`, D16)
+replaced plain deal-membership gating for all four `identity.DEAL_ROLES`.
+Founder decision D15 wired `assertion_ledger.py` into the accept-decision
+path with a real Findings-register surface; `reconciler.py` remains
+unwired pending a fact-extraction pipeline, per D15's own scope.
+
+**Test/build evidence at closeout** (from the Task 17.14 entry above):
+910 backend tests (0 failures), mypy clean, frontend `tsc -b`/`oxlint`
+clean, `npm run build` clean, `tests/frontend/*.test.mjs` 5/5, plus real
+Playwright live-browser verification across four independent
+authenticated sessions.
+
+**Two gaps disclosed during Phase F and closed during the closeout**
+(Task 17.13's finding, Task 17.14's fix): destination-level role gating
+beyond Overview/Activity, and `Work.tsx`'s role-unaware Approve/Return
+controls. Both are recorded above; neither remains open.
+
+**Outstanding, not closed by M17**: M16's own validation gates
+(independent scoring, recurring reusable assertions, measured failure
+modes) were never in scope for M17 (an integration/product-architecture
+phase, not new analytical validation) and remain open - see this file's
+M16 gate-check entry and `docs/10-decisions.md`'s O07. These, plus a
+first genuinely blind human-scored evaluation and a full product-
+acceptance pass, are now M18 Track A/B's scope; see
+`docs/13-post-m17-roadmap.md` and `docs/10-decisions.md`'s D17.
+
+**Push status**: all 14 M17-program commits (`149c4a0` through
+`70f03ca`), plus this file's own subsequent entries, were pushed to
+`origin/main` (confirmed via `git ls-remote`/`git fetch` at the start of
+the 2026-09-27 roadmap-adoption task below) - the "held locally" note in
+the two entries above reflects the state at the time those tasks were
+executed, not the current state.
+
+## 2026-09-27 — Post-M17 roadmap adopted (M18-M22 planning, D17)
+
+**Baseline**: confirmed via `git ls-remote origin` and `git fetch` that
+the M17 commit range through `70f03ca` (`149c4a0`..`70f03ca`) is already
+on `origin/main`; working tree clean on `claude/gifted-turing-79cs5r`.
+
+**Scope**: documentation and planning only, per explicit founder
+instruction. No M18 implementation, infrastructure provisioning,
+Anthropic API call, deployment, data migration or new dependency was
+introduced. Adopted the approved post-M17 milestone sequence - M18
+(Product and Intelligence Validation), M19 (Secure Online Foundation),
+M20 (Commercial Pilot Readiness), M21 (Live Design-Partner Pilot), M22
+(Repeatability and Early Scale) - as evidence-gated milestones with
+explicit entry/exit criteria, founder/customer/adviser dependencies, and
+the planning principles listed in `docs/10-decisions.md`'s new D17.
+
+**Files changed**: new `docs/workspace-shift/docs/13-post-m17-roadmap.md`
+(full entry/exit criteria, M18 Track A's S01-S20 product-acceptance
+scenarios and Track B's intelligence-validation methodology, M19's
+required architecture-decision inputs and implementation areas, M20-M22's
+required work and exit gates, an open-founder-decisions register and an
+external-dependencies register); `docs/08-roadmap.md` (M18-M22 short
+pointer entries replacing the stale "Later: online-readiness gate"
+placeholder); `docs/10-decisions.md` (new D17); `docs/workspace-shift/
+tasks/17.0-product-integration-program.md` (Status header corrected from
+`in_progress` to `complete`, matching its own phase table); this file
+(this entry, the M17 completion-report addendum above, and the
+"Continuation state" header); `README.md` (nav link to the new document);
+`CHANGELOG.md` (new 1.2.0 entry); `docs/product/06-truth-register.md`
+(pointer to the new document from the open production/product decisions
+it already lists).
+
+**Conflicts found and reconciled**: (1) `STATUS.md`'s own "Continuation
+state" header and the Task 17.13/17.14 entries referenced a "completion-
+report addendum" that was never actually written - added above rather
+than left dangling. (2) `tasks/17.0-product-integration-program.md`'s
+Status header said `in_progress` while its own phase table showed every
+phase complete - corrected. (3) `docs/product/05-current-product-map.md`
+is stale (written before M17's own React-surface and Overview/Deals/
+Mandates/Findings consolidation work) but re-verifying and rewriting it
+against the current checkout is implementation-adjacent engineering
+work, not documentation/planning - left unchanged and flagged here
+rather than rewritten under this task's own "no M18 implementation"
+constraint; re-verifying it is a natural, low-risk first action inside
+M18 Track A. (4) No competing M18-M22 planning document existed; nothing
+else conflicted.
+
+**Decisions**: D17 (`docs/10-decisions.md`) - adoption of the M18-M22
+roadmap, explicit that M16's gates are incorporated into M18 rather than
+marked complete, and that provider/hosting selection stays deferred to
+M19.
+
+**Founder decisions left open**: see `docs/13-post-m17-roadmap.md`'s own
+"Open founder decisions" register - M18 Track B's provisional pass
+thresholds and blind-case selection; M19's full architecture selection
+and security-review method; M20's segment/buyer/offer/pricing/legal
+choices; the M19/M20 data-use approval itself. None are decided by this
+task.
+
+**External dependencies disclosed**: independent human evaluators (M18
+Track B); a security reviewer (M19); legal/professional advisers (M20);
+a design-partner customer (M20-M21); a hosting/database/storage/auth
+provider (selected only at M19). Full register:
+`docs/13-post-m17-roadmap.md`.
+
+**Verification**: ran `python3 docs/workspace-shift/scripts/check_spec.py`
+- passed (internal Markdown links, JSON, stage IDs and dependencies).
+This validates the documentation package only; it does not test the
+application, and none of the application was touched by this task.
+
+**Blockers**: none for this task's own scope.
+
+**Permissions needed**: none for the documentation change itself. Per
+this repository's standing rule and this task's own explicit
+instruction, the resulting commit is not pushed without separate
+authorization.

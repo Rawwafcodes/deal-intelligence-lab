@@ -46,6 +46,15 @@ evidence.
 
 ## Open product decisions
 
+Full milestone-by-milestone detail, entry/exit criteria and an explicit
+open-decisions/external-dependencies register for the approved path from
+the completed local product (M17) to a secured, hosted, commercially
+piloted one (M18-M22) live in
+`docs/workspace-shift/docs/13-post-m17-roadmap.md`
+(`docs/workspace-shift/docs/10-decisions.md`'s D17). The items below are
+not superseded by that document; M20 is where several of them get
+answered with real evidence.
+
 - Final product and company name.
 - Exact first customer segment and buyer title.
 - First paid offer and its deliverable boundary.
@@ -57,6 +66,12 @@ evidence.
   recall and false-positive performance.
 
 ## Open production decisions
+
+These are the exact inputs M19's own "required architecture decision"
+inspects and compares before implementation - see
+`docs/workspace-shift/docs/13-post-m17-roadmap.md`'s M19 section.
+Provider/hosting selection is deliberately deferred to that milestone;
+no mention of any provider anywhere in this repository is a decision.
 
 - Hosting and service boundaries.
 - Managed database and object-storage providers.
