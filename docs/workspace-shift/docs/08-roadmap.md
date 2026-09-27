@@ -239,56 +239,81 @@ and the customer-facing half of #25 (usage/cost reporting). Full
 required work and exit gate: `docs/13-post-m17-roadmap.md`.
 Outcome: a founder go/no-go decision for customer outreach.
 
-## M21 — Live Design-Partner Pilot
-Entry: M20 exit gate satisfied (go decision). Runs one controlled real
-engagement under signed pilot terms and measures customer value, not
-mere usage. Uses existing surfaces as they stand at M20's close; adds a
-new one only in response to a specific blocking incident the pilot
-itself surfaces, never for completeness. Full required evidence and exit
-gate: `docs/13-post-m17-roadmap.md`.
+## M21 — Paid Design-Partner Pilots (D19; supersedes D18's "Live Design-Partner Pilot" naming)
+Entry: M20 exit gate satisfied (go decision). Runs controlled **paid**
+engagements (one or more design partners) and measures customer value
+under paid terms, not a free trial. Uses existing surfaces as they stand
+at M20's close; adds a new one only in response to a specific blocking
+incident the pilot itself surfaces, never for completeness. A login or
+free demonstration is not commercial traction. Full required evidence
+and exit gate: `docs/13-post-m17-roadmap.md`.
 Outcome: one explicit conclusion - proceed, remediate and repeat,
 reposition, or stop - supported by customer and usage evidence.
 
-## M22 — Repeatability and Early Scale
+## M22 — Product Learning and Unit Economics (D19; supersedes D18's merged "Repeatability and Early Scale")
 Entry: M21 concludes proceed (or remediate-and-repeat after
-remediation). Turns one successful pilot into repeatable delivery:
-standardized onboarding, validated pricing, further paying customers,
-retention and margin tracking. Refines, removes or adds a surface only
-from measured M21 pilot evidence, not speculation about a second
-customer. Full required work and exit gate: `docs/13-post-m17-
+remediation). Uses M21's real evidence to determine what customers
+genuinely use, what needs founder assistance, what to fix/remove/
+simplify, and unit economics (revenue, AI/infrastructure cost, support
+hours, gross margin, conversion, retention, pricing viability).
+Deliberately narrower than D18's version - standardizing onboarding and
+acquiring further customers now belong to M23, not here. Analysis and
+decision, not delivery. Full required work and exit gate: `docs/13-
+post-m17-roadmap.md`.
+Outcome: a real, evidenced specification of what M23's repeatable
+product must contain - not itself a repeatable product.
+
+## M23 — Repeatable Commercial Product (D19; renamed/refocused from D18's "Repeatable Commercial and Customer-Administration Experience")
+Entry: M22 exit gate satisfied (an evidenced product specification
+exists). Builds what M22 specified: standardized onboarding, repeatable
+deal setup, reliable professional templates, stable packaging/pricing,
+customer administration (self-serve form of canonical surfaces #23-25 -
+Team and Access, Organization Settings, Usage and Billing - beyond M19/
+M20's staging/pilot minimums), a real Invitation/onboarding flow (#6,
+generalized beyond M20's founder-assisted version), repeatable support
+and sales demonstration, and canonical surfaces #1-4 (public marketing
+pages) if the founder judges outbound/self-serve acquisition now
+justifies them. This roadmap's own governing rule: **the architecture is
+mapped now, developed gradually, and commercially complete by M23** -
+this is that completion point. Also where the M18 25-surface
+reconciliation's still-open founder decisions (the four non-canonical
+destinations; Document Detail) must be closed if not already resolved
+earlier. Full required work and exit gate: `docs/13-post-m17-
 roadmap.md`.
-Outcome: evidence the product can be sold and delivered repeatedly, not
-merely once.
-
-## M23 — Repeatable Commercial and Customer-Administration Experience
-Entry: M22 exit gate satisfied. Completes the self-serve form of
-canonical surfaces #23-25 (Team and Access, Organization Settings, Usage
-and Billing) beyond M19/M20's staging/pilot minimums, and canonical
-surfaces #1-4/#6 (public marketing pages, generalized onboarding) if a
-repeatable commercial motion now justifies them - not before, per this
-roadmap's own "do not add features merely to make a milestone look
-substantial." Also where the M18 25-surface reconciliation's still-open
-founder decisions (the four non-canonical destinations; Document Detail)
-must be closed if not already resolved earlier. Full required work and
-exit gate: `docs/13-post-m17-roadmap.md`.
 Outcome: a new customer can be onboarded, self-administer their
-organization, and be billed, without a founder performing a manual step
-on their behalf - demonstrated with a real customer.
+organization, and be billed, without a founder performing a manual
+step on their behalf; multiple paying customers and at least one repeat
+engagement - demonstrated with real customers.
 
-## M24 — Enterprise Identity, Audit, Compliance and Isolated Deployment
+## M24 — Enterprise and Regulated-Market Readiness (D19; renamed from D18's "Enterprise Identity, Audit, Compliance and Isolated Deployment")
 Entry: M23 exit gate satisfied, and a real named customer requirement
 triggers it - never built speculatively against no named requirement.
-Full required work and exit gate: `docs/13-post-m17-roadmap.md`.
+Adds enterprise identity/SSO, advanced access control, extended audit,
+data residency (including Saudi/GCC regulated-customer requirements
+where named), penetration testing, compliance mapping, procurement
+documentation, SLA/disaster-recovery and isolated deployment - an
+addition on top of M23's finished basic product, per this roadmap's own
+governing rule, not a substitute for finishing it. Full required work
+and exit gate: `docs/13-post-m17-roadmap.md`.
 Outcome: the specific named requirement that triggered this milestone is
 satisfied and verified against that requirement, not a generic checklist.
 
-## M25 — Scalable Operational Capabilities
-Entry: M22/M23 evidence shows customer/usage volume M19's staging-scale
-architecture cannot comfortably continue to serve - measured, not
-assumed. Deliberately unspecified in detail until that evidence exists.
-Full framing and exit gate: `docs/13-post-m17-roadmap.md`.
-Outcome: a specific, measured scale problem is resolved with a stated
-before/after metric.
+## M25 — Scalable Growth (D19; broadened from D18's narrower "Scalable Operational Capabilities")
+Entry: M23 (and M24, if triggered) exit gates satisfied, and M22/M23
+evidence shows a growth or scale opportunity/problem - measured or
+evidenced, not assumed. Growth-oriented, not only infrastructure:
+repeatable customer acquisition, scalable onboarding/customer success,
+engineering ownership, operational automation, margin improvement,
+regional/international expansion, partnerships, model/provider
+optimization at volume, evidence-backed fundraising material, and
+acquisition positioning if strategically relevant. This roadmap's own
+governing rule: **M25 is for scaling, not finishing the basic product**
+- any item that turns out to be unfinished M23 product work belongs
+there, not here. Full framing and exit gate: `docs/13-post-m17-
+roadmap.md`.
+Outcome: a specific, measured growth or scale problem is resolved with a
+stated before/after metric - M25 does not retroactively finish M23's
+commercial product.
 
 ## Global acceptance/rollback
 Each task: preserve baseline tests; add unit/integration/UI tests appropriate to changes;

@@ -13,6 +13,17 @@ pre-dated M17 and was stale (see that file's own updated note).
 Re-verify against the actual checkout before relying on this file for a
 later revision - it is a snapshot, not a live view.
 
+**Note on D19**: the same day, the founder renamed and partly redefined
+M21-M25 (`docs/workspace-shift/docs/10-decisions.md` D19) - most visibly,
+splitting what D18 called M22 into a learning milestone (M22, produces a
+specification) and a delivery milestone (M23, builds it). Every
+milestone assignment in this file already lands on M19/M20/M23 for the
+absent administrative surfaces and M18 for in-product gaps - none of
+those assignments point at the old, now-superseded M22 delivery meaning,
+so nothing here needed to change. Where a table cell below says "M22
+evidence", it means the product-learning output D19's M22 now produces,
+consumed by D19's M23.
+
 **25 pages is not 25 equal navigation tabs.** Six destinations
 (Overview, Deals, Mandates, Documents, Findings, Activity) are primary
 navigation. Every other canonical surface is a contextual deal-level,
@@ -33,35 +44,104 @@ static page. No claim below is inferred from a milestone title or an
 earlier STATUS.md narrative alone - each was checked directly against
 the current source.
 
-## Summary table
+## Reconciliation table
 
-| # | Surface | Scope | Current route | Backend | Frontend | Classification | Target milestone |
-|---|---|---|---|---|---|---|---|
-| 1 | Public homepage | Public | none | none | none | missing | M23 |
-| 2 | Product / how it works | Public | none | none | none | missing | M23 |
-| 3 | Security and trust | Public | none | none | none | missing | M23 |
-| 4 | Request pilot / contact | Public | none | none | none | missing | M23 |
-| 5 | Sign in | Access | none (dev identity switcher only) | dev-only session (`identity.create_session`/`_handle_dev_session_login`) | `IdentityFooter`'s dev-identity `<select>`, not a sign-in page | static-only (dev stub) | M19 |
-| 6 | Invitation / onboarding | Access | none | `add_organization_membership`/`add_deal_membership` exist, no invite/token flow, no route | none | missing | M20 |
-| 7 | Workspace Overview | Organization/user | `/` (`Home.tsx`) | real, permission-filtered aggregate routes | complete (5-component Overview, Task 17.6) | complete | M18 (founder acceptance) |
-| 8 | Deals | Organization/user | `/deals` (`Deals.tsx`) | real | complete (Task 17.7) | complete | M18 |
-| 9 | Deal Overview | Deal | `/projects/:id` index (`DealOverview.tsx`) | real | complete, incl. restricted `external_executive` view | complete | M18 |
-| 10 | Mandates | Organization or deal | `/mandates` (`MandatesHome.tsx`) + `/projects/:id/mandates` (`MandateList.tsx`) | real, unified composer/registry | complete, two contextual instances of one canonical surface (Task 17.8/17.9) | complete | M18 |
-| 11 | Mandate Detail | Mandate | `/projects/:id/mandates/:mandateId` (`MandateDetail.tsx`) | real (plan/approval/run/checkpoint) | complete | complete | M18 |
-| 12 | Documents | Active deal | `/projects/:id/documents` (`Documents.tsx`) | real | complete (upload, list, filter) | complete | M18 |
-| 13 | Document Detail | Document/version | none dedicated - `href` opens the raw file inline (`.../documents/<id>/download?inline=1`) | version storage exists, no detail endpoint | raw browser file view only, no in-app version history/citation-backlink panel | **partial** | M18 (essential-gap decision) |
-| 14 | Findings | Active deal | `/projects/:id/findings` (`Findings.tsx`) | real, unified across cross-format and Integrity Review origins (Task 17.11) | complete | complete | M18 |
-| 15 | Finding Detail | Finding | inline expansion inside `Findings.tsx`, not a separate route | real | complete as an inline component (not a page - correctly not a standalone route) | complete | M18 |
-| 16 | Workstreams and Tasks | Deal | `/projects/:id/work` (`Work.tsx`) | real | complete | complete | M18 |
-| 17 | Submission Review | Submission version | inside `Work.tsx`'s `WorkProductItem`, not a separate route | real (approve/return, capability-gated) | complete as a component within Work | complete | M18 |
-| 18 | Information Requests | Deal/finding | `RequestDialog` panel launched from `Findings.tsx`, not a separate route | real (`workspaces.py` request routes, Task 17.1) | complete as a panel | complete | M18 |
-| 19 | Decision Package | Deal/workspace | `/projects/:id/decision-package` (`DecisionPackage.tsx`) | real (`decision_package.py`/`deliverables.py`) | complete | complete | M18 |
-| 20 | Activity | Active deal | `/projects/:id/activity` (`Activity.tsx`) | real | complete | complete | M18 |
-| 21 | Validation Cases | Internal validation | `static/validation.html` (external link from deal sidebar) | real, unchanged | static-only, deliberate | static-only (correct, see below) | none - preserve as-is |
-| 22 | Validation Case / Report | Internal validation | `static/validation-case.html`, `static/validation-evaluation.html` | real, unchanged | static-only, deliberate | static-only (correct) | none - preserve as-is |
-| 23 | Team and Access | Organization/deal | none | deal-level grant/revoke exists (`_handle_grant_membership`/`_handle_revoke_membership`); org-level `add_organization_membership` has no HTTP route at all | none - deal-level endpoints exercised only by tests/curl, never a UI | missing | M19 (minimum for staging), M23 (full self-serve) |
-| 24 | Organization Settings | Organization | none | `create_organization`/`get_organization` exist as internal functions; no create/update HTTP route; organizations exist only via seed data | none | missing | M19 (minimum), M23 (full self-serve) |
-| 25 | Usage and Billing | Organization | none | only a per-mandate-run budget ledger (`budget_limit`/`budget_consumed`, Task 12.2); no org-level usage/cost aggregation, no billing anything | none | missing | M19 (budget/rate limits only), M20 (usage/cost reporting), M23 (real billing) |
+Split into three linked tables (by `#`) so each fits legibly: identity/
+purpose, implementation status, and planning. Together they cover every
+field this reconciliation is required to record: canonical name,
+intended user, scope, intended purpose, current route, implementation
+status, backend support, frontend support, classification, dependencies,
+target milestone, and acceptance test.
+
+### Identity and purpose
+
+| # | Surface | Intended user | Scope | Intended purpose |
+|---|---|---|---|---|
+| 1 | Public homepage | Prospective customer / public visitor | Public | Explain what the product is, before any sign-in |
+| 2 | Product / how it works | Prospective customer | Public | Explain the workflow/value proposition |
+| 3 | Security and trust | Prospective customer's security/procurement reviewer | Public | Pre-empt security/compliance questions before a sales conversation |
+| 4 | Request pilot / contact | Prospective customer | Public | Capture outbound interest |
+| 5 | Sign in | Any user | Access | Authenticate before reaching any organization/deal data |
+| 6 | Invitation / onboarding | Newly invited user | Access | Get an invited person into their first organization/deal safely |
+| 7 | Workspace Overview | Any authenticated org member | Organization/user | "What requires attention and what could affect a decision?" (5 components, per `02-...md`) |
+| 8 | Deals | Any authenticated org member | Organization/user | List/filter every deal the caller can access |
+| 9 | Deal Overview | Deal member, incl. restricted `external_executive` | Deal | Latest approved position, urgent matters, responsibilities, active mandates |
+| 10 | Mandates | Org member (org-wide) or deal member (deal-scoped) | Organization or deal | Configure/track AI mandates in one place |
+| 11 | Mandate Detail | Deal member reviewing/approving a run | Mandate | Plan, approval, run and checkpoint detail for one mandate |
+| 12 | Documents | Analyst/reviewer/lead | Active deal | Upload and register source documents/versions |
+| 13 | Document Detail | Deal member reviewing one document/version | Document/version | Inspect one document's content, versions and citation backlinks |
+| 14 | Findings | Deal member reviewing analytical output | Active deal | One findings register across every analysis origin |
+| 15 | Finding Detail | Deal member drilling into one finding | Finding | Full evidence/lineage for one finding |
+| 16 | Workstreams and Tasks | Analyst/reviewer/lead executing work | Deal | Assign and track work inside a deal |
+| 17 | Submission Review | Reviewer/deal lead | Submission version | Approve/return a specific immutable work-product version |
+| 18 | Information Requests | Deal member requesting/responding, incl. `external_executive` | Deal/finding | Ask for and answer specific evidence/clarification |
+| 19 | Decision Package | Deal lead/reviewer | Deal/workspace | Produce the reviewed, approved final position |
+| 20 | Activity | Deal member auditing history | Active deal | Chronological audit trail for one deal |
+| 21 | Validation Cases | Internal quality reviewer (founder/internal QA) - **not the customer** | Internal validation | List internal-only accuracy-validation cases |
+| 22 | Validation Case / Report | Internal quality reviewer | Internal validation | One validation case's locked answer key and scored report |
+| 23 | Team and Access | Organization/deal administrator | Organization/deal | Invite, role, and revoke people |
+| 24 | Organization Settings | Organization administrator | Organization | Create/rename/configure the tenant itself |
+| 25 | Usage and Billing | Organization administrator / buyer | Organization | See and control AI/infrastructure usage and cost |
+
+### Implementation status
+
+| # | Current route | Implementation status | Backend support | Frontend support | Classification |
+|---|---|---|---|---|---|
+| 1 | none | Never built | none | none | missing |
+| 2 | none | Never built | none | none | missing |
+| 3 | none | Never built | none | none | missing |
+| 4 | none | Never built | none | none | missing |
+| 5 | none (dev identity switcher only) | Dev-only stand-in used throughout M11-M17, never a real sign-in | `identity.create_session`/`_handle_dev_session_login` (dev-only) | `IdentityFooter`'s dev-identity `<select>` | static-only (dev stub) |
+| 6 | none | Never built | `add_organization_membership`/`add_deal_membership` exist as internal functions; no invite/token flow; no route | none | missing |
+| 7 | `/` (`Home.tsx`) | Complete, 5-component Overview (Task 17.6) | real, permission-filtered aggregate routes | complete | complete |
+| 8 | `/deals` (`Deals.tsx`) | Complete (Task 17.7) | real | complete | complete |
+| 9 | `/projects/:id` index (`DealOverview.tsx`) | Complete, incl. restricted `external_executive` view | real | complete | complete |
+| 10 | `/mandates` (`MandatesHome.tsx`) + `/projects/:id/mandates` (`MandateList.tsx`) | Complete, two contextual instances of one canonical surface (Task 17.8/17.9) | real, unified composer/registry | complete | complete |
+| 11 | `/projects/:id/mandates/:mandateId` (`MandateDetail.tsx`) | Complete | real (plan/approval/run/checkpoint) | complete | complete |
+| 12 | `/projects/:id/documents` (`Documents.tsx`) | Complete (upload, list, filter) | real | complete | complete |
+| 13 | none dedicated - `href` opens the raw file inline (`.../documents/<id>/download?inline=1`) | Only a raw browser file view; no in-app version history/citation-backlink panel | version storage exists, no detail endpoint | raw file view only | **partial** |
+| 14 | `/projects/:id/findings` (`Findings.tsx`) | Complete, unified across cross-format and Integrity Review origins (Task 17.11) | real | complete | complete |
+| 15 | inline expansion inside `Findings.tsx`, not a separate route | Complete as a component - correctly not a standalone route | real | complete | complete |
+| 16 | `/projects/:id/work` (`Work.tsx`) | Complete | real | complete | complete |
+| 17 | inside `Work.tsx`'s `WorkProductItem`, not a separate route | Complete as a component within Work | real (approve/return, capability-gated) | complete | complete |
+| 18 | `RequestDialog` modal launched from `Findings.tsx`, not a separate route | Complete as a modal dialog | real (`workspaces.py` request routes, Task 17.1) | complete | complete |
+| 19 | `/projects/:id/decision-package` (`DecisionPackage.tsx`) | Complete | real (`decision_package.py`/`deliverables.py`) | complete | complete |
+| 20 | `/projects/:id/activity` (`Activity.tsx`) | Complete | real | complete | complete |
+| 21 | `static/validation.html` (external link from deal sidebar) | Deliberately static, not migrated - disclosed exception | real, unchanged | static-only, deliberate | static-only (correct - see below) |
+| 22 | `static/validation-case.html`, `static/validation-evaluation.html` | Deliberately static, not migrated | real, unchanged | static-only, deliberate | static-only (correct) |
+| 23 | none | Deal-level exists, exercised only by tests/curl; org-level has no route at all | deal-level grant/revoke (`_handle_grant_membership`/`_handle_revoke_membership`); org-level `add_organization_membership` has no HTTP route | none - no UI at either level | missing |
+| 24 | none | Never built beyond internal seed-time functions | `create_organization`/`get_organization` exist as internal functions; zero HTTP callers confirmed; organizations exist only via seed data | none | missing |
+| 25 | none | Only a per-run budget ledger, no org-level view | per-mandate-run budget ledger (`budget_limit`/`budget_consumed`, Task 12.2) only; no org-level usage/cost aggregation, no billing | none | missing |
+
+### Planning
+
+| # | Dependencies | Target milestone | Acceptance test |
+|---|---|---|---|
+| 1 | A repeatable commercial motion to justify building it (M22 evidence) | M23 | none (out of local-product S01-S20 scope) |
+| 2 | Same as #1 | M23 | none |
+| 3 | Same as #1; M20's security-questionnaire content can seed its copy | M23 | none |
+| 4 | Same as #1; may be pulled forward into M20 if outreach needs it | M23 (optionally M20) | none |
+| 5 | M19's architecture/provider decision | M19 | T04 (revoked user loses access); S20 (concurrent identities) |
+| 6 | M19's identity provider decision | M20 | S01 (create/enter an organization); S03 (establish users and roles) |
+| 7 | none - already complete | M18 (founder acceptance only) | S17 (material changes and activity) |
+| 8 | none | M18 | S02 (create/open a deal) |
+| 9 | none | M18 | S02; S18 (restricted external-executive experience) |
+| 10 | none | M18 | S10 (create and execute mandates); S11 (starting structures) |
+| 11 | none | M18 | S10 |
+| 12 | none | M18 | S06 (upload documents and document versions) |
+| 13 | Founder decision on whether a real detail view is essential before M18 acceptance | M18 (open decision) | S06 |
+| 14 | none | M18 | S12 (findings and evidence) |
+| 15 | none | M18 | S12 |
+| 16 | none | M18 | S05 (workstreams/assignments); S07 (tasks/comments) |
+| 17 | none | M18 | S08 (submit work products); S09 (review/return/approve) |
+| 18 | none | M18 | S13 (information requests) |
+| 19 | none | M18 | S16 (decision package) |
+| 20 | none | M18 | S17 |
+| 21 | None - preserve as-is, no dependency | none (preserve) | T16 (validation secret marker never leaks into a customer path) |
+| 22 | None - preserve as-is | none (preserve) | T16 |
+| 23 | M19's identity/authz architecture decision (minimum); M22 evidence (full self-serve) | M19 (minimum), M23 (full) | S03; T04/T05 (permission boundaries) |
+| 24 | M19's architecture decision (minimum); M22 evidence (full self-serve) | M19 (minimum), M23 (full) | S01 |
+| 25 | M19's rate/budget-limit design (minimum); M20's reporting design; M22 evidence (real billing) | M19 (limits), M20 (reporting), M23 (billing) | none dedicated - covered operationally, not by S01-S20 |
 
 ## Surfaces present in the product but outside the canonical 25 — real conflict, founder decision required
 
@@ -116,26 +196,61 @@ case/report pages are the sole disclosed, deliberate exception (surfaces
 existing Review-vs-Validation-Lab boundary
 (`docs/product/06-truth-register.md`).
 
-## Distinguishing page, panel, drawer, tab and component
+## Distinguishing full route/page, tab, panel, modal, drawer and component
 
 Per this reconciliation's own governing instruction, form is recorded
 explicitly rather than assumed from a canonical row's label:
 
-- **Full page** (own route, own URL): surfaces 7-12, 14, 16, 19, 20,
-  21-22 (static), and both contextual instances of surface 10.
-- **Deep page** (own route, nested under a deal): surface 11.
-- **Panel/dialog** (opened from a page, no own URL): surface 18
-  (`RequestDialog`), the document-upload dialog on surface 12.
-- **Inline expansion component** (not a route, not an overlay): surface
-  15 (finding detail rows inside `Findings.tsx`), surface 17 (submission
-  review inside `Work.tsx`'s task cards).
+- **Full page, top-level** (own route, own URL, primary navigation):
+  surfaces 7, 8, and one of surface 10's two contextual instances
+  (`/mandates`).
+- **Full page + tab** (own route, *and* one of `DealShell.tsx`'s real
+  `<nav>`/`NavLink` tab strip once inside a deal - checked directly
+  against its `TABS` array, not assumed): surfaces 9 (`Overview` tab),
+  12 (`Documents`), 14 (`Findings`), the deal-scoped instance of surface
+  10 (`Mandates`), and 20 (`Activity`) - **five tabs only**.
+- **Full page, linked but not a tab** (own route, reached via a real
+  contextual `Link` from inside Overview or Findings rather than the
+  persistent tab strip - confirmed by grepping every `Link`/`navigate`
+  call, not assumed from any route existing): surface 16 (`Work` - linked
+  from `DealOverview.tsx`), surface 19 (`Decision Package` - linked from
+  `Findings.tsx`), and all four non-canonical destinations (Readiness,
+  Reassessments, Assertions - linked from `Findings.tsx`; Triggers -
+  linked from both `DealOverview.tsx` and `MandateComposerDialog.tsx`).
+  This is a deliberate pattern, not an oversight: it matches
+  `02-experience-and-information-architecture.md`'s own "Deeper routes
+  do not need to become primary navigation tabs" - but it does mean a
+  caller who lands on one of these routes without going through Overview
+  or Findings first (a bookmark, a shared link) has no tab to return to
+  the deal's other destinations from; each of these pages does render
+  inside `DealShell`, so `DealShell`'s own tab strip is still visible for
+  navigating *away*, just not how the caller most likely arrived.
+- **Deep page** (own route, nested under a deal, not in the tab strip and
+  not directly linked from Overview/Findings): surface 11 (`Mandate
+  Detail`, reached from the `Mandates` tab's own list, not itself a tab
+  or a direct Overview/Findings link).
+- **Modal dialog** (opened from a page, no own URL, blocks the
+  background): surface 18 (`RequestDialog`), the document-upload dialog
+  on surface 12 (`DocumentUploadDialog`).
+- **Inline expansion component** (not a route, not an overlay, renders
+  in place within a list): surface 15 (finding detail rows inside
+  `Findings.tsx`), surface 17 (submission review inside `Work.tsx`'s
+  task cards).
+- **Static page, deliberately not migrated**: surfaces 21-22.
 - **Raw browser view, not an application page**: surface 13's current
   state (a direct file `href`, not an in-app detail view) - this is
   exactly why it is classified partial rather than complete.
+- **Drawer**: not used by any canonical surface's current implementation
+  - `02-experience-and-information-architecture.md` allows a drawer as
+    an option for create/edit/upload/select-evidence actions and detail
+    views, but every surface that needed this pattern (12, 18) used a
+    modal dialog instead, and 15/17 used inline expansion instead. No
+    gap follows from this - the guidance names drawer/dialog as
+    interchangeable options, not a requirement for either specifically.
 
 No canonical surface was implemented as an unnecessary standalone route
 merely to reach the count of 25; several (15, 17, 18) are deliberately
-components/panels, not pages, matching
+components/modals, not pages, matching
 `02-experience-and-information-architecture.md`'s own "Deeper routes do
 not need to become primary navigation tabs" and "should usually use a
 focused drawer or dialog" guidance.

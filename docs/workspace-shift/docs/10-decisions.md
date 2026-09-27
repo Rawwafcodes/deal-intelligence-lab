@@ -325,6 +325,63 @@ recorded here rather than left implicit:
   this reconciliation is what makes that condition checkable, not itself
   the founder acceptance decision.
 
+D19 (added 2026-09-27, after M17 confirmed pushed to `origin/main` at
+`70f03ca`) The founder gave the exact names and content for M21-M25
+directly. Per this file's own authority rule (latest explicit founder
+instruction outranks accepted decisions) and root `AGENTS.md`'s matching
+rule, this supersedes D18's version of those five milestones. D17 and
+D18 are **not deleted or rewritten** - they remain above as the
+historical record of what was adopted first; this decision records the
+supersession explicitly rather than silently overwriting them. M18-M20
+and the 25-surface reconciliation (D18) are unchanged by this decision.
+
+Full revised content: `docs/workspace-shift/docs/13-post-m17-
+roadmap.md`'s M21-M25 sections and `08-roadmap.md`'s matching short
+entries, both updated in place. Summary of what changed:
+
+- **M21** renamed "Live Design-Partner Pilot" → **Paid Design-Partner
+  Pilots** - emphasizes paid engagements (possibly more than one design
+  partner), not a single unpaid/free pilot. Evidence list otherwise
+  carried forward from D18 largely unchanged.
+- **M22** substantially redefined. D18's "Repeatability and Early Scale"
+  merged product-learning and repeatable-delivery into one milestone;
+  D19's **Product Learning and Unit Economics** is narrower and comes
+  first - it uses M21's real evidence to determine what customers
+  genuinely use, what needs founder assistance, what to fix/remove/
+  simplify, and unit economics, producing the specification M23 then
+  builds against. "Standardize onboarding" and "acquire further paying
+  customers" - present in D18's M22 - move to M23 under D19.
+- **M23** renamed "Repeatable Commercial and Customer-Administration
+  Experience" → **Repeatable Commercial Product**, and now explicitly
+  absorbs the delivery work D18 had split into M22 (standardized
+  onboarding, further paying customers, repeat engagements) alongside
+  D18's original M23 content (self-serve #23-25, generalized #6,
+  conditional #1-4). The founder's own framing governs directly: **the
+  architecture is mapped now, developed gradually, and commercially
+  complete by M23**.
+- **M24** renamed "Enterprise Identity, Audit, Compliance and Isolated
+  Deployment" → **Enterprise and Regulated-Market Readiness**; content
+  extended with explicit penetration testing, procurement documentation,
+  SLA/disaster-recovery, and Saudi/GCC regulated-customer requirements.
+  Anti-speculation gating (a real named customer requirement triggers
+  it) unchanged from D18. The founder's own framing: enterprise
+  additions are completed here, on top of M23's finished basic product,
+  not a substitute for finishing it.
+- **M25** renamed "Scalable Operational Capabilities" → **Scalable
+  Growth**, broadened well beyond infrastructure scale to repeatable
+  customer acquisition, regional/international expansion, partnerships,
+  evidence-backed fundraising material, and acquisition positioning if
+  strategically relevant. The founder's own framing governs directly:
+  **M25 is for scaling, not finishing the basic product** - unfinished
+  M23 work found here belongs in M23, not M25.
+
+No canonical surface assignment from D18's 25-surface reconciliation
+changed - surfaces #23-25/#1/#6 still land at M23 (not M22, which no
+longer does delivery work) and #24's enterprise/isolated-deployment
+extension still lands at M24, consistent with the founder's own
+"commercially complete by M23, enterprise additions at M24, M25 for
+scaling only" framing.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,

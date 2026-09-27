@@ -18,6 +18,19 @@ enterprise identity/audit/compliance, and volume-justified scale. See
 `docs/10-decisions.md`'s D18 and the "25-surface reconciliation" section
 immediately below.
 
+**Superseded the same day (D19)**: the founder gave the exact names and
+content for M21-M25 directly, after M17 was confirmed pushed to
+`origin/main`. Per root `AGENTS.md`'s own authority rule ("latest
+explicit founder instruction outranks accepted decisions"), D19 revises
+M21's title, substantially redefines M22 (now a distinct product-
+learning/unit-economics milestone, narrower than D18's merged
+"repeatability and early scale"), renames M23, and broadens M25 into
+growth/expansion/fundraising rather than only operational scale. D17 and
+D18 remain in `10-decisions.md` unchanged, as the historical record of
+what was adopted first; this document's own M21-M25 sections below now
+state the D19 content, not the superseded D18 content. M18-M20 and the
+25-surface reconciliation are unchanged by D19.
+
 ## 25-surface information-architecture reconciliation
 
 `docs/product/07-surface-reconciliation.md` is the code-verified status
@@ -64,11 +77,16 @@ retroactively edit any M10-M17 entry, any decision D01-D16, or any
 
 - `08-roadmap.md` — dependency-ordered task list; keep reading it for
   M10-M17. Its M18-M22 entries are short pointers into this file.
-- `10-decisions.md` — D17 records the adoption of this roadmap; further
-  M18-M22 decisions are appended there as D18+ when the founder actually
-  decides them, using the existing decision procedure. This file's own
-  "Open founder decisions" section below is the register of what is not
-  yet decided — it is not itself a decision record.
+- `10-decisions.md` — D17 records the original adoption of this roadmap;
+  D18 the 25-surface reconciliation and its M23-M25 extension; D19 the
+  founder's direct M21-M25 naming/content revision that supersedes D18's
+  version of those five milestones (D17/D18 are not deleted or rewritten
+  - D19 records the supersession explicitly, per root `AGENTS.md`'s
+  "latest explicit founder instruction outranks accepted decisions").
+  Further M18-M25 decisions are appended there as D20+ when the founder
+  actually decides them. This file's own "Open founder decisions" section
+  below is the register of what is not yet decided — it is not itself a
+  decision record.
 - `09-acceptance.md` — the existing T01-T20 scenarios are safety/integrity
   properties (permission boundaries, revision conflicts, audit lineage,
   export literalness) proven at the code/API level. M18 Track A's S01-S20
@@ -355,32 +373,34 @@ M20 closes only when:
 - staging is approved for the intended data class;
 - founders sign a go/no-go decision for customer outreach.
 
-## M21 — Live Design-Partner Pilot
+## M21 — Paid Design-Partner Pilots
 
-**Purpose**: run a controlled real engagement and measure whether the
-product creates customer value.
+**Purpose** (D19, supersedes D18's "Live Design-Partner Pilot" naming):
+run controlled **paid** engagements - one or more design partners, not
+necessarily exactly one - and measure whether the product creates real
+customer value under paid terms, not a free trial's weaker signal.
 
 **Entry criteria**: M20 exit gate satisfied (go decision).
 
 **Surface policy**: use the existing surfaces (the 25 canonical plus the
 four disclosed above, whichever the founder decision resolved) as they
-stand at M20's close. Add a new surface during the pilot only in
-response to a specific blocking incident the pilot itself surfaces, never
-merely for completeness or to look more finished - the same discipline
+stand at M20's close. Add a new surface during a pilot only in response
+to a specific blocking incident the pilot itself surfaces, never merely
+for completeness or to look more finished - the same discipline
 `docs/product/06-truth-register.md` already applies to commercial
 claims, applied here to product surfaces.
 
 ### Required evidence
 
-Authorized customer and users; signed pilot terms; approved data
-handling; recorded onboarding effort; workflow completion; active users
-and roles; analyses and mandates performed; senior-review usage;
-accepted/rejected findings; information requests; time saved; errors and
-incidents; human support required; infrastructure and AI costs; customer
-interviews; willingness to continue; willingness to pay; repeat-deal
-intent.
+Actual workflow usage; time saved; accepted/rejected findings; senior-
+review value; support burden; AI/infrastructure cost; user feedback;
+willingness to continue; willingness to pay; repeat-deal intent. (Also
+carried from D18's original evidence list, unchanged: authorized
+customer and users; signed pilot terms; approved data handling; recorded
+onboarding effort; active users and roles; errors and incidents;
+customer interviews.)
 
-No result is represented as traction merely because a user logged in.
+A login or free demonstration is not commercial traction.
 
 ### M21 exit gate
 
@@ -388,10 +408,14 @@ M21 closes with one explicit conclusion — proceed; remediate and repeat;
 reposition; or stop — supported by customer and usage evidence, not
 engineering completion alone.
 
-## M22 — Repeatability and Early Scale
+## M22 — Product Learning and Unit Economics
 
-**Purpose**: turn successful pilot evidence into a repeatable early
-business.
+**Purpose** (D19, supersedes D18's merged "Repeatability and Early
+Scale"): use M21's real paid-pilot evidence to learn what the product
+actually is, before building the repeatable commercial product around
+it. This is deliberately narrower than D18's version - "acquire further
+paying customers" and "standardize onboarding" now belong to M23 below,
+not here. M22 is analysis and decision, not delivery.
 
 **Entry criteria**: M21 concludes "proceed" (or "remediate and repeat"
 after remediation).
@@ -403,62 +427,73 @@ predictions about what a second customer might want.
 
 ### Required work
 
-Fix recurring pilot issues; standardize onboarding; reduce
-founder-assisted steps; improve reliability and observability; validate
-pricing; acquire further paying customers; measure retention and repeat
-usage; track gross margin and AI cost; establish support expectations;
-establish engineering ownership; prioritize capabilities using observed
-demand; prepare fundraising material only from verified evidence.
+Determine, from M21's real evidence and nothing else: what customers
+genuinely use; what requires founder assistance (and therefore isn't yet
+repeatable); what should be fixed, removed or simplified; revenue per
+engagement/customer; AI and infrastructure cost; support hours; gross
+margin; pilot conversion; repeat usage; retention; pricing viability.
 
 ### M22 exit gate
 
-M22 closes only when the company has evidence that the product can be
-sold and delivered repeatedly — not merely one successful engagement.
-Track: paying customers; repeat engagements; annualized or contracted
-revenue; retention; average revenue per customer/deal; AI and
-infrastructure cost; support hours; gross margin; sales-cycle length;
-implementation effort; customer references; security/procurement
-blockers.
+M22 closes only when every item above has a real, evidenced answer (not
+a guess) and the founders have decided, from that evidence, what M23's
+repeatable product must actually contain - M22 produces the specification
+M23 builds against, it does not itself build anything.
 
-## M23 — Repeatable Commercial and Customer-Administration Experience
+## M23 — Repeatable Commercial Product
 
-**Purpose**: complete the repeatable commercial and customer-
-administration experience - the point at which the product can be sold
-and self-administered without founder hand-holding on every deal, closing
-the surfaces `07-surface-reconciliation.md` deliberately deferred past
-M19/M20's staging/pilot minimums.
+**Purpose** (D19, renamed and refocused from D18's "Repeatable Commercial
+and Customer-Administration Experience"): build the repeatable
+commercial product M22's evidence specified - the point at which the
+product can be sold and self-administered without founder hand-holding
+on every deal. This is where `07-surface-reconciliation.md`'s
+administrative surfaces (#23-25, deferred past M19/M20's staging/pilot
+minimums) and generalized onboarding/marketing surfaces (#1, #6) belong,
+consistent with this roadmap's own governing rule: **the architecture is
+mapped now, developed gradually, and commercially complete by M23** -
+this milestone is that completion point, not M25.
 
-**Entry criteria**: M22 exit gate satisfied (repeatability evidence
-exists).
+**Entry criteria**: M22 exit gate satisfied (a real, evidenced product
+specification exists).
 
 ### Required work
 
-Full self-serve Organization Settings and Team and Access (surfaces
-#23-24 - M19 built only the private-staging minimum: no self-serve
-invite flow, no organization creation/rename UI); real billing beyond
-M19's rate/budget limits and M20's usage reporting (surface #25); public-
-facing marketing surfaces if the founder judges outbound/self-serve
-acquisition now justifies them (#1-4 Public homepage, Product/how it
-works, Security and trust, Request pilot/contact - correctly not built
-before a repeatable commercial motion exists to justify them); a real
-Invitation/onboarding flow with tokens/expiry rather than M20's
-founder-assisted membership creation (#6, generalized beyond the first
-pilot). Resolve the four non-canonical-surface and Document Detail
-decisions from the reconciliation above if not already resolved by M18.
+Standardized onboarding; repeatable deal setup; reliable professional
+templates; stable packaging and pricing; customer administration - full
+self-serve Organization Settings and Team and Access (surfaces #23-24:
+M19 built only the private-staging minimum, no self-serve invite flow,
+no organization creation/rename UI) and a real Invitation/onboarding flow
+with tokens/expiry (#6, generalized beyond M20's founder-assisted
+membership creation); usage and cost reporting at the repeatable-product
+level, plus real billing beyond M19's rate/budget limits and M20's
+reporting (#25); repeatable support; repeatable sales demonstration
+(public-facing marketing surfaces #1-4 - Public homepage, Product/how it
+works, Security and trust, Request pilot/contact - if the founder judges
+outbound/self-serve acquisition now justifies them, per M22's own
+evidence, not built speculatively before it); multiple paying customers;
+repeat engagements. Resolve the four non-canonical-surface and Document
+Detail decisions from the reconciliation above if not already resolved
+by M18.
 
 ### M23 exit gate
 
 M23 closes only when a new customer can be onboarded, administer their
 own organization/team, and be billed, without a founder performing a
-manual database or API step on their behalf - and this has been
-demonstrated with a real customer, not only a synthetic one.
+manual database or API step on their behalf; and there is evidence of
+multiple paying customers and at least one repeat engagement - demonstrated
+with real customers, not only a synthetic one.
 
-## M24 — Enterprise Identity, Audit, Compliance and Isolated Deployment
+## M24 — Enterprise and Regulated-Market Readiness
 
-**Purpose**: meet the identity, audit, compliance, security and
-deployment-isolation requirements a larger or more regulated customer's
-procurement process requires, once real demand for such a customer
-exists - not preemptively.
+**Purpose** (D19, renamed from D18's "Enterprise Identity, Audit,
+Compliance and Isolated Deployment"; same anti-speculation gating,
+content extended with explicit Saudi/GCC regulated-market scope): meet
+the identity, audit, compliance, security, deployment-isolation and
+regional-regulatory requirements a larger or regulated customer's
+procurement process requires - completed here, after M23's commercial
+completion, per this roadmap's own governing rule that enterprise
+additions are an M24 addition on top of a finished basic product, not a
+substitute for finishing it.
 
 **Entry criteria**: M23 exit gate satisfied, and a real prospective
 customer or signed deal whose procurement process names a specific
@@ -467,14 +502,19 @@ speculatively against no named requirement).
 
 ### Required work
 
-Enterprise identity (SSO/SAML/SCIM as a named customer's procurement
-actually requires, not preemptively); extended audit retention and export
-beyond M19's baseline; compliance documentation/attestations a named
-deal actually requires (e.g. SOC 2, ISO 27001 - do not pursue a
-certification with no customer requirement driving it); security-review
-cadence beyond M19's one-time independent review; isolated/dedicated
-deployment administration for a customer whose data-residency or
-isolation requirement M19's shared staging architecture cannot satisfy.
+Enterprise identity and SSO (SAML/SCIM as a named customer's procurement
+actually requires, not preemptively); advanced access control beyond
+`authz.py`'s existing role-capability matrix, if a named requirement
+needs finer grain; extended audit retention and export beyond M19's
+baseline; data residency, including Saudi/GCC-specific regulated-customer
+requirements if a named prospect requires them; penetration testing;
+compliance mapping and documentation/attestations a named deal actually
+requires (e.g. SOC 2, ISO 27001 - do not pursue a certification with no
+customer requirement driving it); procurement documentation; SLA and
+disaster-recovery commitments; isolated/private deployment administration
+for a customer whose data-residency or isolation requirement M19's shared
+staging architecture cannot satisfy; advanced administration beyond M23's
+self-serve baseline.
 
 ### M24 exit gate
 
@@ -483,32 +523,39 @@ milestone is satisfied and verified against that requirement, not
 against a generic enterprise checklist assembled without a real customer
 driving it.
 
-## M25 — Scalable Operational Capabilities
+## M25 — Scalable Growth
 
-**Purpose**: build operational capability that real customer volume
-justifies - the last milestone in this sequence, and the one most
-dependent on evidence this document cannot yet supply.
+**Purpose** (D19, broadened from D18's narrower "Scalable Operational
+Capabilities"): grow the repeatable, commercially-complete product (M23)
+and its enterprise readiness (M24, where applicable) at real volume -
+acquisition, expansion and, if the evidence supports it, fundraising or
+acquisition positioning. This roadmap's own governing rule applies
+directly: **M25 is for scaling, not finishing the basic product** - any
+item below that turns out to require finishing product surfaces M23
+should have completed belongs there, not here.
 
-**Entry criteria**: M22/M23 evidence shows customer/usage volume that
-M19's staging-scale architecture cannot comfortably continue to serve
-(measured, not assumed).
+**Entry criteria**: M23 (and M24, if triggered) exit gates satisfied, and
+M22/M23 evidence shows customer/usage volume or growth opportunity that
+justifies the specific item below (measured or evidenced, not assumed).
 
 ### Required work
 
-To be specified from M21-M23's own measured volume, cost and reliability
-evidence at the time this milestone actually starts - deliberately not
-detailed here, per this roadmap's own "do not add features merely to
-make a milestone look substantial" principle. Likely candidates,
-none pre-committed: horizontal scaling of the background-job worker;
-multi-region or read-replica database architecture; cost-optimized
-model/provider routing at volume; dedicated observability/on-call
-capacity; formalized SLAs.
+Repeatable customer acquisition; scalable onboarding and customer
+success; engineering ownership; operational automation; improved gross
+margins; regional/international expansion (building on M24's regulated-
+market work where relevant); partnerships; model/provider cost
+optimization at volume; fundraising material supported only by verified
+evidence (`docs/product/06-truth-register.md`'s existing rule against
+unverified demand/traction/valuation claims, unchanged); acquisition
+positioning, only if strategically relevant and only from real evidence.
 
 ### M25 exit gate
 
-M25 closes only when the specific scale problem that triggered this
-milestone is measurably resolved (a stated metric, before/after) - not
-merely when generic infrastructure work has been performed.
+M25 closes only when the specific growth or scale problem that triggered
+a given item is measurably addressed (a stated metric, before/after) -
+not merely when generic growth or infrastructure activity has occurred.
+Only scale-related surfaces justified by real volume are added here;
+M25 does not retroactively finish M23's commercial product.
 
 ## Open founder decisions (register, not a decision record)
 
@@ -542,6 +589,12 @@ not close it.
 - M24's actual trigger: which named customer requirement, if any, first
   makes enterprise identity/compliance/isolated-deployment work
   necessary (not decided in advance of a real requirement).
+- M22's own product-learning conclusions (what to fix/remove/simplify,
+  pricing viability) - deliberately not pre-decided here; M22 exists
+  precisely to produce this decision from M21's real evidence.
+- M25's specific growth/expansion/fundraising priorities - deliberately
+  unspecified until M23/M24 evidence exists to justify a particular one
+  over another.
 
 ## External dependencies (register)
 
@@ -563,12 +616,15 @@ not close it.
 Restated from the milestone-by-milestone exclusions above: this roadmap
 does not authorize, at any point before its own relevant gate, cloud
 deployment (before M19), production authentication or real customer data
-(before M19's exit gate and M20's legal/security work), public launch or
-broad onboarding (before M22), self-serve billing or public marketing
-surfaces (before M23), enterprise identity/compliance/isolated-deployment
-work against no named customer requirement (before M24's own gated
-entry), or scale infrastructure against no measured volume problem
-(before M25's own gated entry) - or any claim of commercial demand,
+(before M19's exit gate and M20's legal/security work), acquiring
+customers beyond the paid design partners themselves or standardizing
+onboarding (before M22's evidence exists to specify what "standardized"
+should mean), public launch, self-serve billing or public marketing
+surfaces (before M23, this roadmap's own commercial-completion point),
+enterprise identity/compliance/isolated-deployment work against no named
+customer requirement (before M24's own gated entry), or growth/scale
+activity against no measured volume or evidenced opportunity (before
+M25's own gated entry) - or any claim of commercial demand,
 traction, retention or valuation without the specific evidence each
 milestone's exit gate requires (`06-truth-register.md`'s existing rule,
 carried forward unchanged).

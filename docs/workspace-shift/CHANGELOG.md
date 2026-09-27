@@ -1,4 +1,21 @@
 # Change history
+## 1.4.0 — 2026-09-27
+Confirmed M17's push to `origin/main` (`70f03ca` - already there from an
+earlier session; no new push performed). Revised M21-M25 per the
+founder's direct instruction (D19), superseding 1.3.0's version of those
+five milestones without deleting it: M21 Paid Design-Partner Pilots; M22
+Product Learning and Unit Economics (narrower than 1.3.0's merged
+milestone); M23 Repeatable Commercial Product (absorbs 1.3.0's M22
+delivery content); M24 Enterprise and Regulated-Market Readiness
+(explicit Saudi/GCC scope); M25 Scalable Growth (broadened to
+acquisition/expansion/fundraising). Extended `docs/product/
+07-surface-reconciliation.md` with intended-user, intended-purpose,
+dependencies and acceptance-test fields, split into three linked tables;
+corrected its tab-strip claim after reading `DealShell.tsx`'s actual
+`TABS` array (five tabs, not the larger set previously assumed - the
+other destinations are reached via real contextual links instead). No
+code, schema, deployment or paid-call authorization changed.
+
 ## 1.3.0 — 2026-09-27
 Extended the post-M17 roadmap through M23 (Repeatable Commercial and
 Customer-Administration Experience), M24 (Enterprise Identity, Audit,

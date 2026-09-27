@@ -37,12 +37,28 @@ pages, real sign-in, onboarding, Team and Access, Organization Settings,
 Usage and Billing) - each assigned to M19, M20 or M23, not left
 unattributed. A real conflict was disclosed, not resolved: four shipped
 destinations (Readiness, Reassessments, Triggers, Assertions) exist with
-no row in the canonical 25-surface table. See this file's matching
-2026-09-27 "25-surface reconciliation adopted" entry (bottom) for the
-full record. **M18 is next; no M18 implementation has begun.** This
-supersedes the "Current task"/"Next recommended" lines below as the
-up-to-date pointer; see this file's own newest dated entries (bottom)
-for full detail.
+no row in the canonical 25-surface table.
+
+Still the same day, after M17 was independently re-confirmed pushed to
+`origin/main` at `70f03ca` (a fresh `git fetch`/`rev-parse` check, not
+assumed), the founder gave the founder's own exact names and content for
+M21-M25 directly (D19), superseding D18's version of those five
+milestones without deleting or rewriting D17/D18: **M21** Paid
+Design-Partner Pilots; **M22** Product Learning and Unit Economics (a
+narrower, evidence-gathering milestone, not D18's merged
+"repeatability"); **M23** Repeatable Commercial Product (now also
+absorbs the delivery work D18 had put in M22 - standardized onboarding,
+further paying customers); **M24** Enterprise and Regulated-Market
+Readiness (same gating, Saudi/GCC scope made explicit); **M25** Scalable
+Growth (broadened to acquisition/expansion/fundraising, not only
+infrastructure). The 25-surface reconciliation's own milestone
+assignments (M19/M20/M23 for the absent administrative surfaces) were
+already consistent with D19 and needed no change. See this file's
+matching 2026-09-27 "M17 push confirmed; M21-M25 revised (D19)" entry
+(bottom) for the full record. **M18 is next; no M18 implementation has
+begun.** This supersedes the "Current task"/"Next recommended" lines
+below as the up-to-date pointer; see this file's own newest dated
+entries (bottom) for full detail.
 
 Package version: 1.1.0 (2026-09-17: adopted the Integrity Review
 product/roadmap integration as documentation only - see this file's own
@@ -6218,3 +6234,104 @@ assumed from an earlier document.
 **Permissions needed**: none for the documentation change itself. Not
 pushed without separate authorization, per this repository's standing
 rule.
+
+## 2026-09-27 — M17 push confirmed; M21-M25 revised (D19); reconciliation table extended with intended-user/purpose/dependencies/acceptance-test fields
+
+**Part 1 (push verification, not a new push)**: the founder approved M17
+and asked for the M17 commit range through `70f03ca` to be pushed to
+`origin/main` as a fast-forward, with an explicit "stop and report" if
+it could not be a clean fast-forward. Ran `git fetch origin main` fresh,
+then `git rev-parse origin/main` and `git rev-parse 70f03ca` - both
+return `70f03caf59e032d2f64810c5f6d4b0233ad3feed`, and `git status`
+confirms a clean working tree with no divergence. **`origin/main`
+already pointed exactly at `70f03ca` before this task started** (done in
+an earlier session, per this file's own prior entries) - there was
+nothing to push, no fast-forward to perform, and no blocker to report.
+This is a verification finding, not an accomplishment of this task.
+
+**Part 2/3 scope**: documentation and planning only, per explicit
+founder instruction. No route, schema, dependency, or application code
+changed; no M18 implementation begun.
+
+**M21-M25 revision (D19)**: the founder gave the exact names and content
+for M21-M25 directly. Per root `AGENTS.md`'s authority rule (latest
+explicit founder instruction outranks accepted decisions), this
+supersedes D18's version of those five milestones - recorded as D19,
+not by deleting or rewriting D17/D18. Full content:
+`docs/workspace-shift/docs/13-post-m17-roadmap.md`'s M21-M25 sections and
+`08-roadmap.md`'s matching short entries, both updated in place; full
+rationale `docs/10-decisions.md` D19. Summary: M21 renamed Paid
+Design-Partner Pilots; M22 narrowed to Product Learning and Unit
+Economics (an evidence-gathering milestone that now produces the
+specification M23 builds, rather than D18's merged delivery+learning
+milestone); M23 renamed Repeatable Commercial Product and now also
+absorbs the delivery work D18 had placed in M22 (standardized
+onboarding, further paying customers, repeat engagements) alongside its
+own original administrative-surface content; M24 renamed Enterprise and
+Regulated-Market Readiness with explicit Saudi/GCC scope added; M25
+renamed Scalable Growth and broadened beyond infrastructure to
+acquisition/expansion/partnerships/fundraising. The founder's own
+framing governs directly and is now stated in both roadmap documents
+verbatim: the architecture is mapped now, developed gradually, and
+commercially complete by M23; enterprise additions are completed in M24;
+M25 is for scaling, not finishing the basic product.
+
+**Reconciliation table extended**: `docs/product/07-surface-
+reconciliation.md`'s single wide table was split into three linked
+tables (identity/purpose, implementation status, planning) to add the
+fields this task's own instructions required beyond the prior pass:
+intended user, intended purpose, dependencies, and acceptance test (cross-
+referenced to the existing S01-S20/T01-T20 scenario IDs, not new ones
+invented for this pass). Two corrections found while doing this, not
+assumed from the prior pass:
+- The "form" analysis previously said several deal-scoped surfaces
+  render as tabs in `DealShell.tsx`'s tab strip. Reading that component's
+  actual `TABS` array directly found only five real tabs (Overview,
+  Documents, Findings, Mandates, Activity) - Work (#16), Decision
+  Package (#19), and all four non-canonical destinations (Readiness,
+  Reassessments, Triggers, Assertions) are **not** in the tab strip.
+  Grepping every `Link`/`navigate` call confirmed they are still reached
+  through real contextual links from `DealOverview.tsx`/`Findings.tsx`/
+  `MandateComposerDialog.tsx`, not a hand-typed URL - so the "complete"
+  classification for these surfaces is unchanged, but the form
+  description is corrected: linked full page, not tab.
+- Surface 18's (`RequestDialog`) and surface 12's upload dialog's form is
+  now labeled modal dialog rather than the looser "panel/dialog" used
+  before, matching this task's own explicit page/tab/panel/modal/drawer/
+  component vocabulary; no drawer pattern is actually used by any
+  canonical surface's current implementation (noted explicitly rather
+  than left unaddressed, since the target architecture allows one).
+
+**Files changed**: `docs/workspace-shift/docs/13-post-m17-roadmap.md`
+(D19 supersession note; M21-M25 sections rewritten; open-decisions
+register extended; non-goals section corrected for the M22/M23 split);
+`docs/workspace-shift/docs/08-roadmap.md` (M21-M25 short entries
+rewritten to match); `docs/10-decisions.md` (new D19); `docs/product/
+07-surface-reconciliation.md` (three-table restructure; D19 note; tab-
+strip correction; modal-dialog terminology); this file (this entry and
+the "Continuation state" header).
+
+**Decisions**: D19 (`docs/10-decisions.md`) - the M21-M25 revision
+itself, recorded as a supersession of D18, not a silent rewrite.
+
+**Founder decisions left open**: unchanged from the prior entry's list,
+plus two added by this task - M22's own product-learning conclusions
+(deliberately not pre-decided; that is what M22 exists to produce from
+M21's evidence) and M25's specific growth/expansion/fundraising
+priorities (deliberately unspecified until M23/M24 evidence exists).
+
+**External dependencies**: unchanged from the prior entry's register.
+
+**Verification**: ran `python3 docs/workspace-shift/scripts/
+check_spec.py` - passed. Every specific claim above (origin/main's exact
+hash; `DealShell.tsx`'s real tab list; every contextual `Link`/`navigate`
+call reaching the four non-canonical destinations and Work/Decision
+Package) was checked directly against the current checkout, not assumed
+from the prior reconciliation pass.
+
+**Blockers**: none for this task's own scope. Part 1 required no action
+since `origin/main` already matched `70f03ca`.
+
+**Permissions needed**: none for the documentation change itself. Per
+this task's own explicit instruction, the resulting commit is not pushed
+until separately authorized.
