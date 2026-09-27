@@ -509,18 +509,23 @@ class Handler(BaseHTTPRequestHandler):
         attention" (tasks assigned to the caller, across every project
         they can actually see, whose status means a specific action is
         expected next) plus one real row per accessible engagement with
-        its own real task/mandate counts. Deliberately a "simple overview
-        shell" (docs/08-roadmap.md's own explicit allowance) rather than
-        the fuller Workspace Overview docs/05 eventually describes
-        (quick actions, a merged cross-deal activity feed) - every number
-        shown is real and derived the identical way the Deal Overview's
-        own numbers are, just scoped to "my attention" instead of one
-        deal."""
+        its own real task/mandate counts. Extended (Task 17.6, still no
+        new schema) with `material_changes`: the same per-deal activity
+        composition `_project_activity_feed` already computes for the
+        Deal Overview/Activity routes, merged across every accessible
+        project and tagged with which project each event belongs to, plus
+        one synthetic "stale" event per currently-stale workspace (a real
+        read of the already-persisted `version_dependencies` staleness
+        flag, not a new kind of record) - the mandate summary shown on
+        Overview needs no backend change at all, since `engagements[].
+        mandate_counts` (below) already gives the frontend everything it
+        aggregates client-side."""
         accessible_ids = identity.list_accessible_project_ids(self.current_user_id)
         projects = [p for p in store.list_projects() if p.id in accessible_ids]
 
         my_attention: list[dict] = []
         engagements: list[dict] = []
+        material_change_events: list[dict] = []
         for project in projects:
             task_list = tasks.list_tasks(project.id)
             mandate_list = mandates.list_mandates(project.id)
@@ -535,8 +540,20 @@ class Handler(BaseHTTPRequestHandler):
                     row["project"] = project.to_dict()
                     my_attention.append(row)
 
+            for event in self._project_activity_feed(project.id, task_list, limit=10):
+                event["project"] = project.to_dict()
+                material_change_events.append(event)
+            for ws in workspaces.list_workspaces(project.id):
+                flag = version_dependencies.get_staleness("workspace", ws.id)
+                if flag is not None:
+                    material_change_events.append({
+                        "kind": "stale_workspace", "at": flag.last_marked_at, "project": project.to_dict(),
+                        "workspace_id": ws.id, "reason": flag.reason, "actor": None, "summary": None,
+                    })
+
         my_attention.sort(key=lambda t: t["updated_at"], reverse=True)
-        return {"my_attention": my_attention, "engagements": engagements}
+        material_changes = overview.build_activity_feed(material_change_events, limit=20)
+        return {"my_attention": my_attention, "engagements": engagements, "material_changes": material_changes}
 
     # -- mandates (Task 12.1) --------------------------------------------
 

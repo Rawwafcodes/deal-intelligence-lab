@@ -34,6 +34,7 @@ import {
   type TaskWithWorkProducts,
   type WorkstreamSummary,
 } from "@/lib/api"
+import { MANDATE_STATUS_LABELS as STATUS_LABELS } from "@/lib/mandateStatus"
 
 // Mirrors mandates.py's own _CAPABILITIES_NEEDING_DOCUMENT_SELECTION: the
 // set of capabilities whose stage input is a source document selection,
@@ -51,17 +52,6 @@ const CAPABILITIES_NEEDING_DOCUMENT_SELECTION = new Set(["reconciliation.cross_f
 // one above, since its stage input shape is not "a list of document ids"
 // at all.
 const INTEGRITY_REVIEW_CAPABILITY = "integrity.review_work_product"
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  planning: "Planning",
-  awaiting_approval: "Awaiting approval",
-  active: "Active",
-  under_review: "Under review",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  failed: "Failed",
-}
 
 // Task 12.2: a run now spends real time in these statuses while the
 // durable worker (a background thread independent of this page) actually

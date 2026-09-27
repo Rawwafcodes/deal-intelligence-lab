@@ -1262,9 +1262,33 @@ export interface WorkspaceOverviewTask extends TaskSummary {
   project: Project
 }
 
+// One row per event kind server.py's _workspace_overview merges -
+// comment/submission/review_decision (reused verbatim from
+// _project_activity_feed, the same function Activity.tsx/DealOverview.tsx
+// already call per-deal) plus stale_workspace (new in Task 17.6, a real
+// read of an already-persisted staleness flag). Fields beyond kind/at/
+// project are a loose union rather than a discriminated one, matching
+// how the backend itself composes them (plain tagged dicts, not a fixed
+// schema) - callers narrow by `kind`.
+export interface MaterialChangeEvent {
+  kind: "comment" | "submission" | "review_decision" | "stale_workspace"
+  at: string
+  project: Project
+  task_id?: string
+  task_title?: string
+  work_product_title?: string
+  version_number?: number
+  decision?: string
+  actor?: IdentityUser | null
+  summary?: string | null
+  workspace_id?: string
+  reason?: string
+}
+
 export interface WorkspaceOverview {
   my_attention: WorkspaceOverviewTask[]
   engagements: WorkspaceOverviewEngagement[]
+  material_changes: MaterialChangeEvent[]
 }
 
 export async function getWorkspaceOverview(): Promise<WorkspaceOverview> {

@@ -8,9 +8,8 @@ state.
 **2026-09-27 update**: a founder-directed product-integration program (M17)
 is now underway - see `docs/workspace-shift/docs/08-roadmap.md`'s own M17
 entry and `docs/workspace-shift/tasks/17.0-product-integration-program.md`
-for the full plan. **Phase A (17.1-17.5) is complete** - every backend-
-complete workflow the audit found unreachable now has a React-native
-path; **the current task is 17.6, Phase B's product-shell completion**.
+for the full plan. **Phase A (17.1-17.5) and Task 17.6 (Overview) are
+complete**; **the current task is 17.7, a distinct Deals destination**.
 This
 supersedes the "Current task"/"Next recommended" lines below as the
 up-to-date pointer; see this file's own newest dated entries (bottom)
@@ -5278,3 +5277,62 @@ program's "write immediately before it starts" convention. Continuing
 automatically.
 
 **Permissions needed**: none identified yet for 17.6.
+
+## 2026-09-27 — Task 17.6 executed (Overview 5-component composition)
+
+Full detail in `docs/workspace-shift/tasks/17.6-overview.md`. Summary:
+`/`'s own backend (`server.py`'s `_workspace_overview`) had disclosed
+since M13.3 that it was "deliberately a simple overview shell" missing
+a Mandates summary, Quick actions, and a cross-deal Material changes
+feed. This task closes that gap with one small backend composition
+addition (no new table, no new route): `/api/overview` now also returns
+`material_changes`, built by reusing `_project_activity_feed` (the exact
+function `Activity.tsx` already calls per-deal) across every accessible
+project, tagged with project, plus one synthetic `stale_workspace` event
+per real, already-persisted staleness flag - merged via the existing
+`overview.build_activity_feed`. The Mandates summary needed **no
+backend change at all**: `engagements[].mandate_counts` already gave the
+frontend everything it aggregates client-side into real counts by real
+`MANDATE_STATUSES` value - no invented category, no percentage.
+
+`Home.tsx` (now genuinely "Overview," not a project list with an
+attention card bolted on) gained a Mandates summary card and a Material
+Changes feed, plus three real Quick Actions ("Create a deal," "Create a
+mandate," "Upload evidence" - the latter two jump to the most recently
+active deal, a disclosed simplification rather than a full deal-picker).
+Active Engagements stays the existing project-card list unchanged for
+now - trimming it to a summary-with-link-to-Deals is 17.7's job, once
+the Deals destination actually exists (avoids a dead link in this
+commit). Also extracted `MANDATE_STATUS_LABELS` into a new shared
+`frontend/src/lib/mandateStatus.ts`, removing the identical inline copy
+from `MandateList.tsx`/`MandateDetail.tsx` rather than adding a third.
+
+**Verification**: three new backend tests (real tagged comment event,
+real stale-workspace event built via the real `mark_superseded`
+mechanism, cross-project scope) all pass; full suite 861 tests OK; mypy
+clean; `tsc -b`/`oxlint`/`npm run build` clean; `node --test
+tests/frontend/*.test.mjs` 5/5. Live Playwright check (no Anthropic
+call): created a real mandate, a real task+comment, and re-triggered
+real staleness via a genuine second document version - confirmed the
+Mandates summary's aggregated count/breakdown, both Material Changes
+event kinds rendering with correct project attribution, and "Create a
+mandate" correctly navigating to the most recent deal.
+
+**Files changed**: `server.py` (`_workspace_overview` extended),
+`tests/test_overview_endpoints.py` (3 new tests), new
+`frontend/src/lib/mandateStatus.ts`, `frontend/src/lib/api.ts` (new
+`MaterialChangeEvent` type, extended `WorkspaceOverview`),
+`frontend/src/routes/Home.tsx` (rewritten), `frontend/src/routes/
+MandateList.tsx`/`MandateDetail.tsx` (import the shared label map
+instead of a local copy).
+
+**Decisions**: none - the material-changes composition and the Quick
+Actions simplification both follow directly from "reuse existing
+routes/schemas whenever they already satisfy the workflow" and the
+program's own disclosed-simplification convention, not new product
+decisions.
+
+**Blockers**: none. **Next task**: 17.7 (a distinct Deals destination,
+separate from Overview). Continuing automatically.
+
+**Permissions needed**: none identified yet for 17.7.

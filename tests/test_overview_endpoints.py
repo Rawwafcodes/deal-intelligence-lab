@@ -285,6 +285,49 @@ class OverviewEndpointTests(unittest.TestCase):
         engagement = next(e for e in body["engagements"] if e["project"]["id"] == self.project.id)
         self.assertEqual(engagement["task_counts"], {"open": 1})
 
+    def test_workspace_overview_material_changes_includes_a_real_comment_tagged_with_its_project(self):
+        task = self._seed_task_with_review(self.project.id)
+        status, body = self._get("/api/overview")
+        self.assertEqual(status, 200)
+        comment_events = [e for e in body["material_changes"] if e["kind"] == "comment"]
+        self.assertTrue(comment_events)
+        self.assertEqual(comment_events[0]["task_id"], task["id"])
+        self.assertEqual(comment_events[0]["project"]["id"], self.project.id)
+
+    def test_workspace_overview_material_changes_includes_a_real_stale_workspace(self):
+        pdf_doc = documents.save_uploaded_file(self.project.id, "im.pdf", "", b"%PDF-1.4\n%test\n%%EOF").document
+        xlsx_doc = documents.save_uploaded_file(self.project.id, "model.xlsx", "", b"PK\x03\x04fake-xlsx").document
+        analysis = cross_format_analyses.create_cross_format_analysis(
+            project_id=self.project.id,
+            pdf_document_ids=[pdf_doc.id], pdf_document_filenames=["im.pdf"], pdf_document_checksums=[pdf_doc.sha256],
+            excel_document_ids=[xlsx_doc.id], excel_document_filenames=["model.xlsx"],
+            excel_document_checksums=[xlsx_doc.sha256],
+            status="success", transmitted=True, analysis_seconds=1.0, model="claude-opus-5",
+            mandate_version="1", stop_reason="end_turn", input_tokens=100, output_tokens=50,
+            code_execution_requests=0, error_type=None, error_message=None,
+            segments=[_text_segment(FINDINGS_TEXT)], tool_trace=None, excel_cleanup=None, excel_verification=None,
+        )
+        _, ws = self._post(f"/api/projects/{self.project.id}/cross-format-analyses/{analysis.id}/workspace")
+        version_dependencies.record_dependencies(
+            "workspace", ws["id"], [("document", pdf_doc.id, pdf_doc.current_version_id)]
+        )
+        new_version = documents.add_version(self.project.id, pdf_doc.id, b"%PDF-1.4\n%revised\n%%EOF")
+        version_dependencies.mark_superseded("document", pdf_doc.id, new_version.document.current_version_id)
+
+        status, body = self._get("/api/overview")
+        self.assertEqual(status, 200)
+        stale_events = [e for e in body["material_changes"] if e["kind"] == "stale_workspace"]
+        self.assertTrue(stale_events)
+        self.assertEqual(stale_events[0]["workspace_id"], ws["id"])
+        self.assertEqual(stale_events[0]["project"]["id"], self.project.id)
+
+    def test_workspace_overview_material_changes_spans_every_accessible_project(self):
+        self._seed_task_with_review(self.other_project.id)
+        status, body = self._get("/api/overview")
+        self.assertEqual(status, 200)
+        project_ids = {e["project"]["id"] for e in body["material_changes"]}
+        self.assertIn(self.other_project.id, project_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

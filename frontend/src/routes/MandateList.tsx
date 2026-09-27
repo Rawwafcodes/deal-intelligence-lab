@@ -14,17 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { createMandate, listMandates, type Mandate } from "@/lib/api"
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  planning: "Planning",
-  awaiting_approval: "Awaiting approval",
-  active: "Active",
-  under_review: "Under review",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  failed: "Failed",
-}
+import { MANDATE_STATUS_LABELS as STATUS_LABELS } from "@/lib/mandateStatus"
 
 export function MandateList() {
   const { projectId } = useParams<{ projectId: string }>()
