@@ -6453,3 +6453,135 @@ check_spec.py` - passed.
 **Permissions needed**: none for the documentation change itself; not
 pushed without separate authorization, per this repository's standing
 rule.
+
+## 2026-09-27 — Task 18.1 executed: M18 Track A walkthrough run live (17/20 scenarios exercised, founder pre-authorized)
+
+**Authorization**: the founder chose to execute the scoped Track A
+walkthrough directly ("1 and drive the browser as you have my
+acceptance") - real browser automation against the real running app,
+with founder acceptance of the run granted in advance rather than a
+scenario-by-scenario pause. This did **not** authorize a real Anthropic
+API call; the standing "no paid call without explicit task-specific
+authorization" rule (`AGENTS.md`) was treated as still in force and
+nothing in this session's instruction named a budget or spend - see
+"Not exercised" below for what that excluded.
+
+**Environment**: this ran inside this cloud session's own fresh
+container, not the founder's persistent local `~/Projects/deal-
+intelligence-lab` checkout - a from-scratch Postgres 16 cluster
+(system-installed via apt, not the app's own documented conda/`pgdata/`
+convention, since `initdb` cannot run as root in this container; used
+the system cluster with a `root` superuser role instead, `deal_lab`
+database, Unix socket at `/var/run/postgresql`), a fresh `venv`, `npm
+install` + `npm run build` in `frontend/`, copied into `static/`, and
+`server.py` started with `DEAL_LAB_PG_*` env vars pointing at that
+cluster. All data created (the "M18 Track A Walkthrough Deal" project
+and everything under it) is real but exists only in this session's own
+ephemeral database - it is not on the founder's own machine and will not
+survive this container's lifetime. Re-running this walkthrough on the
+founder's actual local checkout is a legitimate, cheap way to get a
+second, environment-independent confirmation, not a requirement to trust
+this one.
+
+**Method**: Playwright (Node, `playwright@1.56.1`, the pre-installed
+Chromium at `/opt/pw-browsers`) driving the real running app exactly as
+`18.1-track-a-walkthrough-script.md` specified - real HTTP requests, real
+DOM interaction, no mocking. One genuine bug found and fixed in the test
+harness itself before trusting any role-based result: the dev-identity
+switch (`IdentityFooter`'s `<select>`, backed by `POST /api/dev/session`)
+raced with the page's `window.location.reload()`, and an early run
+silently left a switch-to-`external_executive` scenario running as
+`deal_lead` instead - caught by comparing the screenshot against the
+expected sidebar identity, not just the automated check, and fixed by
+verifying the real session identity via `GET /api/session` after every
+switch (with one retry) rather than trusting reload timing. A second,
+independent script bug (wrong endpoint path, `/api/dev/session/login`
+instead of the real `/api/dev/session`) was caught the same way before
+being used for S20. Both were bugs in this walkthrough's own scripts,
+not in the application.
+
+**Results** (17 of 20 scenarios genuinely exercised; full JSON, 30+
+screenshots retained in this session's own scratchpad, not committed to
+the repository - synthetic test artifacts, not durable evidence the
+product needs to carry):
+
+| Scenario | Result | Note |
+|---|---|---|
+| S01 Create/enter an organization | Confirmed known gap | No org-creation UI exists (surface #24) - matches the reconciliation exactly, not a new finding. |
+| S02 Create/open a deal | PASS | Real deal created via the `+ New deal` dialog, opened. |
+| S03 Establish users and roles | Confirmed known gap | No team/access UI exists (surface #23) - matches the reconciliation. Membership granted via the real API instead, per the script's own fallback. |
+| S04 Create/edit the deal brief | PASS | `BriefEditorDialog` save confirmed live via toast + version display (screenshot-verified after an initial automated-check false negative). |
+| S05 Add workstreams/assignments | PASS | Workstream created; task-level assignment exercised in S07/S08 (no separate assignment screen, as scoped). |
+| S06 Upload documents/versions | PASS | Real file uploaded via `DocumentUploadDialog`. |
+| S06b Document Detail form (surface #13) | Confirmed known gap | Link resolves to a raw `?inline=1` download, not an in-app detail view - matches the reconciliation's partial classification exactly. |
+| S07 Create tasks/comments | PASS | Task created with workstream + assignee; comment posted and persisted. |
+| S08 Submit work products | PASS | Submitted as `analyst`. |
+| S09 Review/return/approve | PASS (4 sub-checks) | Live-confirmed: `analyst` sees **no** Approve/Return controls at all (Task 17.14's own fix, still holding); `reviewer` returns with a rationale; `analyst` resubmits a new version; `reviewer` approves. |
+| S10/S11 Mandates + structures | PASS | Composer objective submitted; all four starting structures (Flexible/Review/Pipeline/Monitoring) rendered; Monitoring's documented no-AI routing to `/triggers` confirmed live. Flexible/Review/Pipeline deliberately **not** clicked into, to avoid a real `proposePlan`/`proposePlanWithAi` AI call - out of this task's authorized scope. |
+| S12 Findings and evidence | Not exercised (blocked) | No mandate has actually run (no AI call made), so Findings has no real findings yet - an environment limitation of an AI-call-free walkthrough, not a defect. Page itself loads correctly. |
+| S13 Information requests | Not exercised (blocked) | `RequestDialog` is workspace-scoped; no workspace exists without a real mandate run - same root cause as S12. |
+| S14 Readiness/Reassessments | PASS (pages load) | Real empty-state pages confirmed; no populated content to review without a real mandate run. |
+| S15 Assertions | PASS (page loads) | Same caveat as S14. |
+| S16 Decision Package | PASS (page loads) | Same caveat. |
+| S17 Material changes/Activity | PASS | Live-confirmed: Overview shows the new deal; **Activity shows a fully correct, real, chronologically ordered audit trail** with every S07-S09 action correctly attributed to the real identity that performed it (screenshot-verified) - a genuine, strong T13/lineage confirmation. |
+| S18 Restricted external-executive experience | **PASS, live-confirmed** | Direct navigation to `/findings` as `external_executive`: nav strip correctly collapsed to Overview-only, and the guarded route renders a real "Not available for your role" card - not Findings content, not a flash of it. Screenshot-verified after the harness bug above was fixed; this is a real, current re-confirmation of Task 17.14's own closeout, not assumed from that task's earlier record. |
+| S19 Restart persistence | **PASS, strong form performed** | Beyond the script's own weaker browser-reload fallback: the real `server.py` process was killed (`pkill`, confirmed down via a failed `curl`) and restarted fresh: the workstream created earlier was confirmed identical (same id, same timestamp) via the real API afterward - genuine process-restart persistence, not merely reload persistence. |
+| S20 Concurrent identities/revision conflict | PASS (identity half only) | Two genuinely independent browser contexts, separate cookie jars, confirmed distinct real identities (`lead@local.dev`/`analyst@local.dev`) with no bleed, both correctly seeing the same shared deal state. The **conflict half was not exercised**: the app's only `expected_revision`/optimistic-concurrency mechanism (`workspaces.update_finding_workflow`, Task 11.5) operates on findings-workflow objects, which (again) need a real mandate run to exist - not a gap in this app's own logic (that mechanism has real backend test coverage, `tests/test_document_versions.py`), just not reachable without an AI call this task wasn't authorized to make. |
+
+**Not exercised, and why** (all for the identical underlying reason -
+no real Anthropic call was made, so no mandate ever actually ran to
+produce real findings/assertions/a workspace): the AI-planning half of
+S10/S11 (clicking into Flexible/Review/Pipeline and letting a plan
+actually propose); S12's real findings review; S13's full
+request-and-respond cycle (blocked upstream at "no workspace exists");
+S14-S16's *populated* states (their pages load correctly, but with
+nothing in them to review); S20's revision-conflict half. **This is a
+real, disclosed limit of this specific run, not a claim that these
+scenarios pass or fail** - closing them needs a separate, explicitly
+budgeted task that authorizes a real (likely small, single-case) mandate
+run, which this task was not given.
+
+**Essential product-facing gap confirmed live, not just by code
+inspection**: S06b reconfirms, this time via a real click-through rather
+than only a `grep` of the source, that Document Detail (canonical
+surface #13) is genuinely just a raw file link. This is the same open
+M18 founder decision `07-surface-reconciliation.md` and D18 already
+named (build it before acceptance, or explicitly defer) - now backed by
+a live observation, not resolved by this task.
+
+**Files changed**: none to application code, schema or dependencies.
+`docs/workspace-shift/tasks/18.1-track-a-walkthrough-script.md` is
+unchanged (its own "Completion evidence" section correctly said this
+execution record belongs in `STATUS.md`, not that file). This entry
+only.
+
+**Decisions**: none new. This confirms (does not newly discover) the
+gaps `07-surface-reconciliation.md`/D18 already recorded, and does not
+resolve any of the open founder decisions those documents named.
+
+**Founder decisions still open, now with live evidence behind them
+rather than only code inspection**: the Document Detail essential-gap
+question (S06b); the four non-canonical-surface question (S14/S15/S16
+confirm those destinations load correctly for what little of them a
+mandate-free environment can exercise); whether/when to authorize a
+small, explicitly budgeted real mandate run so S10-S16/S20's AI-dependent
+halves can actually be exercised, closing Track A in full.
+
+**Verification**: every PASS/CONFIRMED-KNOWN-GAP verdict above is backed
+by either a direct API check (`GET /api/session`, `GET .../workstreams`
+before/after a real process restart) or a screenshot inspected directly
+in this session, not only an automated text-match (two automated checks
+- S04, S18 - were initially misreported by the script's own substring
+matching and corrected after looking at the actual screenshot). Raw
+results (`results.json`, `s20-results.json`) and ~30 screenshots exist in
+this session's own scratchpad; not committed to the repository as they
+are synthetic test artifacts from an ephemeral environment, not durable
+product evidence.
+
+**Blockers**: closing M18 Track A in full needs a founder decision to
+authorize one small, explicitly budgeted real mandate run - not
+something this task was given, and not assumed here.
+
+**Permissions needed**: whether to authorize that follow-up mandate run
+(model, budget, source document) is for the founder to decide next; nothing
+from this task itself is pushed without separate authorization.
