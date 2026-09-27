@@ -6585,3 +6585,94 @@ something this task was given, and not assumed here.
 **Permissions needed**: whether to authorize that follow-up mandate run
 (model, budget, source document) is for the founder to decide next; nothing
 from this task itself is pushed without separate authorization.
+
+## 2026-09-27 — Task 18.1 AI-dependent follow-up executed: one real mandate run, S10-S16/S20 closed out (founder-authorized paid calls)
+
+**Authorization**: founder instruction in this session to close the
+AI-dependent gaps from the Task 18.1 walkthrough with one small, bounded,
+real mandate run on a new synthetic deal, driven through the real UI, then
+exercise S12, S13, S14-S16 and S20's revision-conflict half. Commit
+locally; no push without separate authorization.
+
+**Environment**: the founder's own Mac checkout (not a fresh container,
+which the instruction had assumed), branch `claude/gifted-turing-79cs5r`
+at `c4b8468`. Existing local Postgres (conda, `pgdata/`, port 5544) was
+already running; a **separate disposable database `deal_lab_m18_ai`** was
+created for this run so the branch code's schema never touched the real
+`deal_lab` database (`DEAL_LAB_PG_DBNAME=deal_lab_m18_ai`). A stale
+`server.py` from Sep 18 (pre-M17 code) was holding port 8765 and was
+stopped; the branch server was started against the disposable DB. Frontend
+rebuilt via `scripts/build-frontend-into-static.sh` - output byte-identical
+to the committed `static/`. Playwright 1.56.1 + Chromium installed into
+the session scratchpad only (nothing added to the repo).
+
+**API key / model**: the key in `.env.local` was first invalid (401), then
+an organization-level key without workspace scope (400: requests must send
+`anthropic-workspace-id`, which this app does not); the founder replaced it
+with a workspace-scoped key, verified via the free models endpoint before
+any paid call. `.env.local` was set to `ANTHROPIC_MODEL=claude-sonnet-5`
+by the founder at that point, so **every paid call below ran on
+claude-sonnet-5**, not the claude-opus-5 default the instruction named.
+
+**Synthetic data**: deal "Project Kestrel (synthetic AI acceptance)" with a
+one-page PDF term sheet and a small XLSX valuation model, both generated in
+the scratchpad and labelled "SYNTHETIC TEST DOCUMENT", with one planted
+discrepancy (FY2025 EBITDA GBP 3.1m in the term sheet vs 3.4m in the
+model). No real deal data touched.
+
+**Paid calls made (2 total)**:
+
+| Call | Trigger (real UI) | Model | Tokens in/out |
+|---|---|---|---|
+| Plan proposal (`propose-ai`) | Composer → Flexible (auto-fires) → "Propose with AI" | claude-sonnet-5 | 1,742 / 165 |
+| Reconciliation run (`reconciliation.cross_format`) | Approve plan → Start run | claude-sonnet-5 | 32,176 / 6,042 |
+
+A first `propose-ai` attempt with the invalid key failed at authentication
+(no charge). The decision-package draft call that was planned for S16 was
+**not** made - see S16 below.
+
+**Results**:
+
+| Scenario | Result | Note |
+|---|---|---|
+| S10/S11 AI-planning half | **PASS** | Flexible structure auto-fired the real planner; it chose `reconciliation`, paired exactly the two documents with pinned versions, and gave reasoning. Human approval was required and given in the UI; run succeeded in ~60s, budget_consumed 1. |
+| Run output | **PASS** | 6 real findings. The planted mismatch was found as the top item: "FY2025 EBITDA mismatch between term sheet and model" (high). Others: EV/revenue/net debt agree (info), equity bridge consistent (info), no EV/EBITDA build-up in model (medium), exclusivity not in model (low), formula result not cached (low). |
+| S12 Review findings and evidence | **PARTIAL - new gap** | Findings renders all 6 with correct severity counts for `reviewer`. But clicking a finding does nothing: **no inline expansion, no evidence/citation locators, no review controls**. `Findings.tsx` has never had any of these (git history), and the React client calls no per-finding endpoint. This **conflicts with `docs/product/07-surface-reconciliation.md` rows 14/15**, which record surface #15 Finding Detail as "complete as inline expansion". |
+| S13 Information requests | **PASS (full cycle)** | `analyst` created a request via `RequestDialog` linked to the real EBITDA finding and set it to Sent; `external_executive` saw it on the restricted Overview, responded, response persisted across reload and showed on the analyst's Findings. Usability note: status stays "Sent" after the response (no move to "Answered"). |
+| S14 Readiness / Reassessments | **BLOCKED in UI - new gap** | The composer offers "Readiness checklist" and "Targeted reassessment" as pipelines, but `MandateDetail` has no workspace selector, so proposing fails with a raw 400 toast: `stage 'assess' (readiness.assess_scope) input: missing required field 'workspace_id'`. Staleness also cannot be triggered: the React app has no "upload new version" control (the versions endpoint exists; nothing calls it), and re-uploading the same filename via `DocumentUploadDialog` creates a **second, separate document with the same name** instead of a version. Pages load, empty. |
+| S15 Assertions | **Not populated** | Assertions only come from accepting an Integrity Review candidate. That needs a second, different paid mandate run (integrity review of a submitted work product), outside the "single run" authorization. Not done. Page loads, empty. |
+| S16 Decision package | **BLOCKED in UI - same gap as S14** | The "Decision package" pipeline fails the same way (`decision_package.produce_draft ... missing required field 'workspace_id'`), before any AI call. Also, the backend needs a finding with review activity, which the React UI cannot create (S12). No paid call made. |
+| S20 revision conflict | **FAIL - real defect** | Two independent browser contexts (separate `dl_session` cookies, `reviewer` + `deal_lead`) edited the real EBITDA finding. The React UI has no finding-edit control, so this ran against the real HTTP endpoint (`POST .../findings/<id>` with `revision`) from those authenticated pages, not through a UI control. **Sequential** stale save: correct 409 "finding was updated by someone else", with the current state returned. **Simultaneous** saves on the same expected revision: **both 200 in 10 of 10 races** (revision advanced by 2, first write silently lost). Cause: `workspaces.update_finding_workflow` checks `existing["revision"] != expected_revision` in Python, then runs `UPDATE ... WHERE workspace_id = %s AND id = %s` with no `AND revision = <expected>` and no row lock - a check-then-write race. The T06/Task 11.5 guarantee holds only for non-overlapping requests. |
+
+**New conflicts / defects for founder decision** (not fixed here - this
+task is execution evidence only):
+1. Surface #15 Finding Detail is not implemented in React, contrary to
+   `07-surface-reconciliation.md`. Without it, no human can review a
+   finding in the product, which also blocks the decision package.
+2. Readiness, decision-package and reassessment mandates cannot be
+   configured from the React UI (no `workspace_id` input), yet the
+   composer offers them and they fail with a raw schema error.
+3. No React path creates a new document version; same-name re-upload
+   silently creates a duplicate document. (Adjacent to the already-open
+   Document Detail decision from S06b.)
+4. Lost-update race in `update_finding_workflow` (S20). Likely fix: make
+   the UPDATE conditional on the expected revision and treat 0 rows as a
+   conflict. Same pattern should be checked in other revision-guarded
+   writes.
+
+The roadmap and reconciliation documents were **not** edited; item 1 is a
+genuine conflict with `07-surface-reconciliation.md`, recorded here for a
+founder decision on whether to correct that document and where the fix
+belongs (M19/M20).
+
+**Files changed**: this entry only. No application code, schema,
+dependency or frontend change. `static/` rebuild produced no diff.
+
+**Evidence**: ~20 screenshots and raw results (`propose-ai.json`,
+`s20.json`) are in this session's scratchpad, not committed (synthetic
+artifacts). The disposable database `deal_lab_m18_ai` still exists on the
+founder's machine and can be dropped with `dropdb -h "$(pwd)/pgsocket" -p
+5544 deal_lab_m18_ai`.
+
+**Permissions needed**: push of this commit; whether to fix items 1-4;
+whether to authorize a second paid run (integrity review) to populate S15.
