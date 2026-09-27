@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import { type DevIdentity, type Session, getSession, listDevIdentities, switchIdentity } from "@/lib/api"
+import { HOSTED_AUTH } from "@/lib/auth"
+
+const HostedUserButton = lazy(() => import("@/components/HostedUserButton"))
 
 // Extracted from the old AppHeader's IdentityNav (Task 11.3b) when that
 // header was replaced by the sidebar shell - same behavior, moved and
@@ -20,6 +23,8 @@ export function IdentityFooter() {
       .catch(() => setSession(null))
     // Absent (404) outside dev - see docs/06-security-and-collaboration.md.
     // Treated the same as "not available", not an error to surface.
+    // Never asked for in hosted mode (Task 19.4): there is no dev switcher.
+    if (HOSTED_AUTH) return
     listDevIdentities()
       .then(setIdentities)
       .catch(() => setIdentities(null))
@@ -61,6 +66,13 @@ export function IdentityFooter() {
             </option>
           ))}
         </select>
+      ) : HOSTED_AUTH ? (
+        <div className="flex items-center gap-2">
+          <Suspense fallback={null}>
+            <HostedUserButton />
+          </Suspense>
+          <span className="truncate text-sidebar-foreground">{session.user.display_name}</span>
+        </div>
       ) : (
         <span className="truncate text-sidebar-foreground">{session.user.display_name}</span>
       )}

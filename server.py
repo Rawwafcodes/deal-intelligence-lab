@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, urlparse
 import ai_client
 import answer_keys
 import assertion_ledger
+import auth_tokens
 import authz
 import cross_analyses
 import cross_document_analysis
@@ -80,6 +81,18 @@ _ALLOWED_ORIGINS = {
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 }
+# Task 19.4 (M19): a hosted deployment adds its own origin(s).
+_ALLOWED_ORIGINS |= {o.strip() for o in os.environ.get("DEAL_LAB_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+
+# Task 19.4 (M19): "dev" (default, local only) keeps the dev identity
+# switcher; "clerk" (hosted) accepts only verified Clerk session tokens and
+# never falls back to a default identity.
+AUTH_MODE = os.environ.get("DEAL_LAB_AUTH_MODE", "dev").strip().lower()
+if AUTH_MODE not in ("dev", "clerk"):
+    raise SystemExit(f"DEAL_LAB_AUTH_MODE must be 'dev' or 'clerk', not {AUTH_MODE!r}")
+CLERK_SESSION_COOKIE = "__session"
+# Reachable without signing in, in hosted mode.
+_PUBLIC_API_PATHS = {"/api/health"}
 
 # Task 11.3b: dev-only identity switching (docs/06: "explicit, disabled
 # outside development, loopback-only, and absent from production routes").
@@ -215,6 +228,8 @@ class Handler(BaseHTTPRequestHandler):
     # do_DELETE, before any route runs.
     current_user_id: str
     _new_session_token: str | None
+    # Task 19.4: why a hosted-mode request has no identity (401/403), if so.
+    _auth_failure: tuple[int, str] | None = None
 
     def log_message(self, format: str, *args) -> None:  # quieter default logging
         pass
@@ -225,10 +240,12 @@ class Handler(BaseHTTPRequestHandler):
         return self.client_address[0] in ("127.0.0.1", "::1")
 
     def _dev_auth_enabled(self) -> bool:
+        if AUTH_MODE != "dev":
+            return False  # never in hosted mode, whatever DEAL_LAB_DEV_AUTH says
         raw = os.environ.get("DEAL_LAB_DEV_AUTH", "1").strip().lower()
         return raw not in _DEV_AUTH_DISABLED_VALUES and self._client_is_loopback()
 
-    def _get_session_cookie_token(self) -> str | None:
+    def _get_session_cookie_token(self, name: str = SESSION_COOKIE_NAME) -> str | None:
         header = self.headers.get("Cookie")
         if not header:
             return None
@@ -237,8 +254,42 @@ class Handler(BaseHTTPRequestHandler):
             jar.load(header)
         except Exception:
             return None
-        morsel = jar.get(SESSION_COOKIE_NAME)
+        morsel = jar.get(name)
         return morsel.value if morsel else None
+
+    def _resolve_hosted_identity(self) -> None:
+        """Task 19.4: hosted sign-in. Identity comes only from a verified
+        Clerk session token - no cookie of our own, no default identity."""
+        self._new_session_token = None
+        self._auth_failure = None
+        self.current_user_id = ""
+        header = self.headers.get("Authorization", "")
+        token = header[7:].strip() if header.lower().startswith("bearer ") else self._get_session_cookie_token(CLERK_SESSION_COOKIE)
+        if not token:
+            self._auth_failure = (401, "sign in required")
+            return
+        try:
+            verified = auth_tokens.verify(token)
+        except auth_tokens.TokenError:
+            self._auth_failure = (401, "sign in required")
+            return
+        user = identity.resolve_signed_in_user(verified.subject, verified.email)
+        if user is None:
+            self._auth_failure = (403, "this account has not been invited to this workspace")
+            return
+        self.current_user_id = user.id
+
+    def _identity_gate(self, path: str) -> bool:
+        """Hosted mode: refuse every API route except the public ones when
+        the caller has no identity. Static files (the React app, which
+        shows the sign-in screen) are always served."""
+        if AUTH_MODE != "clerk" or self._auth_failure is None:
+            return True
+        if not path.startswith("/api/") or path in _PUBLIC_API_PATHS:
+            return True
+        status, message = self._auth_failure
+        self._send_json(status, {"error": message})
+        return False
 
     def _resolve_identity(self) -> None:
         """Resolves the caller's identity for this request. A valid
@@ -248,6 +299,9 @@ class Handler(BaseHTTPRequestHandler):
         static pages - which have no login UI - keep working unchanged.
         Explicitly switching identity (POST /api/dev/session) is what
         actually exercises differentiated access."""
+        if AUTH_MODE == "clerk":
+            self._resolve_hosted_identity()
+            return
         self._new_session_token = None
         token = self._get_session_cookie_token()
         if token:
@@ -985,6 +1039,12 @@ class Handler(BaseHTTPRequestHandler):
         self._resolve_identity()
         parsed = urlparse(self.path)
         path = parsed.path
+        if not self._identity_gate(path):
+            return
+
+        if path == "/api/health":
+            self._send_json(200, {"ok": True})
+            return
 
         if path == "/api/session":
             self._handle_get_session()
@@ -1619,6 +1679,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._resolve_identity()
         path = urlparse(self.path).path
+        if not self._identity_gate(path):
+            return
 
         if not self._check_origin_for_mutation():
             self._send_json(403, {"error": "cross-origin request rejected"})
@@ -1966,6 +2028,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         self._resolve_identity()
         path = urlparse(self.path).path
+        if not self._identity_gate(path):
+            return
 
         if not self._check_origin_for_mutation():
             self._send_json(403, {"error": "cross-origin request rejected"})

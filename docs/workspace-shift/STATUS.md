@@ -7052,3 +7052,46 @@ founder's R2 account (provisioning).
 **Known intermittent test**: across this session two full-suite runs (of
 ≈ 12) reported one failure that did not reproduce; the test name was not
 captured either time. Logged for follow-up rather than dismissed.
+
+## 2026-09-27 — M19 code change 3: hosted sign-in (Task 19.4)
+
+**Security issue found and closed for hosted use**: in local mode a request
+with no session cookie is silently given the default identity (the deal lead
+/ org admin) - fine on loopback, but on a hosted URL every anonymous visitor
+would have been that admin. Hosted mode never does this.
+
+`DEAL_LAB_AUTH_MODE=clerk` (hosted; default stays `dev`, unchanged):
+- Identity only from a verified Clerk session token (`__session` cookie on
+  same-origin requests, or `Authorization: Bearer`): RS256 against the
+  instance JWKS, issuer, `exp`/`nbf` (5 s leeway), and `azp` against the
+  deployment's origins (`auth_tokens.py`, PyJWT). No token or an invalid one
+  -> 401 on every API route except `/api/health`; the React app itself is
+  still served so it can show the sign-in screen.
+- **Invite-only**: a verified sign-in maps to an existing local user - by a
+  linked Clerk id, or on first sign-in by the `email` custom claim
+  (case-insensitive) when that user isn't already linked to another sign-in
+  (`identity.resolve_signed_in_user`; additive `users.external_auth_id`).
+  Otherwise 403 "not invited". Nobody is created by signing in.
+- Dev identity endpoints (`/api/dev/*`) return 404 in hosted mode regardless
+  of `DEAL_LAB_DEV_AUTH`. `DEAL_LAB_ALLOWED_ORIGINS` adds the hosted origin to
+  the CSRF origin check. New public `GET /api/health`.
+- Frontend: a hosted build (`VITE_CLERK_PUBLISHABLE_KEY` set) wraps the app in
+  `ClerkProvider` + `AuthGate` (sign-in screen; "not invited" screen after a
+  server check) and shows Clerk's account menu instead of the dev switcher.
+  The Clerk SDK (`@clerk/react` 6.17.2) is lazy-loaded in its own chunk, so the
+  local bundle is unchanged in size (625.6 KB) and never downloads it.
+
+**Verification**: 8 new tests (`tests/test_hosted_auth.py`, real server, real
+RSA keys and signed JWTs): no token -> 401 and no default-identity cookie;
+health public; invited user signs in by email, then by linked id alone;
+uninvited -> 403; an email linked to one sign-in can't be taken over by
+another; expired, wrong-issuer, wrong-origin, forged-signature, garbage and
+HS256 tokens all rejected; dev endpoints 404. Full backend suite OK; mypy
+clean; `tsc -b` clean; no new lint warnings. Live local-mode browser check:
+dev switcher present, pages load, no Clerk chunk requested, no console
+errors. **Not yet exercised against a real Clerk instance** - needs the
+founder's Clerk application (publishable key, JWKS/issuer URLs, and the
+`email` session-token claim).
+
+Still to do in § 3.3: the minimal organization and team screens (#23-24) for
+inviting the pilot users; § 3.4 (environment-only configuration).

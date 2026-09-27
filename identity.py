@@ -138,6 +138,9 @@ def init_identity_db() -> None:
             )
             """
         )
+        # Task 19.4 (M19): the hosted sign-in provider's user id (Clerk
+        # `sub`), linked on a user's first verified sign-in. Additive.
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS external_auth_id TEXT UNIQUE")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS organization_memberships (
@@ -266,6 +269,45 @@ def _backfill_legacy_projects(default_org_id: str, default_user_id: str) -> None
     for row in rows:
         assign_project_organization(row["id"], default_org_id)
         add_deal_membership(row["id"], default_user_id, "deal_lead")
+
+
+def find_user_by_external_auth_id(external_auth_id: str) -> User | None:
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, email, display_name, created_at FROM users WHERE external_auth_id = %s", (external_auth_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return User(row["id"], row["email"], row["display_name"], row["created_at"]) if row else None
+
+
+def resolve_signed_in_user(external_auth_id: str, email: str | None) -> User | None:
+    """Task 19.4: invite-only mapping from a verified sign-in to a local
+    user. A user already linked to this sign-in id wins; otherwise, on first
+    sign-in, an existing local user with the same email (case-insensitive)
+    is linked - but only if not already linked to a different sign-in id.
+    Nobody is created here: without a matching invited user this returns
+    None and the caller refuses access."""
+    linked = find_user_by_external_auth_id(external_auth_id)
+    if linked is not None:
+        return linked
+    if not email:
+        return None
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            UPDATE users SET external_auth_id = %s
+             WHERE lower(email) = lower(%s) AND external_auth_id IS NULL
+            RETURNING id, email, display_name, created_at
+            """,
+            (external_auth_id, email),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return User(row["id"], row["email"], row["display_name"], row["created_at"]) if row else None
 
 
 def get_default_user_id() -> str:
