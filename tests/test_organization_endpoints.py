@@ -7,6 +7,7 @@ import unittest
 import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -73,6 +74,15 @@ class OrganizationEndpointTests(unittest.TestCase):
         admin = self._as(self.admin_id)
         self.assertEqual(admin.post("/api/organization/members", {"email": "not-an-email"})[0], 400)
         self.assertEqual(admin.post("/api/organization/members", {"email": "a@b.c", "role": "owner"})[0], 400)
+
+    def test_bootstrap_admin_from_environment_is_idempotent(self):
+        email = f"founder-{uuid.uuid4().hex[:6]}@example.com"
+        with patch.dict("os.environ", {"DEAL_LAB_BOOTSTRAP_ADMIN_EMAIL": email}):
+            server.bootstrap_admin_from_env()
+            server.bootstrap_admin_from_env()
+        matches = [(u, r) for u, r in identity.list_organization_members(self.org_id) if u.email == email]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0][1], "admin")
 
     def test_admin_renames_organization(self):
         status, body = self._as(self.admin_id).post("/api/organization", {"name": "Acme Advisory"})

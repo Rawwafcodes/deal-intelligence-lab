@@ -4169,6 +4169,20 @@ def init_databases() -> None:
             cur.execute("SELECT pg_advisory_unlock(%s)", (SCHEMA_INIT_LOCK_KEY,))
         lock_conn.close()
 
+def bootstrap_admin_from_env() -> None:
+    """Task 19.6: makes the person named in DEAL_LAB_BOOTSTRAP_ADMIN_EMAIL an
+    admin of the (first) organization on start-up, so the founder can sign
+    in to a fresh hosted deployment and invite everyone else from the Team
+    page - no shell access needed. Idempotent; a no-op when unset."""
+    email = os.environ.get("DEAL_LAB_BOOTSTRAP_ADMIN_EMAIL", "").strip()
+    if not email:
+        return
+    organizations = identity.list_organizations()
+    if not organizations:
+        return
+    identity.invite_to_organization(organizations[0].id, email, email.split("@")[0], "admin")
+
+
 def worker_from_env() -> "mandates.Worker":
     return mandates.Worker(
         poll_interval=float(os.environ.get("DEAL_LAB_MANDATE_WORKER_POLL_SECONDS", "0.5")),
@@ -4180,6 +4194,7 @@ def worker_from_env() -> "mandates.Worker":
 def main() -> None:
     observability.init("web")
     init_databases()
+    bootstrap_admin_from_env()
     # Task 19.2 (M19): locally the worker runs in this process, as it always
     # has. In a hosted deployment the worker runs as its own service
     # (worker.py) and the web service sets DEAL_LAB_RUN_WORKER=0.
