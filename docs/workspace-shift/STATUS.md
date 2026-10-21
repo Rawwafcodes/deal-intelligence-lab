@@ -7393,3 +7393,40 @@ With this, Path B is complete end-to-end as asked: schema, access control,
 an invite flow, and a UI - not yet decided is whether the product
 direction wants this at all beyond the exercise of building it, which
 remains this report's own still-open question.
+
+## 2026-10-21 — D27: two open M19 items dropped, Post-M19 review declined for now
+
+Recorded in full in `docs/workspace-shift/docs/10-decisions.md` (D27).
+The two items D26 had left open (a scheduled two-user test, dollar cost
+figures) are no longer being pursued at all - not deferred, dropped. The
+Post-M19 strategic-pause review required before any M20 work
+(`13-post-m17-roadmap.md`) is explicitly not being done right now either.
+This does not authorize M20; it only means the review that would have is
+not happening yet.
+
+## 2026-10-21 — Task 20.4: close the same `.env.local` gap for ordinary local runs
+
+Task 19.7 fixed `.env.local`'s real staging `DATABASE_URL` from leaking
+into test runs. The same gap reaches ordinary local development too:
+running `python server.py` normally tried to connect to the real staging
+database and crashed on startup - caught live while verifying Path B's
+UI this session.
+
+- `store.is_local_database_url(url)`: one shared helper (used by this
+  fix, `server.py`'s and `worker.py`'s new guards, and Task 19.7's
+  existing test-isolation check) so "local" can't quietly drift apart
+  across the three places that now check it.
+- `server.py`: refuses to start in `DEAL_LAB_AUTH_MODE=dev` (the default)
+  against a non-local `DATABASE_URL` - dev mode signs every caller in as
+  the default admin with no password, which is fine against a local,
+  disposable database and a real problem against a real hosted one.
+- `worker.py`: refuses to start against a non-local `DATABASE_URL` unless
+  `DEAL_LAB_ENVIRONMENT` is set (the signal an actual hosted worker is
+  already configured with, per `docs/deployment/staging-setup.md`) -
+  otherwise it would silently claim and execute real, billed mandate
+  runs against staging data from a local machine.
+
+**Verification**: 11 new tests (`tests/test_startup_guards.py`) covering
+both guards' predicates directly and confirming `main()` actually raises
+`SystemExit` when they fire, without starting anything. Full backend
+suite: 987 tests, all passing. mypy clean.

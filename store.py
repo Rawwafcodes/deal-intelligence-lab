@@ -40,9 +40,18 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 _LOCAL_DATABASE_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
+def is_local_database_url(url: str) -> bool:
+    """Whether `url` (a DATABASE_URL-shaped connection string) points at a
+    local Postgres instance rather than a real hosted one. Shared by this
+    module's own test-isolation guard below and by server.py/worker.py's
+    startup guards (Task 19.7/20.4) - one place to define "local" so the
+    three checks can't quietly drift apart."""
+    return urlsplit(url).hostname in _LOCAL_DATABASE_HOSTS
+
+
 def _connect(**kwargs: Any) -> "psycopg2.extensions.connection":
     if DATABASE_URL:
-        if REFUSE_PUBLIC_SCHEMA and urlsplit(DATABASE_URL).hostname not in _LOCAL_DATABASE_HOSTS:
+        if REFUSE_PUBLIC_SCHEMA and not is_local_database_url(DATABASE_URL):
             # REFUSE_PUBLIC_SCHEMA is the tests package's own "we are running
             # under tests" signal. CI legitimately sets DATABASE_URL to a
             # disposable localhost Postgres (.github/workflows/ci.yml) - that

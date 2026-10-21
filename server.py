@@ -4433,7 +4433,32 @@ def worker_from_env() -> "mandates.Worker":
     )
 
 
+def dev_mode_targets_non_local_database() -> bool:
+    """True when this process would start in dev identity mode (which
+    signs every caller in as the default admin, no password) against a
+    real hosted database rather than a local, disposable one - see
+    main()'s own guard for why that's refused, not just risky."""
+    return bool(AUTH_MODE == "dev" and store.DATABASE_URL and not store.is_local_database_url(store.DATABASE_URL))
+
+
 def main() -> None:
+    # Dev identity mode (the default) signs every caller in as the default
+    # admin, with no password - fine against a local, disposable database,
+    # not against a real hosted one, where the developer running this
+    # locally would then be silently looking at (and able to write to)
+    # real data as an unauthenticated full admin. `.env.local` can carry a
+    # real hosted DATABASE_URL for direct staging access
+    # (docs/deployment/staging-setup.md) even though its own comment says
+    # "leave unset locally" - Task 19.7 already closed this same gap for
+    # test runs; this closes it for an ordinary `python server.py` too,
+    # at the one place it would otherwise first try that connection.
+    if dev_mode_targets_non_local_database():
+        raise SystemExit(
+            "Refusing to start: DEAL_LAB_AUTH_MODE=dev (the default) with a non-local "
+            "DATABASE_URL would silently sign every caller in as the default admin against "
+            "a real hosted database. If this is deliberate, set DEAL_LAB_AUTH_MODE=clerk; "
+            "otherwise unset DATABASE_URL (check .env.local)."
+        )
     observability.init("web")
     init_databases()
     bootstrap_admin_from_env()

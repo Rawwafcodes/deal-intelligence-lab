@@ -631,6 +631,30 @@ pricing, legal/procurement, founder capacity) is still required, ending in
 an explicit Proceed/Remediate/Narrow/Reposition/Pause/Stop decision,
 before any M20 work begins.
 
+D27 (added 2026-10-21) **D26's two open items dropped entirely, not just
+accepted-but-open; the Post-M19 strategic-pause review explicitly
+declined for now.** Founder: "1,2 forget about them completely, saad
+ghosted me and im expecting the replies of ppl im inviting actually so no
+need for them. pulling dollar costs, i dont know what is this. post m19,
+ignore it."
+
+- **Two-authorized-users-complete-the-core-workflow**: not merely
+  deferred - the founder is no longer pursuing a scheduled live test with
+  a named reviewer. The actual mechanism (inviting outside contacts,
+  Task 20.1-20.3) stays in the product; replies from real invited users,
+  whenever they come, are the evidence now, not a scripted session.
+- **Dollar cost figures**: dropped. The founder does not consider this
+  actionable without more context than a bare "pull the numbers" ask
+  provided.
+- **The Post-M19 strategic-pause review** (product coherence, intelligence
+  quality, infra reliability, real costs, first customer, pricing,
+  legal/procurement, founder capacity - required by `13-post-m17-roadmap.md`
+  before any M20 work) is explicitly not being done right now. This does
+  not retroactively authorize M20 - declining the review is not the same
+  as passing it. M20 remains unauthorized until a future, separate
+  founder decision either does this review or otherwise explicitly
+  authorizes proceeding.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,
