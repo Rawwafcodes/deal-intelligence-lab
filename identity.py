@@ -92,6 +92,13 @@ class DealMembership:
     role: str
     created_at: str
     revoked_at: str | None
+    # Task 20.1 (Path B, multi-firm-per-deal): which organization this
+    # member is representing on this specific deal - the deal's own owning
+    # organization, or one explicitly added as a DealParty. Nullable:
+    # existing rows and dev-seeded identities predate this and are never
+    # backfilled, per the architecture decision report's "nothing about an
+    # existing deal's behavior changes".
+    organization_id: str | None
 
     def to_dict(self) -> dict:
         return {
@@ -101,6 +108,36 @@ class DealMembership:
             "role": self.role,
             "created_at": self.created_at,
             "revoked_at": self.revoked_at,
+            "organization_id": self.organization_id,
+        }
+
+
+DEAL_PARTY_ROLES = ("counterparty", "legal_counsel", "lender", "other")
+
+
+@dataclass
+class DealParty:
+    """Task 20.1 (Path B): an organization other than the deal's own owning
+    organization that has been explicitly given access to it. Granting a
+    user deal membership through a DealParty's organization is otherwise
+    identical to granting it through the owning organization - same
+    `DEAL_ROLES`, same capability matrix (`authz.py`); `party_role` is
+    informational today, not yet consumed by any authorization check
+    (deferred to a future, separate Phase 2 decision)."""
+
+    id: str
+    project_id: str
+    organization_id: str
+    party_role: str
+    created_at: str
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "organization_id": self.organization_id,
+            "party_role": self.party_role,
+            "created_at": self.created_at,
         }
 
 
@@ -176,11 +213,36 @@ def init_identity_db() -> None:
             )
             """
         )
+        # Task 20.1 (Path B): which organization this member represents on
+        # this deal. Additive, nullable - see DealMembership's docstring.
+        conn.execute("ALTER TABLE deal_memberships ADD COLUMN IF NOT EXISTS organization_id TEXT")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_deal_memberships_project ON deal_memberships(project_id)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_deal_memberships_user ON deal_memberships(user_id)"
+        )
+        # Task 20.1 (Path B, multi-firm-per-deal): organizations other than
+        # a deal's owning organization that have been explicitly given
+        # access to it. See DealParty's docstring and
+        # docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md.
+        # A deal's owning organization (project_organizations) is never
+        # also listed here - it's always implicitly eligible, checked
+        # first in resolve_grantable_organization_for.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deal_parties (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                organization_id TEXT NOT NULL,
+                party_role TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (project_id, organization_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_deal_parties_project ON deal_parties(project_id)"
         )
         conn.execute(
             """
@@ -548,13 +610,114 @@ def get_project_organization_id(project_id: str) -> str | None:
     return row["organization_id"] if row else None
 
 
+# -- deal parties (Task 20.1, Path B: multi-firm-per-deal) -------------------
+
+
+def add_deal_party(project_id: str, organization_id: str, party_role: str) -> DealParty:
+    """Gives `organization_id` access to `project_id` as a named party,
+    in addition to the deal's own owning organization. Idempotent on
+    (project_id, organization_id): re-adding updates the party_role rather
+    than erroring or duplicating."""
+    if party_role not in DEAL_PARTY_ROLES:
+        raise ValueError(f"invalid deal party role: {party_role!r}")
+    party_id = uuid.uuid4().hex
+    created_at = _now()
+    conn = store.get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO deal_parties (id, project_id, organization_id, party_role, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (project_id, organization_id) DO UPDATE SET party_role = EXCLUDED.party_role
+            """,
+            (party_id, project_id, organization_id, party_role, created_at),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, created_at FROM deal_parties WHERE project_id = %s AND organization_id = %s",
+            (project_id, organization_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row is not None
+    return DealParty(row["id"], project_id, organization_id, party_role, row["created_at"])
+
+
+def list_deal_parties_for_project(project_id: str) -> list[DealParty]:
+    conn = store.get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, project_id, organization_id, party_role, created_at
+            FROM deal_parties WHERE project_id = %s ORDER BY created_at
+            """,
+            (project_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        DealParty(r["id"], r["project_id"], r["organization_id"], r["party_role"], r["created_at"])
+        for r in rows
+    ]
+
+
+def remove_deal_party(project_id: str, organization_id: str) -> bool:
+    """Returns whether a row was actually removed. Deliberately a hard
+    delete, unlike deal_memberships's revoke-preserves-history pattern:
+    a DealParty is an access grant between organizations, not a person's
+    membership record, so there's no individual history to preserve -
+    D06's revocation rule doesn't apply to it. Existing deal_memberships
+    granted through this party are unaffected (their own revocation is
+    separate and explicit) - removing a party does not retroactively
+    revoke anyone already granted access through it."""
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "DELETE FROM deal_parties WHERE project_id = %s AND organization_id = %s RETURNING id",
+            (project_id, organization_id),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def resolve_grantable_organization_for(project_id: str, user_id: str) -> str | None:
+    """Which organization a candidate deal member may be granted access
+    through: the deal's own owning organization, or any organization
+    explicitly added as a DealParty to this deal. Returns the resolved
+    organization id (to record on the new DealMembership), or None if the
+    user belongs to neither - the caller must then refuse the grant. This
+    is the one check Task 19.5's tenant isolation used to make unilaterally
+    ("member of the deal's single organization or refused"); Path B widens
+    it to a deliberate, per-deal, explicit allowlist rather than removing
+    the check."""
+    owning_org_id = get_project_organization_id(project_id)
+    if owning_org_id is not None and get_organization_role(owning_org_id, user_id) is not None:
+        return owning_org_id
+    for party in list_deal_parties_for_project(project_id):
+        if get_organization_role(party.organization_id, user_id) is not None:
+            return party.organization_id
+    return None
+
+
 # -- deal memberships --------------------------------------------------------
 
 
-def add_deal_membership(project_id: str, user_id: str, role: str) -> DealMembership:
+def add_deal_membership(
+    project_id: str, user_id: str, role: str, organization_id: str | None = None
+) -> DealMembership:
     """Grants (or re-activates, updating the role) deal access. Never
     deletes a prior row - a previously revoked-then-regranted user keeps
-    their full history, per D06 (revocation preserves history)."""
+    their full history, per D06 (revocation preserves history).
+
+    `organization_id` (Task 20.1, Path B) records which organization the
+    member is representing on this deal - the caller (server.py) resolves
+    it via `resolve_grantable_organization_for` before calling this.
+    Optional and left `None` for dev-seeded/internal callers that predate
+    Path B; never required, since an existing deal's single owning
+    organization is still always implicitly eligible regardless of what's
+    recorded here."""
     if role not in DEAL_ROLES:
         raise ValueError(f"invalid deal role: {role!r}")
     conn = store.get_connection()
@@ -567,7 +730,10 @@ def add_deal_membership(project_id: str, user_id: str, role: str) -> DealMembers
             (project_id, user_id),
         ).fetchone()
         if existing:
-            conn.execute("UPDATE deal_memberships SET role = %s WHERE id = %s", (role, existing["id"]))
+            conn.execute(
+                "UPDATE deal_memberships SET role = %s, organization_id = %s WHERE id = %s",
+                (role, organization_id, existing["id"]),
+            )
             conn.commit()
             membership_id = existing["id"]
             created_at = _now()
@@ -576,15 +742,15 @@ def add_deal_membership(project_id: str, user_id: str, role: str) -> DealMembers
             created_at = _now()
             conn.execute(
                 """
-                INSERT INTO deal_memberships (id, project_id, user_id, role, created_at, revoked_at)
-                VALUES (%s, %s, %s, %s, %s, NULL)
+                INSERT INTO deal_memberships (id, project_id, user_id, role, created_at, revoked_at, organization_id)
+                VALUES (%s, %s, %s, %s, %s, NULL, %s)
                 """,
-                (membership_id, project_id, user_id, role, created_at),
+                (membership_id, project_id, user_id, role, created_at, organization_id),
             )
             conn.commit()
     finally:
         conn.close()
-    return DealMembership(membership_id, project_id, user_id, role, created_at, None)
+    return DealMembership(membership_id, project_id, user_id, role, created_at, None, organization_id)
 
 
 def revoke_deal_membership(project_id: str, user_id: str) -> bool:
@@ -696,7 +862,7 @@ def list_deal_memberships_for_project(project_id: str) -> list[DealMembership]:
     try:
         rows = conn.execute(
             """
-            SELECT id, project_id, user_id, role, created_at, revoked_at
+            SELECT id, project_id, user_id, role, created_at, revoked_at, organization_id
             FROM deal_memberships WHERE project_id = %s ORDER BY created_at
             """,
             (project_id,),
@@ -704,7 +870,9 @@ def list_deal_memberships_for_project(project_id: str) -> list[DealMembership]:
     finally:
         conn.close()
     return [
-        DealMembership(r["id"], r["project_id"], r["user_id"], r["role"], r["created_at"], r["revoked_at"])
+        DealMembership(
+            r["id"], r["project_id"], r["user_id"], r["role"], r["created_at"], r["revoked_at"], r["organization_id"]
+        )
         for r in rows
     ]
 

@@ -68,6 +68,18 @@ already marked explicitly approved/sent).
 | Configure triggers | Denied | Allowed | Allowed | Denied |
 | Request reassessment | Allowed | Allowed | Allowed | Denied |
 | Manage membership | Denied | Denied | Allowed | Denied |
+| Manage deal parties (Task 20.1, Path B) | Denied | Denied | Allowed | Denied |
+
+**Manage deal parties** (added 2026-10-21, not one of the founder's
+original 17 rows): add or remove an organization other than the deal's own
+owning organization as an explicit party with access to it (`deal_parties`
+table) - see
+`docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md`.
+Gated the same as membership management (deal_lead only) since it's a more
+consequential action: it makes an entire outside firm's members eligible
+for future grants, not just one person. Granting deal membership itself
+still goes through the row above's same deal_lead-only gate; this new row
+only governs which *organizations* are eligible to be granted from at all.
 
 Two rows the 17 required by the founder's directive don't name, added
 because the real route surface needed them and because leaving them

@@ -69,6 +69,7 @@ MANAGE_ASSERTIONS = "manage_assertions"
 VIEW_TRIGGERS = "view_triggers"
 CONFIGURE_TRIGGERS = "configure_triggers"
 MANAGE_MEMBERSHIP = "manage_membership"
+MANAGE_DEAL_PARTIES = "manage_deal_parties"
 
 ALL_CAPABILITIES: tuple[str, ...] = (
     VIEW_DEAL,
@@ -96,6 +97,7 @@ ALL_CAPABILITIES: tuple[str, ...] = (
     VIEW_TRIGGERS,
     CONFIGURE_TRIGGERS,
     MANAGE_MEMBERSHIP,
+    MANAGE_DEAL_PARTIES,
 )
 
 # -- the matrix ---------------------------------------------------------------
@@ -148,6 +150,7 @@ _MATRIX: dict[str, dict[str, bool]] = {
         VIEW_TRIGGERS: True,
         CONFIGURE_TRIGGERS: True,
         MANAGE_MEMBERSHIP: False,
+        MANAGE_DEAL_PARTIES: False,
     },
     "analyst": {
         VIEW_DEAL: True,
@@ -175,6 +178,7 @@ _MATRIX: dict[str, dict[str, bool]] = {
         VIEW_TRIGGERS: True,
         CONFIGURE_TRIGGERS: False,
         MANAGE_MEMBERSHIP: False,
+        MANAGE_DEAL_PARTIES: False,
     },
     "external_executive": {
         VIEW_DEAL: True,
@@ -207,6 +211,7 @@ _MATRIX: dict[str, dict[str, bool]] = {
         VIEW_TRIGGERS: False,
         CONFIGURE_TRIGGERS: False,
         MANAGE_MEMBERSHIP: False,
+        MANAGE_DEAL_PARTIES: False,
     },
 }
 

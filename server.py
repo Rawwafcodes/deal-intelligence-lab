@@ -173,6 +173,11 @@ _WORKSTREAM_ASSIGNMENT_ITEM_RE = re.compile(
 _MEMBERSHIPS_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/memberships$")
 _MEMBERSHIP_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/memberships/([^/]+)$")
 
+# Task 20.1 (Path B): which organizations besides the deal's owner have
+# access to it.
+_DEAL_PARTIES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/parties$")
+_DEAL_PARTY_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/parties/([^/]+)$")
+
 _WORKSPACE_OVERVIEW_RE = re.compile(r"^/api/overview$")
 _ORG_MANDATES_RE = re.compile(r"^/api/mandates$")
 _DEAL_OVERVIEW_RE = re.compile(r"^/api/projects/([^/]+)/overview$")
@@ -1519,6 +1524,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, self._memberships_with_users(project_id))
             return
 
+        deal_parties_collection_match = _DEAL_PARTIES_COLLECTION_RE.match(path)
+        if deal_parties_collection_match:
+            (project_id,) = deal_parties_collection_match.groups()
+            self._handle_list_deal_parties(project_id)
+            return
+
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
@@ -1852,6 +1863,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_grant_membership(project_id)
             return
 
+        deal_parties_collection_match = _DEAL_PARTIES_COLLECTION_RE.match(path)
+        if deal_parties_collection_match:
+            (project_id,) = deal_parties_collection_match.groups()
+            self._handle_add_deal_party(project_id)
+            return
+
         task_work_products_match = _TASK_WORK_PRODUCTS_RE.match(path)
         if task_work_products_match:
             project_id, task_id = task_work_products_match.groups()
@@ -2155,6 +2172,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_revoke_membership(project_id, user_id)
             return
 
+        deal_party_item_match = _DEAL_PARTY_ITEM_RE.match(path)
+        if deal_party_item_match:
+            project_id, organization_id = deal_party_item_match.groups()
+            self._handle_remove_deal_party(project_id, organization_id)
+            return
+
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
         if workstream_item_match:
             project_id, workstream_id = workstream_item_match.groups()
@@ -2356,11 +2379,16 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(user_id, str) or identity.get_user(user_id) is None:
             self._send_json(400, {"error": "user_id must be an existing user id"})
             return
-        # Task 19.5 (M19): tenant isolation - deal access only for members of
-        # the deal's own organization, never an arbitrary user id.
-        org_id = identity.get_project_organization_id(project_id)
-        if org_id is None or identity.get_organization_role(org_id, user_id) is None:
-            self._send_json(400, {"error": "that person is not a member of this deal's organization"})
+        # Task 19.5 (M19) tenant isolation, widened by Task 20.1 (Path B):
+        # deal access only for members of the deal's own organization, or of
+        # an organization explicitly added as a DealParty to this specific
+        # deal - never an arbitrary user id, and never any organization that
+        # wasn't deliberately given access.
+        grant_org_id = identity.resolve_grantable_organization_for(project_id, user_id)
+        if grant_org_id is None:
+            self._send_json(400, {
+                "error": "that person is not a member of this deal's organization or an added party organization",
+            })
             return
         role = data.get("role")
         if not isinstance(role, str) or role not in identity.DEAL_ROLES:
@@ -2369,8 +2397,53 @@ class Handler(BaseHTTPRequestHandler):
         if role != "deal_lead" and self._would_leave_no_deal_lead(project_id, user_id):
             self._send_json(400, {"error": "a deal must keep at least one deal lead - add another lead first"})
             return
-        identity.add_deal_membership(project_id, user_id, role)
+        identity.add_deal_membership(project_id, user_id, role, grant_org_id)
         self._send_json(201, self._memberships_with_users(project_id))
+
+    def _handle_list_deal_parties(self, project_id: str) -> None:
+        if self._require_capability(project_id, authz.VIEW_INTERNAL_ACTIVITY) is None:
+            return
+        self._send_json(200, [p.to_dict() for p in identity.list_deal_parties_for_project(project_id)])
+
+    def _handle_add_deal_party(self, project_id: str) -> None:
+        """Gives a whole other organization access to this deal - a more
+        consequential action than adding one person, so gated the same way
+        as membership management: an existing deal_lead only (Task 20.1,
+        Path B)."""
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may add a deal party organization"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        organization_id = data.get("organization_id")
+        if not isinstance(organization_id, str) or identity.get_organization(organization_id) is None:
+            self._send_json(400, {"error": "organization_id must be an existing organization id"})
+            return
+        if organization_id == identity.get_project_organization_id(project_id):
+            self._send_json(400, {"error": "that organization already owns this deal"})
+            return
+        party_role = data.get("party_role")
+        if not isinstance(party_role, str) or party_role not in identity.DEAL_PARTY_ROLES:
+            self._send_json(400, {"error": f"party_role must be one of {list(identity.DEAL_PARTY_ROLES)}"})
+            return
+        identity.add_deal_party(project_id, organization_id, party_role)
+        self._send_json(201, [p.to_dict() for p in identity.list_deal_parties_for_project(project_id)])
+
+    def _handle_remove_deal_party(self, project_id: str, organization_id: str) -> None:
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may remove a deal party organization"})
+            return
+        removed = identity.remove_deal_party(project_id, organization_id)
+        if not removed:
+            self._send_json(404, {"error": "deal party not found"})
+            return
+        self._send_json(200, {"removed": True})
 
     def _would_leave_no_deal_lead(self, project_id: str, user_id: str) -> bool:
         """Task 19.5: a deal must always keep at least one deal lead - the
