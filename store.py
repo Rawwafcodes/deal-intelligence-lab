@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import psycopg2
 import psycopg2.extras
@@ -36,9 +37,24 @@ PG_USER = os.environ.get("DEAL_LAB_PG_USER", os.environ.get("USER", "postgres"))
 # is used as-is and the DEAL_LAB_PG_* settings above are ignored.
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
+_LOCAL_DATABASE_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
 
 def _connect(**kwargs: Any) -> "psycopg2.extensions.connection":
     if DATABASE_URL:
+        if REFUSE_PUBLIC_SCHEMA and urlsplit(DATABASE_URL).hostname not in _LOCAL_DATABASE_HOSTS:
+            # REFUSE_PUBLIC_SCHEMA is the tests package's own "we are running
+            # under tests" signal. CI legitimately sets DATABASE_URL to a
+            # disposable localhost Postgres (.github/workflows/ci.yml) - that
+            # is allowed. Anything else (a real hosted database, reached by
+            # however DATABASE_URL ended up set) is not: a test run must
+            # never be able to touch it, regardless of how it got here.
+            raise RuntimeError(
+                "store._connect() refused a non-local DATABASE_URL under "
+                "tests (REFUSE_PUBLIC_SCHEMA is set): tests must only ever "
+                "reach a local Postgres instance, never a real hosted "
+                "database."
+            )
         return psycopg2.connect(DATABASE_URL, **kwargs)
     return psycopg2.connect(host=PG_HOST, port=PG_PORT, dbname=PG_DBNAME, user=PG_USER, **kwargs)
 

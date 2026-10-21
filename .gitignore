@@ -10,3 +10,5 @@ venv/
 pgdata/
 pgsocket/
 pgdata.log
+.neon
+node_modules/

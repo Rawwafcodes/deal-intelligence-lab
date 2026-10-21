@@ -7175,3 +7175,137 @@ been offered to the founder.
 database via `DATABASE_URL` (959 tests); mypy clean on changed modules; the
 Dockerfile could not be built locally (no Docker installed) - the CI image job
 builds and starts it on every push.
+
+## 2026-09-27/28 — M19 follow-up: strict test isolation, two more mandate-worker races
+
+After Task 19.6, stricter test isolation (a test schema's `search_path` no
+longer falls back to `public`; `store.get_connection()` refuses
+`SCHEMA="public"` outright when imported under tests) turned up two more
+real races with the 0.02s background worker in `test_mandate_endpoints`:
+`resume_run` could overwrite a concurrent cancel back to `queued`
+(executing a cancelled run); `cancel_run` read-then-wrote unconditionally,
+so a worker finishing the run in between got its result relabeled
+cancelled. Both are now compare-and-set; `cancel_run` returns the state it
+wrote rather than a re-read the worker may have already moved past.
+
+## 2026-09-28 — M19: staging setup guide and bootstrap admin (Task 19.6 follow-up)
+
+Replaced the staging checklist with a full step-by-step walkthrough
+(`docs/deployment/staging-setup.md`: Anthropic, Neon, Cloudflare R2, Clerk,
+Sentry, Railway) and added `DEAL_LAB_BOOTSTRAP_ADMIN_EMAIL`, which makes
+the founder an organization admin on start-up without needing shell
+access.
+
+## 2026-10-21 — M19 exit-gate closure pass (Task 19.7)
+
+Staging is live on Railway (project `acceptable-contentment`): `web` and
+`worker` services, Neon Postgres (`deal-lab-staging`, EU), Cloudflare R2.
+Worked through the M19 exit gate (`docs/workspace-shift/docs/13-post-m17-roadmap.md`)
+item by item; full detail and method in
+`docs/workspace-shift/tasks/19.7-security-review.md`.
+
+- **Fixed a real secret-exposure gap**: the documented local test command
+  (`python -m unittest discover -s tests`, missing `-t .`) skipped
+  `tests/__init__.py` entirely, which meant a developer's `.env.local`
+  (holding a real staging `DATABASE_URL` with password) could leak into a
+  test run via `dotenv.load_dotenv` calls in several application modules,
+  with nothing stopping a test from then running schema-admin operations
+  against the live staging database. Caught live in this session - a full
+  suite run attempted exactly that connection, saved only by the sandbox
+  having no network access. Fixed two ways: `tests/__init__.py` now
+  neutralizes `dotenv.load_dotenv` for the whole test process before
+  anything else imports, and `store._connect()` independently refuses any
+  non-local `DATABASE_URL` host while running under tests, regardless of
+  how it got set. `README.md` corrected to the safe invocation, matching
+  what CI already ran.
+- **Tenant isolation / document access**: re-verified, 84 targeted tests
+  plus the full 964-test backend suite, all passing, run the corrected
+  (safe) way.
+- **Backup restoration demonstrated live** against the actual staging
+  Neon project: snapshotted `production`, restored it onto a separate
+  branch, confirmed identical data (row counts and max user id matched
+  exactly), then returned the project to its original single-branch
+  state. One misstep along the way is worth recording: `restore_snapshot`
+  with its default `finalize: true` does not create an inert side copy -
+  it reassigns the live compute and swaps which branch is primary/default.
+  That was corrected (the original branch, with its full metering
+  history, is primary again) with no data loss and no live-app
+  disruption, confirmed before and after via Railway's own health check.
+- **Region mismatch fixed**: `worker` was running in `sfo` while `web` and
+  the database are in `europe-west4`; moved live to match, no redeploy
+  needed (Railway reassigns region to a running deployment immediately).
+- **Documented security review** completed (self-review, not an external
+  audit - the founder's explicit choice over holding the gate for one):
+  `docs/workspace-shift/tasks/19.7-security-review.md`. No critical or
+  unfixed high-severity issue. One open, accepted low-severity gap: no
+  HTTP-layer rate limiting beyond the AI provider's own (acceptable for an
+  invite-only pilot, not for broader exposure).
+- **Costs**: usage gathered directly (Neon: paid "Launch" plan, ~532,000
+  compute-seconds this billing cycle; Railway: both services near-idle,
+  <0.1% CPU). No tool available here exposes actual billed dollar amounts
+  for Railway or Neon - that still needs a founder check of each
+  dashboard directly.
+
+**Resolved during this pass**:
+- `ANTHROPIC_API_KEY` was suspected expired; founder confirmed it is not.
+- Worker-interruption survival: a live staging re-run (real mandate run,
+  worker deliberately restarted mid-run) was offered and the founder
+  explicitly declined it as not worth the cost/effort given the mechanism
+  is already proven by Task 19.2's automated tests and local
+  demonstration. Accepted as satisfied on that existing evidence - a
+  founder decision, not an open question.
+
+**M19 closed by founder decision (D26, `docs/workspace-shift/docs/10-decisions.md`),
+2026-10-21**, with two exit-gate items explicitly accepted rather than
+completed rather than silently dropped:
+- Two-authorized-users-complete-the-core-workflow was never actually run
+  (a named outside reviewer, Saad, was planned but never invited).
+- Dollar cost figures were never pulled from the Railway/Neon billing
+  dashboards - only raw usage was measured.
+
+Per the roadmap, M19 closing does not by itself authorize M20 - the
+Post-M19 strategic-pause review (a founder decision: Proceed / Remediate /
+Narrow / Reposition / Pause / Stop) is still required first.
+
+## 2026-10-21 — Task 20.1: multi-firm-per-deal, Phase 1 (Path B)
+
+Founder-approved per
+`docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md`
+(new, unplanned work - not in `08-roadmap.md`/`13-post-m17-roadmap.md`;
+where it sits relative to the roadmap is still an open question in that
+report). Phase 1 only - party-scoped document/workstream visibility and
+multi-payer billing are explicitly deferred to a future Phase 2.
+
+- **New `deal_parties` table** (`project_id`, `organization_id`,
+  `party_role` - one of `counterparty`/`legal_counsel`/`lender`/`other`,
+  `UNIQUE(project_id, organization_id)`): organizations other than a
+  deal's owning organization that have been explicitly given access to
+  it. New `organization_id` column on `deal_memberships` (nullable,
+  additive) records which organization a member is representing on that
+  specific deal.
+- **Task 19.5's tenant-isolation grant check widened, not removed**:
+  `identity.resolve_grantable_organization_for` now allows granting deal
+  access to a member of the deal's owning organization **or** of an
+  organization explicitly listed as a `deal_party` - still an explicit,
+  per-deal allowlist; every other organization is refused exactly as
+  before. New endpoints `GET/POST /api/projects/:id/parties` and
+  `DELETE /api/projects/:id/parties/:organization_id`, gated by a new
+  `MANAGE_DEAL_PARTIES` capability (deal_lead only, same as membership
+  management - adding a party organization is more consequential than
+  adding one person).
+- Removing a party is a hard delete (no history to preserve, unlike a
+  person's revoked membership) and does **not** retroactively revoke
+  members already granted access through it.
+
+**Verification**: 10 new tests (`tests/test_deal_parties.py`) - HTTP-level
+(only a deal lead may add/remove a party; the owning organization can't be
+added as its own party; an invalid party_role is rejected; granting access
+to a non-party outside organization is still refused exactly as Task 19.5
+originally specified; adding a party then lets its members be granted
+access, recording which organization they came through; removing a party
+doesn't revoke an existing grant) and pure identity.py-level (resolution
+order when a candidate belongs to both the owning and a party
+organization, or to neither). Full backend suite: 974 tests (964 + 10),
+all passing, including the pre-existing cross-organization denial test
+unmodified. mypy clean. Not yet built: any frontend surface for adding a
+deal party (backend/API only, matching what was approved).

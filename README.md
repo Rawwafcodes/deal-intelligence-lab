@@ -474,5 +474,11 @@ real API or uses any credit):
 
 ```
 source venv/bin/activate
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests -t .
 ```
+
+`-t .` matters: without it, Python imports each `tests/test_*.py` file as a
+bare top-level module instead of as part of the `tests` package, which
+skips `tests/__init__.py` entirely — including the safety checks that keep
+a test run from ever reaching a real hosted database. CI always runs it
+this way (`.github/workflows/ci.yml`); run it the same way locally.

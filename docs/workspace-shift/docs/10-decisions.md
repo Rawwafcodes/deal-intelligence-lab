@@ -598,6 +598,39 @@ still needs its own formal approval, per the M19 exit gate). Account
 creation is the founder's to do; the agent cannot create accounts or
 handle credentials.
 
+D26 (added 2026-10-21) **M19 closed - founder decision, with two exit-gate
+items explicitly accepted rather than completed.** Founder: "consider m19
+as closed."
+
+Against the M19 exit gate (`13-post-m17-roadmap.md`), worked in
+`tasks/19.7-security-review.md`:
+
+| Gate item | Status |
+|---|---|
+| Staging privately accessible | Met - verified live (Railway, both services online) |
+| Tenant-isolation tests pass | Met - 84 targeted tests + full 964-test suite |
+| Document-access tests pass | Met - same suite |
+| Long-running job survives worker interruption | Met on existing evidence (Task 19.2: automated tests + live local-disposable-DB demonstration) - a staging-specific live re-run was offered and declined as not worth the cost, not from doubt |
+| Backup restoration demonstrated | Met - demonstrated live against the actual staging Neon project |
+| Logs and alerts work | Met for logs (Railway, verified); Sentry alerting specifically not independently triggered/verified |
+| No production secret in source control | Met - verified clean; a related real gap (`.env.local` leaking into local test runs) was found and fixed in the same pass |
+| Independent security review or equivalent documented review | Met - self-review by the implementing agent, the founder's explicit choice over holding the gate for an external reviewer (`tasks/19.7-security-review.md`) |
+| Costs measured | **Not met as literally written** - raw usage was gathered (Neon, Railway), but no tool available exposed actual billed dollar amounts; the founder chose to close without pulling those figures from the provider dashboards |
+| Two authorized users complete the core workflow | **Not met** - a real second user (a named outside reviewer) was planned but never actually invited or run; the founder chose to close without completing this |
+| Real customer data remains prohibited | Unaffected by this decision - still prohibited, separate approval needed |
+
+**What this decision means going forward**: the two unmet items are not
+forgotten or silently dropped - they are explicitly accepted as open by
+founder choice, not resolved. If either becomes relevant later (a real
+cost overrun, or a real second user's experience turning up a problem),
+that history is here, not erased by M19 showing as "closed." Per
+`13-post-m17-roadmap.md`, closing M19's exit gate does not by itself
+authorize M20 - the Post-M19 strategic-pause review (product coherence,
+intelligence quality, infra reliability, real costs, first customer,
+pricing, legal/procurement, founder capacity) is still required, ending in
+an explicit Proceed/Remediate/Narrow/Reposition/Pause/Stop decision,
+before any M20 work begins.
+
 ## Decision procedure
 Record id/date/status/options/reason/impact/approver. Agents may choose reversible
 implementation details within a task. They may not silently change product hierarchy,
