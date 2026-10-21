@@ -110,14 +110,25 @@ class DealPartiesTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual({p["organization_id"] for p in listed}, {self.other_org.id})
 
-        # Now the same grant that was refused above succeeds, and records
-        # which organization the member was granted access through.
-        status, memberships = self.lead.post(
+        # A broader role is refused for a party-org grant (Task 20.2,
+        # Phase 2's safe default) even though the organization is now a
+        # recognized party.
+        status, body = self.lead.post(
             f"/api/projects/{self.project_id}/memberships", {"user_id": self.outsider.id, "role": "reviewer"}
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("external_executive", body["error"])
+
+        # Only external_executive succeeds, and the grant records which
+        # organization the member was granted access through.
+        status, memberships = self.lead.post(
+            f"/api/projects/{self.project_id}/memberships",
+            {"user_id": self.outsider.id, "role": "external_executive"},
         )
         self.assertEqual(status, 201)
         granted = next(m for m in memberships if m["user_id"] == self.outsider.id)
         self.assertEqual(granted["organization_id"], self.other_org.id)
+        self.assertEqual(granted["role"], "external_executive")
 
         # Removing the party does not retroactively revoke the grant
         # already made through it.
@@ -130,6 +141,18 @@ class DealPartiesTests(unittest.TestCase):
     def test_removing_a_nonexistent_party_is_404(self):
         status, _ = self.lead.delete(f"/api/projects/{self.project_id}/parties/{uuid.uuid4().hex}")
         self.assertEqual(status, 404)
+
+    def test_a_party_org_member_can_never_be_granted_deal_lead(self):
+        status, _ = self.lead.post(
+            f"/api/projects/{self.project_id}/parties",
+            {"organization_id": self.other_org.id, "party_role": "lender"},
+        )
+        self.assertEqual(status, 201)
+        status, body = self.lead.post(
+            f"/api/projects/{self.project_id}/memberships", {"user_id": self.outsider.id, "role": "deal_lead"}
+        )
+        self.assertEqual(status, 400)
+        self.lead.delete(f"/api/projects/{self.project_id}/parties/{self.other_org.id}")
 
 
 class ResolveGrantableOrganizationTests(unittest.TestCase):

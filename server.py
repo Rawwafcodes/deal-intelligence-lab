@@ -2394,6 +2394,26 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(role, str) or role not in identity.DEAL_ROLES:
             self._send_json(400, {"error": f"role must be one of {list(identity.DEAL_ROLES)}"})
             return
+        # Task 20.2 (Path B Phase 2): a member granted access through a
+        # DealParty - a different organization than the deal's own owner -
+        # is restricted to external_executive, the existing restricted-
+        # shaped role (brief + approved deliverables + sent/answered
+        # requests only - authz.py's own matrix, unchanged), rather than
+        # the deal's full internal roles. This is the safe default the
+        # founder chose over "same access as the owning organization's
+        # members": one firm's analyst/reviewer/deal_lead capabilities are
+        # never extended to another firm just because they're on the same
+        # deal. Finer-grained sharing (letting a specific party see more
+        # than this, such as one shared workstream) is deferred - see
+        # docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md.
+        if grant_org_id != identity.get_project_organization_id(project_id) and role != "external_executive":
+            self._send_json(400, {
+                "error": (
+                    "a member granted access through a party organization can only be given the "
+                    "external_executive role - broader roles are reserved for the deal's own organization"
+                ),
+            })
+            return
         if role != "deal_lead" and self._would_leave_no_deal_lead(project_id, user_id):
             self._send_json(400, {"error": "a deal must keep at least one deal lead - add another lead first"})
             return

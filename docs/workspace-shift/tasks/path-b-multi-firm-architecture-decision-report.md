@@ -92,18 +92,36 @@ existing `deal_memberships` rows beyond optionally setting their new
 `organization_id` to the deal's existing single org for consistency.
 Nothing about an existing deal's behavior changes.
 
-### Phase 2 (explicitly deferred — its own future decision, not part of this approval)
+### Phase 2 — delivered: safe default, not yet: fine-grained sharing
 
-- Party-role-aware authorization: document/workstream visibility scoped to
-  which party a role belongs to, not just the flat role.
+The founder approved the safe-default direction (restricted by default,
+like `external_executive` today) over full role-based access for party
+members. **Delivered** (Task 20.2): a member granted access through a
+`DealParty` can now only be granted the `external_executive` role — never
+`analyst`/`reviewer`/`deal_lead`. This is enforced at grant time in
+`server.py`, not by a new authorization mechanism: it reuses
+`external_executive`'s existing, already-tested restricted shape (brief +
+approved deliverables + sent/answered requests only) wholesale, rather
+than building new per-document/per-workstream object-level sharing. A
+party organization's members can never become `deal_lead` as a direct
+consequence. `01-product-definition.md`'s product hierarchy is updated to
+describe this.
+
+**Not yet delivered, and why it's a separate piece of work**: the
+"expand access for a specific party beyond the restricted default" half -
+e.g., sharing one specific workstream or document with a named party
+without giving them the owning organization's full internal roles. That
+needs new object-level sharing records and touches the 20+ existing
+`VIEW_INTERNAL_DOCUMENTS`/`DOWNLOAD_DOCUMENTS` call sites across
+`documents.py`, `server.py` and related modules - a meaningfully larger,
+separate change, not a few more lines on top of this one. Left for a
+future, explicitly scoped piece of work rather than attempted here under
+the same approval.
+
+**Still deferred, unchanged from the original report**:
 - A real multi-payer billing/cost-ownership model, if "owning org always
-  pays" turns out not to be enough.
-- Updating `01-product-definition.md`'s product hierarchy, which currently
-  states Organization strictly above Engagement/deal — Phase 1 doesn't
-  technically violate this (a deal still has exactly one *owning*
-  organization), but Phase 2's full vision would, and that's a product-
-  definition change that deserves its own explicit founder sign-off, not
-  a side effect of a schema migration.
+  pays" turns out not to be enough. Not urgent: M19 already excluded
+  billing automation from this phase of the product generally.
 
 ## Risk and cost
 

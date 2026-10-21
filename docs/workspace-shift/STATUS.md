@@ -7309,3 +7309,34 @@ organization, or to neither). Full backend suite: 974 tests (964 + 10),
 all passing, including the pre-existing cross-organization denial test
 unmodified. mypy clean. Not yet built: any frontend surface for adding a
 deal party (backend/API only, matching what was approved).
+
+## 2026-10-21 — Task 20.2: multi-firm-per-deal, Phase 2 safe default
+
+Founder chose "restricted by default, like external_executive today" over
+full role-based access for party-organization members (the other option
+offered: same access as the owning organization's own members).
+
+- A member granted deal access through a `DealParty` can now only be
+  granted the `external_executive` role - `server.py`'s grant handler
+  rejects `analyst`/`reviewer`/`deal_lead` for a party-org grant with a
+  400. This reuses `external_executive`'s existing, already-tested
+  restricted shape (brief + approved deliverables + sent/answered
+  requests only) rather than building new object-level document/
+  workstream sharing - deliberately the cheap, safe slice, not the full
+  Phase 2 originally sketched.
+- Direct consequence: a party organization's members can never become
+  `deal_lead`.
+- `docs/product/01-product-definition.md`'s product hierarchy now
+  describes multi-firm deals and this restriction explicitly.
+
+**Not delivered, and intentionally not attempted under this change**:
+letting a specific party see more than the restricted default (e.g. one
+shared workstream or document) - that needs new object-level sharing
+records and touches 20+ existing document-visibility call sites across
+several modules, a separate, larger piece of work. Multi-payer billing
+remains out of scope, unchanged from the original report.
+
+**Verification**: 1 new test (`test_a_party_org_member_can_never_be_granted_deal_lead`,
+`tests/test_deal_parties.py`) plus an existing test updated to grant
+`external_executive` instead of `reviewer` now that the restriction is
+in place. Full backend suite: 975 tests, all passing. mypy clean.

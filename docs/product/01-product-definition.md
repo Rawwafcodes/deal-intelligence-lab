@@ -42,6 +42,20 @@ resolution and approved decisions within one continuing workspace.
 8. **Deliverable** — an approved work product or decision package.
 9. **Monitoring / reassessment** — explicit, scoped reactions to later changes.
 
+**Multi-firm deals (Task 20.1/20.2, Path B, 2026-10-21)**: an engagement's
+owning organization remains its tenant for administration, billing and
+default access — "Organization — the persisted tenant and access
+boundary" above is still accurate as the default case. A deal may
+additionally have other organizations explicitly added as parties
+(`DealParty`), each able to have members granted deal-level access. This
+does not flatten the hierarchy: a party organization's members get a
+restricted-shaped role (`external_executive`) by default, never the
+owning organization's own internal roles, and only the owning
+organization's members can ever be `deal_lead`. Finer-grained sharing
+(letting a specific party see more than the restricted default - one
+shared workstream, say) is not yet built; see
+`docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md`.
+
 `Workspace` is also the product term. The existing `workspaces` database table
 from Milestone 9 is a preserved per-analysis record and must not be confused
 with the organization-wide product concept.
