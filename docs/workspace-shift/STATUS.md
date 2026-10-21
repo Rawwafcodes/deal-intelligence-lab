@@ -7340,3 +7340,56 @@ remains out of scope, unchanged from the original report.
 `tests/test_deal_parties.py`) plus an existing test updated to grant
 `external_executive` instead of `reviewer` now that the restriction is
 in place. Full backend suite: 975 tests, all passing. mypy clean.
+
+## 2026-10-21 — Task 20.3: multi-firm-per-deal, Phase 3 - fine-grained sharing, invite flow, UI
+
+Founder: "complete path b fully including ui and everything." Full detail
+in `docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md`.
+
+- New `deal_party_document_shares` table; a party-org `external_executive`
+  can now see one specific, explicitly shared document (detail, download,
+  versions) despite lacking `VIEW_INTERNAL_DOCUMENTS` outright -
+  `server.py`'s new `_require_document_access` helper, plus the document
+  collection list filtered rather than denied for them. Scoped to
+  documents only - findings, mandates and anything built from a shared
+  document stay internal regardless.
+- New realistic invite flow (`identity.invite_deal_party_contact`,
+  `POST /api/projects/:id/parties/invite`): name an outside contact by
+  email plus an existing or brand-new organization, in one action.
+  Reuses an existing user by email, same pattern as
+  `invite_to_organization`; always grants `external_executive`.
+- Frontend: `DealPartiesCard.tsx` (Deal Overview - invite/remove a party)
+  and a "Shared with other organizations" section on Document Detail
+  (`DocumentDetail.tsx` - toggle a document's visibility per party). Both
+  gated on the new `manage_deal_parties` capability.
+
+**Found and fixed along the way**: the first live-browser verification
+attempt hit a real environment hazard - starting `python server.py`
+normally (not through the test harness) also loads `.env.local` via the
+same `dotenv` calls the M19 closure security review already flagged for
+tests, and it crashed on startup trying to reach the real staging Neon
+database with a stale/wrong password. The *test* path was already fixed
+(Task 19.7); this is the same root cause reaching ordinary local
+development too, worked around for this session by launching with
+`DATABASE_URL=""` explicitly, not fixed at the code level - worth a
+follow-up along the same lines as the test fix, so a developer running
+the app locally for ordinary work can't end up pointed at staging by
+accident either.
+
+**Verified live in the browser**, not just automated tests: invited a new
+outside contact (new organization + new user, one action); confirmed
+their session reported `view_internal_documents: false` (the restricted
+default, unchanged) while correctly seeing and downloading the one
+document explicitly shared with their organization, 403 on an unshared
+one, and a *filtered* document list rather than a blocked one.
+
+**Verification**: 1 new test (`test_fine_grained_document_sharing_and_invite_flow`,
+covering sharing, unsharing, the invite flow and re-invite-reuses-the-user);
+full backend suite: 976 tests, all passing; mypy clean on changed files;
+`tsc -b` and `oxlint` both clean on the frontend changes; frontend built
+and the full flow verified live in the browser as described above.
+
+With this, Path B is complete end-to-end as asked: schema, access control,
+an invite flow, and a UI - not yet decided is whether the product
+direction wants this at all beyond the exercise of building it, which
+remains this report's own still-open question.

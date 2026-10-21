@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { BriefEditorDialog } from "@/components/BriefEditorDialog"
+import { DealPartiesCard } from "@/components/DealPartiesCard"
 import { DealPeopleCard } from "@/components/DealPeopleCard"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -372,6 +373,8 @@ export function DealOverview() {
       </Card>
 
       <DealPeopleCard projectId={projectId} />
+
+      <DealPartiesCard projectId={projectId} />
 
       <BriefEditorDialog
         projectId={projectId}

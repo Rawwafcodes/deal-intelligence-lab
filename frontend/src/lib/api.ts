@@ -640,6 +640,10 @@ export interface DealMembership {
   role: string
   created_at: string
   revoked_at: string | null
+  // Task 20.1 (Path B): which organization this member represents on this
+  // deal - the deal's own owning organization, or a DealParty's. Null for
+  // memberships that predate Path B.
+  organization_id: string | null
 }
 
 export async function listDealMemberships(projectId: string): Promise<DealMembership[]> {
@@ -703,6 +707,90 @@ export interface IdentityUser {
   email: string
   display_name: string
   created_at: string
+}
+
+// -- deal parties (Task 20.1-20.3, Path B: multi-firm-per-deal) ------------
+// An organization other than the deal's own owner can be given access as a
+// named "party" (e.g. the counterparty, their legal counsel, a lender).
+// Its members are always granted the restricted external_executive role
+// (Task 20.2) - never the owning organization's own internal roles - and
+// can be given access to specific documents beyond that default (Task
+// 20.3). See docs/workspace-shift/tasks/path-b-multi-firm-architecture-
+// decision-report.md.
+
+export const DEAL_PARTY_ROLES = ["counterparty", "legal_counsel", "lender", "other"] as const
+
+export interface DealParty {
+  id: string
+  project_id: string
+  organization_id: string
+  party_role: string
+  created_at: string
+  organization: { id: string; name: string; created_at: string } | null
+}
+
+export async function listDealParties(projectId: string): Promise<DealParty[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/parties`)
+  return jsonOrThrow(res, "Could not load this deal's party organizations.")
+}
+
+export async function addDealParty(projectId: string, organizationId: string, partyRole: string): Promise<DealParty[]> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/parties`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationId, party_role: partyRole }),
+  })
+  return jsonOrThrow(res, "Could not add that organization as a party to this deal.")
+}
+
+export async function removeDealParty(projectId: string, organizationId: string): Promise<void> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/parties/${encodeURIComponent(organizationId)}`,
+    { method: "DELETE" }
+  )
+  await jsonOrThrow(res, "Could not remove that party organization.")
+}
+
+export interface InviteDealPartyContactResult {
+  organization: { id: string; name: string; created_at: string }
+  user: IdentityUser
+  memberships: DealMembershipWithUser[]
+}
+
+export async function inviteDealPartyContact(
+  projectId: string,
+  params: { partyRole: string; email: string; displayName: string; organizationId?: string; organizationName?: string }
+): Promise<InviteDealPartyContactResult> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/parties/invite`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      party_role: params.partyRole, email: params.email, display_name: params.displayName,
+      organization_id: params.organizationId, organization_name: params.organizationName,
+    }),
+  })
+  return jsonOrThrow(res, "Could not invite this outside contact.")
+}
+
+export async function listSharedDocuments(projectId: string, organizationId: string): Promise<string[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/parties/${encodeURIComponent(organizationId)}/documents`
+  )
+  return jsonOrThrow(res, "Could not load what's shared with this party.")
+}
+
+export async function shareDocumentWithParty(projectId: string, organizationId: string, documentId: string): Promise<string[]> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/parties/${encodeURIComponent(organizationId)}/documents`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ document_id: documentId }) }
+  )
+  return jsonOrThrow(res, "Could not share this document.")
+}
+
+export async function unshareDocumentFromParty(projectId: string, organizationId: string, documentId: string): Promise<void> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/parties/${encodeURIComponent(organizationId)}/documents/${encodeURIComponent(documentId)}`,
+    { method: "DELETE" }
+  )
+  await jsonOrThrow(res, "Could not unshare this document.")
 }
 
 export interface OrganizationMembership {

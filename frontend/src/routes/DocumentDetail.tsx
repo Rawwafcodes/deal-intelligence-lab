@@ -2,20 +2,102 @@ import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
   documentVersionHref,
   getDocument,
   getDocumentUsage,
+  listDealParties,
   listDocumentVersions,
+  listSharedDocuments,
+  shareDocumentWithParty,
+  unshareDocumentFromParty,
   uploadDocumentVersion,
+  type DealParty,
   type DocumentDependent,
   type DocumentUsage,
   type DocumentVersionRecord,
   type ProjectDocument,
 } from "@/lib/api"
+import { useCapability } from "@/lib/dealAccess"
 import { labelFor } from "@/lib/findingDisplay"
 import { withWorkspace } from "@/lib/workspaceSelection"
+
+const PARTY_ROLE_LABELS: Record<string, string> = {
+  counterparty: "Counterparty", legal_counsel: "Legal counsel", lender: "Lender", other: "Other",
+}
+
+// Task 20.3 (Path B fine-grained sharing): this deal's own people already
+// see every document (subject to their role); the only thing to control
+// here is whether a specific *other organization's* party can see this one
+// document, beyond their restricted default. Loads the deal's parties and,
+// for each, whether this document is currently shared with them.
+function SharedWithSection({ projectId, documentId }: { projectId: string; documentId: string }) {
+  const canManage = useCapability("manage_deal_parties")
+  const [parties, setParties] = useState<DealParty[] | null>(null)
+  const [sharedWith, setSharedWith] = useState<Set<string>>(new Set())
+  const [busyOrgId, setBusyOrgId] = useState<string | null>(null)
+
+  const reload = useCallback(() => {
+    if (!canManage) return
+    listDealParties(projectId).then(async (list) => {
+      setParties(list)
+      const shares = await Promise.all(
+        list.map((p) => listSharedDocuments(projectId, p.organization_id).catch((): string[] => []))
+      )
+      setSharedWith(new Set(list.filter((_, i) => shares[i].includes(documentId)).map((p) => p.organization_id)))
+    }).catch(() => setParties([]))
+  }, [projectId, documentId, canManage])
+
+  useEffect(reload, [reload])
+
+  if (!canManage || parties === null || parties.length === 0) return null
+
+  async function toggle(party: DealParty) {
+    setBusyOrgId(party.organization_id)
+    try {
+      if (sharedWith.has(party.organization_id)) {
+        await unshareDocumentFromParty(projectId, party.organization_id, documentId)
+        toast.success(`No longer shared with ${party.organization?.name ?? "that organization"}.`)
+      } else {
+        await shareDocumentWithParty(projectId, party.organization_id, documentId)
+        toast.success(`Shared with ${party.organization?.name ?? "that organization"}.`)
+      }
+      reload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not change sharing for this document.")
+    } finally {
+      setBusyOrgId(null)
+    }
+  }
+
+  return (
+    <Section title="Shared with other organizations">
+      <ul className="divide-y divide-border">
+        {parties.map((party) => {
+          const shared = sharedWith.has(party.organization_id)
+          return (
+            <li key={party.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+              <span className="min-w-0 text-foreground">
+                {party.organization?.name ?? "Unknown organization"}{" "}
+                <span className="text-xs text-muted-foreground">{PARTY_ROLE_LABELS[party.party_role] ?? party.party_role}</span>
+              </span>
+              <Button
+                size="sm"
+                variant={shared ? "secondary" : "default"}
+                disabled={busyOrgId === party.organization_id}
+                onClick={() => toggle(party)}
+              >
+                {shared ? "Shared · remove" : "Share this document"}
+              </Button>
+            </li>
+          )
+        })}
+      </ul>
+    </Section>
+  )
+}
 
 // Surface #13 (Document Detail) - founder decision 2026-09-27 to build it
 // in M18: one document's content, its full version history, and its
@@ -271,6 +353,8 @@ export function DocumentDetail() {
           </ul>
         )}
       </Section>
+
+      <SharedWithSection projectId={projectId} documentId={document.id} />
     </div>
   )
 }

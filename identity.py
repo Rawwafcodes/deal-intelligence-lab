@@ -244,6 +244,29 @@ def init_identity_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_deal_parties_project ON deal_parties(project_id)"
         )
+        # Task 20.3 (Path B fine-grained sharing): a specific document made
+        # visible to a specific party organization, beyond that party's
+        # restricted (external_executive) default. document_id isn't a
+        # foreign key to documents' own table (documents.py owns that
+        # schema separately, per this module's "no existing table is
+        # altered" rule) - server.py checks the document still exists on
+        # every read, same as deal_memberships already does for user_id.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deal_party_document_shares (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                organization_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (project_id, organization_id, document_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_deal_party_doc_shares_party "
+            "ON deal_party_document_shares(project_id, organization_id)"
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -699,6 +722,151 @@ def resolve_grantable_organization_for(project_id: str, user_id: str) -> str | N
         if get_organization_role(party.organization_id, user_id) is not None:
             return party.organization_id
     return None
+
+
+def caller_party_organization_id(project_id: str, user_id: str) -> str | None:
+    """None if this user's active deal membership is through the deal's
+    own owning organization (or they have none); otherwise the id of the
+    DealParty organization they're on this deal through. Task 20.3's
+    document-sharing override uses this to tell "an owning-org member,
+    already fully authorized" from "a party-org member, who may have been
+    separately given access to specific shared documents" without
+    re-deriving it at every call site."""
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT organization_id FROM deal_memberships
+            WHERE project_id = %s AND user_id = %s AND revoked_at IS NULL
+            """,
+            (project_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None or row["organization_id"] is None:
+        return None
+    if row["organization_id"] == get_project_organization_id(project_id):
+        return None
+    return str(row["organization_id"])
+
+
+def invite_deal_party_contact(
+    project_id: str,
+    party_role: str,
+    email: str,
+    display_name: str,
+    organization_id: str | None = None,
+    organization_name: str | None = None,
+) -> tuple[Organization, User]:
+    """The realistic version of adding a party: a deal lead names an
+    outside person by email and either an existing organization to attach
+    them to or a new one to create - rather than "first add the
+    organization, then separately check whether the user already exists"
+    (add_deal_party/add_deal_membership still work that way directly, for
+    anyone who wants that lower-level control). Reuses an existing user by
+    case-insensitive email, same pattern as invite_to_organization, never
+    duplicates. Always grants external_executive - this is not a way
+    around Task 20.2's safe-default restriction, it's built on top of it."""
+    if party_role not in DEAL_PARTY_ROLES:
+        raise ValueError(f"invalid deal party role: {party_role!r}")
+    if bool(organization_id) == bool(organization_name):
+        raise ValueError("exactly one of organization_id or organization_name is required")
+    if organization_id is not None:
+        org = get_organization(organization_id)
+        if org is None:
+            raise ValueError("organization_id must be an existing organization id")
+    else:
+        assert organization_name is not None
+        name = organization_name.strip()
+        if not name or len(name) > 200:
+            raise ValueError("organization name must be 1-200 characters")
+        org = create_organization(name)
+    if org.id == get_project_organization_id(project_id):
+        raise ValueError("that organization already owns this deal")
+
+    email = email.strip()
+    if "@" not in email or len(email) > 320:
+        raise ValueError("a valid email address is required")
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, email, display_name, created_at FROM users WHERE lower(email) = lower(%s)", (email,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is not None:
+        user = User(row["id"], row["email"], row["display_name"], row["created_at"])
+    else:
+        safe_name = display_name.strip() or email.split("@")[0]
+        user = create_user(email, safe_name[:200])
+
+    add_deal_party(project_id, org.id, party_role)
+    add_organization_membership(org.id, user.id, "member")
+    add_deal_membership(project_id, user.id, "external_executive", org.id)
+    return org, user
+
+
+# -- deal party document shares (Task 20.3, Path B fine-grained sharing) ----
+
+
+def share_document_with_party(project_id: str, organization_id: str, document_id: str) -> None:
+    conn = store.get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO deal_party_document_shares (id, project_id, organization_id, document_id, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (project_id, organization_id, document_id) DO NOTHING
+            """,
+            (uuid.uuid4().hex, project_id, organization_id, document_id, _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def unshare_document_from_party(project_id: str, organization_id: str, document_id: str) -> bool:
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            DELETE FROM deal_party_document_shares
+            WHERE project_id = %s AND organization_id = %s AND document_id = %s
+            RETURNING id
+            """,
+            (project_id, organization_id, document_id),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def list_shared_document_ids_for_party(project_id: str, organization_id: str) -> set[str]:
+    conn = store.get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT document_id FROM deal_party_document_shares WHERE project_id = %s AND organization_id = %s",
+            (project_id, organization_id),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {r["document_id"] for r in rows}
+
+
+def is_document_shared_with_party(project_id: str, organization_id: str, document_id: str) -> bool:
+    conn = store.get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT 1 FROM deal_party_document_shares
+            WHERE project_id = %s AND organization_id = %s AND document_id = %s
+            """,
+            (project_id, organization_id, document_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
 
 
 # -- deal memberships --------------------------------------------------------

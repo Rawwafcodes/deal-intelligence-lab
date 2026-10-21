@@ -107,21 +107,58 @@ party organization's members can never become `deal_lead` as a direct
 consequence. `01-product-definition.md`'s product hierarchy is updated to
 describe this.
 
-**Not yet delivered, and why it's a separate piece of work**: the
-"expand access for a specific party beyond the restricted default" half -
-e.g., sharing one specific workstream or document with a named party
-without giving them the owning organization's full internal roles. That
-needs new object-level sharing records and touches the 20+ existing
-`VIEW_INTERNAL_DOCUMENTS`/`DOWNLOAD_DOCUMENTS` call sites across
-`documents.py`, `server.py` and related modules - a meaningfully larger,
-separate change, not a few more lines on top of this one. Left for a
-future, explicitly scoped piece of work rather than attempted here under
-the same approval.
+### Phase 3 — delivered: fine-grained document sharing, the invite flow, and a UI (Task 20.3)
 
-**Still deferred, unchanged from the original report**:
+Founder: "complete path b fully including ui and everything." This phase
+delivered the piece Phase 2's own report called "a meaningfully larger,
+separate change":
+
+- **Object-level document sharing**: a new `deal_party_document_shares`
+  table and `GET/POST /api/projects/:id/parties/:org_id/documents`,
+  `DELETE .../documents/:document_id`. A party-org `external_executive`
+  who lacks `VIEW_INTERNAL_DOCUMENTS`/`DOWNLOAD_DOCUMENTS` outright is
+  still let through for one specific, explicitly shared document -
+  `server.py`'s new `_require_document_access` helper, applied to the
+  document detail, download, version-download and versions-list routes,
+  plus the document collection list being filtered (not denied) for a
+  party-org caller. Scoped to documents only, deliberately - findings,
+  mandates, and other object types a document might feed into are not
+  covered and stay fully internal regardless of sharing; sharing a
+  document doesn't share what was built from it.
+- **The realistic invite flow** (`identity.invite_deal_party_contact`,
+  `POST /api/projects/:id/parties/invite`): a deal lead names an outside
+  contact by email and either an existing or a brand-new organization, in
+  one action - not "first create the organization, then separately check
+  whether the user exists." Reuses an existing user by case-insensitive
+  email, same pattern as `invite_to_organization`; always grants
+  `external_executive`, built on top of Task 20.2's restriction rather
+  than around it.
+- **Frontend**: a "Other organizations on this deal" card on Deal
+  Overview (`DealPartiesCard.tsx`) for inviting and removing parties, and
+  a "Shared with other organizations" section on Document Detail
+  (`SharedWithSection` in `DocumentDetail.tsx`) for toggling a specific
+  document's visibility to a specific party. Both gated on the
+  `manage_deal_parties` capability, invisible to anyone else.
+
+**Verified live in the browser** (not just automated tests): invited a
+new outside contact, creating a new organization and user in one step;
+confirmed their session showed `view_internal_documents: false` (the
+restricted default, intact) while still being able to open and download
+the one document explicitly shared with their organization, and correctly
+403'd on an unshared one; confirmed the document list itself is filtered
+to just the shared document, not merely blocked.
+
+**Still deferred, unchanged**:
 - A real multi-payer billing/cost-ownership model, if "owning org always
   pays" turns out not to be enough. Not urgent: M19 already excluded
   billing automation from this phase of the product generally.
+- Sharing anything other than a document (a workstream, a finding) with a
+  party - not asked for, not built.
+
+With this, "Path B" as discussed is complete end-to-end: schema, access
+control, an invite flow, and a UI. What's still genuinely open is whether
+the product direction wants it at all beyond this exercise - that's the
+roadmap-placement question Phase 1's report opened and never answered.
 
 ## Risk and cost
 

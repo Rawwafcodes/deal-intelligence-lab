@@ -177,6 +177,11 @@ _MEMBERSHIP_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/memberships/([^/]+)$")
 # access to it.
 _DEAL_PARTIES_COLLECTION_RE = re.compile(r"^/api/projects/([^/]+)/parties$")
 _DEAL_PARTY_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/parties/([^/]+)$")
+_DEAL_PARTY_INVITE_RE = re.compile(r"^/api/projects/([^/]+)/parties/invite$")
+# Task 20.3 (Path B fine-grained sharing): which specific documents a party
+# organization has been given access to, beyond its restricted default.
+_DEAL_PARTY_DOCUMENTS_RE = re.compile(r"^/api/projects/([^/]+)/parties/([^/]+)/documents$")
+_DEAL_PARTY_DOCUMENT_ITEM_RE = re.compile(r"^/api/projects/([^/]+)/parties/([^/]+)/documents/([^/]+)$")
 
 _WORKSPACE_OVERVIEW_RE = re.compile(r"^/api/overview$")
 _ORG_MANDATES_RE = re.compile(r"^/api/mandates$")
@@ -382,6 +387,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(403, {"error": f"your role on this deal does not permit this action ({capability})"})
             return False
         return True
+
+    def _require_document_access(self, project_id: str, document_id: str, capability: str) -> "store.Project | None":
+        """Task 20.3 (Path B fine-grained sharing): the same existence +
+        capability gate as `_require_capability`, plus one object-level
+        exception - a party-organization member who lacks `capability`
+        outright (every external_executive does, by Task 20.2's safe
+        default) is still let through for this one document if their
+        specific party organization was explicitly given access to it.
+        This is deliberately narrow: it only ever widens access to the
+        named document_id, never to the capability generally, and only
+        for a party-org caller - an owning-org caller's result is
+        identical to `_require_capability`'s."""
+        project = self._authorized_project(project_id)
+        if project is None:
+            return None
+        role = self._caller_deal_role(project_id)
+        if authz.has_capability(role, capability):
+            return project
+        party_org_id = identity.caller_party_organization_id(project_id, self.current_user_id)
+        if party_org_id is not None and identity.is_document_shared_with_party(project_id, party_org_id, document_id):
+            return project
+        self._send_json(403, {"error": f"your role on this deal does not permit this action ({capability})"})
+        return None
 
     # -- identity endpoints (Task 11.3b) --------------------------------
 
@@ -1211,7 +1239,7 @@ class Handler(BaseHTTPRequestHandler):
         download_match = _DOCUMENT_DOWNLOAD_RE.match(path)
         if download_match:
             project_id, document_id = download_match.groups()
-            if self._require_capability(project_id, authz.DOWNLOAD_DOCUMENTS) is None:
+            if self._require_document_access(project_id, document_id, authz.DOWNLOAD_DOCUMENTS) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -1224,7 +1252,7 @@ class Handler(BaseHTTPRequestHandler):
         version_download_match = _DOCUMENT_VERSION_DOWNLOAD_RE.match(path)
         if version_download_match:
             project_id, document_id, version_id = version_download_match.groups()
-            if self._require_capability(project_id, authz.DOWNLOAD_DOCUMENTS) is None:
+            if self._require_document_access(project_id, document_id, authz.DOWNLOAD_DOCUMENTS) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -1253,7 +1281,7 @@ class Handler(BaseHTTPRequestHandler):
         document_item_match = _DOCUMENT_ITEM_RE.match(path)
         if document_item_match:
             project_id, document_id = document_item_match.groups()
-            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
+            if self._require_document_access(project_id, document_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             document = documents.get_document(project_id, document_id)
             if document is None:
@@ -1265,7 +1293,7 @@ class Handler(BaseHTTPRequestHandler):
         versions_match = _DOCUMENT_VERSIONS_RE.match(path)
         if versions_match:
             project_id, document_id = versions_match.groups()
-            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
+            if self._require_document_access(project_id, document_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
                 return
             if documents.get_document(project_id, document_id) is None:
                 self._send_json(404, {"error": "document not found"})
@@ -1469,10 +1497,24 @@ class Handler(BaseHTTPRequestHandler):
         collection_match = _DOCUMENTS_COLLECTION_RE.match(path)
         if collection_match:
             (project_id,) = collection_match.groups()
-            if self._require_capability(project_id, authz.VIEW_INTERNAL_DOCUMENTS) is None:
+            project = self._authorized_project(project_id)
+            if project is None:
                 return
-            docs = [d.to_dict() for d in documents.list_documents(project_id)]
-            self._send_json(200, docs)
+            role = self._caller_deal_role(project_id)
+            all_docs = documents.list_documents(project_id)
+            if authz.has_capability(role, authz.VIEW_INTERNAL_DOCUMENTS):
+                self._send_json(200, [d.to_dict() for d in all_docs])
+                return
+            # Task 20.3: a party-org caller who lacks VIEW_INTERNAL_DOCUMENTS
+            # outright (every external_executive does) still sees the
+            # documents explicitly shared with their specific party -
+            # filtered, not the project's full set.
+            party_org_id = identity.caller_party_organization_id(project_id, self.current_user_id)
+            if party_org_id is not None:
+                shared_ids = identity.list_shared_document_ids_for_party(project_id, party_org_id)
+                self._send_json(200, [d.to_dict() for d in all_docs if d.id in shared_ids])
+                return
+            self._send_json(403, {"error": f"your role on this deal does not permit this action ({authz.VIEW_INTERNAL_DOCUMENTS})"})
             return
 
         brief_versions_match = _BRIEF_VERSIONS_RE.match(path)
@@ -1528,6 +1570,12 @@ class Handler(BaseHTTPRequestHandler):
         if deal_parties_collection_match:
             (project_id,) = deal_parties_collection_match.groups()
             self._handle_list_deal_parties(project_id)
+            return
+
+        deal_party_documents_match = _DEAL_PARTY_DOCUMENTS_RE.match(path)
+        if deal_party_documents_match:
+            project_id, organization_id = deal_party_documents_match.groups()
+            self._handle_list_shared_documents(project_id, organization_id)
             return
 
         workstream_item_match = _WORKSTREAM_ITEM_RE.match(path)
@@ -1863,10 +1911,22 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_grant_membership(project_id)
             return
 
+        deal_party_invite_match = _DEAL_PARTY_INVITE_RE.match(path)
+        if deal_party_invite_match:
+            (project_id,) = deal_party_invite_match.groups()
+            self._handle_invite_deal_party_contact(project_id)
+            return
+
         deal_parties_collection_match = _DEAL_PARTIES_COLLECTION_RE.match(path)
         if deal_parties_collection_match:
             (project_id,) = deal_parties_collection_match.groups()
             self._handle_add_deal_party(project_id)
+            return
+
+        deal_party_documents_match = _DEAL_PARTY_DOCUMENTS_RE.match(path)
+        if deal_party_documents_match:
+            project_id, organization_id = deal_party_documents_match.groups()
+            self._handle_share_document(project_id, organization_id)
             return
 
         task_work_products_match = _TASK_WORK_PRODUCTS_RE.match(path)
@@ -2172,6 +2232,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_revoke_membership(project_id, user_id)
             return
 
+        deal_party_document_item_match = _DEAL_PARTY_DOCUMENT_ITEM_RE.match(path)
+        if deal_party_document_item_match:
+            project_id, organization_id, document_id = deal_party_document_item_match.groups()
+            self._handle_unshare_document(project_id, organization_id, document_id)
+            return
+
         deal_party_item_match = _DEAL_PARTY_ITEM_RE.match(path)
         if deal_party_item_match:
             project_id, organization_id = deal_party_item_match.groups()
@@ -2420,10 +2486,19 @@ class Handler(BaseHTTPRequestHandler):
         identity.add_deal_membership(project_id, user_id, role, grant_org_id)
         self._send_json(201, self._memberships_with_users(project_id))
 
+    def _deal_parties_with_orgs(self, project_id: str) -> list[dict]:
+        out = []
+        for party in identity.list_deal_parties_for_project(project_id):
+            row = party.to_dict()
+            org = identity.get_organization(party.organization_id)
+            row["organization"] = org.to_dict() if org is not None else None
+            out.append(row)
+        return out
+
     def _handle_list_deal_parties(self, project_id: str) -> None:
         if self._require_capability(project_id, authz.VIEW_INTERNAL_ACTIVITY) is None:
             return
-        self._send_json(200, [p.to_dict() for p in identity.list_deal_parties_for_project(project_id)])
+        self._send_json(200, self._deal_parties_with_orgs(project_id))
 
     def _handle_add_deal_party(self, project_id: str) -> None:
         """Gives a whole other organization access to this deal - a more
@@ -2451,7 +2526,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": f"party_role must be one of {list(identity.DEAL_PARTY_ROLES)}"})
             return
         identity.add_deal_party(project_id, organization_id, party_role)
-        self._send_json(201, [p.to_dict() for p in identity.list_deal_parties_for_project(project_id)])
+        self._send_json(201, self._deal_parties_with_orgs(project_id))
 
     def _handle_remove_deal_party(self, project_id: str, organization_id: str) -> None:
         if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
@@ -2462,6 +2537,80 @@ class Handler(BaseHTTPRequestHandler):
         removed = identity.remove_deal_party(project_id, organization_id)
         if not removed:
             self._send_json(404, {"error": "deal party not found"})
+            return
+        self._send_json(200, {"removed": True})
+
+    def _handle_invite_deal_party_contact(self, project_id: str) -> None:
+        """Task 20.3: the realistic one-step version of bringing in an
+        outside contact - name them by email and either an existing
+        organization or a new one to create, rather than requiring the
+        deal lead to first create the organization, then separately check
+        whether the user exists. Gated the same as adding a party
+        organization directly (deal_lead only) since it does the same
+        thing plus more."""
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        if identity.get_deal_role(project_id, self.current_user_id) != "deal_lead":
+            self._send_json(403, {"error": "only a deal lead may invite an outside contact"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        party_role = data.get("party_role")
+        email = data.get("email")
+        display_name = data.get("display_name", "")
+        organization_id = data.get("organization_id")
+        organization_name = data.get("organization_name")
+        if not isinstance(party_role, str) or not isinstance(email, str) or not isinstance(display_name, str):
+            self._send_json(400, {"error": "party_role, email and display_name are required"})
+            return
+        try:
+            org, user = identity.invite_deal_party_contact(
+                project_id,
+                party_role,
+                email,
+                display_name,
+                organization_id=organization_id if isinstance(organization_id, str) else None,
+                organization_name=organization_name if isinstance(organization_name, str) else None,
+            )
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(201, {
+            "organization": org.to_dict(),
+            "user": user.to_dict(),
+            "memberships": self._memberships_with_users(project_id),
+        })
+
+    def _handle_list_shared_documents(self, project_id: str, organization_id: str) -> None:
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        self._send_json(200, sorted(identity.list_shared_document_ids_for_party(project_id, organization_id)))
+
+    def _handle_share_document(self, project_id: str, organization_id: str) -> None:
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        if identity.get_organization(organization_id) is None:
+            self._send_json(404, {"error": "organization not found"})
+            return
+        data = self._read_json_body()
+        if data is None:
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        document_id = data.get("document_id")
+        if not isinstance(document_id, str) or documents.get_document(project_id, document_id) is None:
+            self._send_json(400, {"error": "document_id must be an existing document on this deal"})
+            return
+        identity.share_document_with_party(project_id, organization_id, document_id)
+        self._send_json(201, sorted(identity.list_shared_document_ids_for_party(project_id, organization_id)))
+
+    def _handle_unshare_document(self, project_id: str, organization_id: str, document_id: str) -> None:
+        if self._require_capability(project_id, authz.MANAGE_DEAL_PARTIES) is None:
+            return
+        removed = identity.unshare_document_from_party(project_id, organization_id, document_id)
+        if not removed:
+            self._send_json(404, {"error": "that document is not shared with this party"})
             return
         self._send_json(200, {"removed": True})
 

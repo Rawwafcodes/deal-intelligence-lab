@@ -7,6 +7,7 @@ docs/workspace-shift/tasks/path-b-multi-firm-architecture-decision-report.md.
 """
 
 import sys
+import tempfile
 import threading
 import unittest
 import uuid
@@ -17,14 +18,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tests.test_identity_endpoints import _Client
 
+import documents
 import identity
 import server
 import store
+
+PDF_BYTES = b"%PDF-1.4\n%Deal parties test fixture, harmless bytes\n%%EOF"
+
+
+def _raw_status(client: "_Client", path: str) -> int:
+    """`_Client.get`/`.post` assume a JSON body, which a file download
+    response isn't - just the HTTP status, for asserting access without
+    choking on binary content."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(f"{client._base}{path}", method="GET")  # noqa: SLF001
+    try:
+        return client._opener.open(req).status  # noqa: SLF001
+    except urllib.error.HTTPError as exc:
+        return exc.code
 
 
 class DealPartiesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        cls._original_data_dir = documents.DATA_DIR
+        documents.DATA_DIR = Path(cls._tmpdir.name) / "DealLabData"
         cls._schema = f"test_{uuid.uuid4().hex}"
         cls._original_schema = store.SCHEMA
         store.ensure_schema(cls._schema)
@@ -62,6 +83,8 @@ class DealPartiesTests(unittest.TestCase):
         cls.httpd.server_close()
         store.SCHEMA = cls._original_schema
         store.drop_schema(cls._schema)
+        documents.DATA_DIR = cls._original_data_dir
+        cls._tmpdir.cleanup()
 
     def test_granting_access_to_a_non_party_outside_org_is_still_refused(self):
         """Task 19.5's original behavior must survive unchanged for any
@@ -153,6 +176,117 @@ class DealPartiesTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
         self.lead.delete(f"/api/projects/{self.project_id}/parties/{self.other_org.id}")
+
+    def test_fine_grained_document_sharing_and_invite_flow(self):
+        # Two documents on the deal; the party org isn't added yet. Distinct
+        # content, not just distinct filenames - documents dedupe by
+        # content hash regardless of name.
+        shared_doc = documents.save_uploaded_file(self.project_id, "shared.pdf", "", PDF_BYTES).document
+        unshared_doc = documents.save_uploaded_file(
+            self.project_id, "unshared.pdf", "", PDF_BYTES + b"\n%distinct\n"
+        ).document
+
+        status, body = self.lead.post(
+            f"/api/projects/{self.project_id}/parties",
+            {"organization_id": self.other_org.id, "party_role": "counterparty"},
+        )
+        self.assertEqual(status, 201)
+        status, _ = self.lead.post(
+            f"/api/projects/{self.project_id}/memberships",
+            {"user_id": self.outsider.id, "role": "external_executive"},
+        )
+        self.assertEqual(status, 201)
+
+        outside_client = _Client(self.port)
+        outside_client.post("/api/dev/session", {"user_id": self.outsider.id})
+
+        # Before any share, an external_executive from the party org sees
+        # no documents at all - Task 20.2's safe default, unchanged.
+        status, docs = outside_client.get(f"/api/projects/{self.project_id}/documents")
+        self.assertEqual(status, 200)
+        self.assertEqual(docs, [])
+        status, _ = outside_client.get(f"/api/projects/{self.project_id}/documents/{shared_doc.id}")
+        self.assertEqual(status, 403)
+
+        # Only a deal lead may manage shares.
+        reviewer_client = _Client(self.port)
+        reviewer_client.post("/api/dev/session", {"user_id": self.reviewer_id})
+        status, _ = reviewer_client.post(
+            f"/api/projects/{self.project_id}/parties/{self.other_org.id}/documents",
+            {"document_id": shared_doc.id},
+        )
+        self.assertEqual(status, 403)
+
+        # Share exactly one document with the party.
+        status, shared_ids = self.lead.post(
+            f"/api/projects/{self.project_id}/parties/{self.other_org.id}/documents",
+            {"document_id": shared_doc.id},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(shared_ids, [shared_doc.id])
+
+        # Now the party's member sees exactly the shared document - the
+        # collection is filtered, not fully opened - and can fetch and
+        # download it, but the unshared one stays invisible.
+        status, docs = outside_client.get(f"/api/projects/{self.project_id}/documents")
+        self.assertEqual(status, 200)
+        self.assertEqual([d["id"] for d in docs], [shared_doc.id])
+        status, _ = outside_client.get(f"/api/projects/{self.project_id}/documents/{shared_doc.id}")
+        self.assertEqual(status, 200)
+        status, _ = outside_client.get(f"/api/projects/{self.project_id}/documents/{unshared_doc.id}")
+        self.assertEqual(status, 403)
+        status, _ = outside_client.get(f"/api/projects/{self.project_id}/documents/{unshared_doc.id}/download")
+        self.assertEqual(status, 403)
+        # A real file download, not JSON - check the status without
+        # parsing the body as JSON.
+        status = _raw_status(outside_client, f"/api/projects/{self.project_id}/documents/{shared_doc.id}/download")
+        self.assertEqual(status, 200)
+
+        # Unsharing removes visibility again.
+        status, _ = self.lead.delete(
+            f"/api/projects/{self.project_id}/parties/{self.other_org.id}/documents/{shared_doc.id}"
+        )
+        self.assertEqual(status, 200)
+        status, docs = outside_client.get(f"/api/projects/{self.project_id}/documents")
+        self.assertEqual(status, 200)
+        self.assertEqual(docs, [])
+
+        self.lead.delete(f"/api/projects/{self.project_id}/parties/{self.other_org.id}")
+
+        # The invite flow: a brand-new outside contact and a brand-new
+        # organization, in one call.
+        email = f"newcontact-{uuid.uuid4().hex[:6]}@newcounterparty.example"
+        status, body = self.lead.post(
+            f"/api/projects/{self.project_id}/parties/invite",
+            {
+                "party_role": "legal_counsel",
+                "email": email,
+                "display_name": "New Contact",
+                "organization_name": "New Counterparty LLP",
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(body["organization"]["name"], "New Counterparty LLP")
+        self.assertEqual(body["user"]["email"].lower(), email.lower())
+        granted = next(m for m in body["memberships"] if m["user"]["email"].lower() == email.lower())
+        self.assertEqual(granted["role"], "external_executive")
+        self.assertEqual(granted["organization_id"], body["organization"]["id"])
+
+        # Re-inviting the same email (now already a user) reuses them
+        # rather than creating a duplicate, same pattern as
+        # invite_to_organization - and still only ever grants
+        # external_executive, via resolve_grantable_organization_for.
+        status, body2 = self.lead.post(
+            f"/api/projects/{self.project_id}/parties/invite",
+            {
+                "party_role": "lender",
+                "email": email,
+                "display_name": "New Contact",
+                "organization_id": self.other_org.id,
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(body2["user"]["id"], body["user"]["id"])
 
 
 class ResolveGrantableOrganizationTests(unittest.TestCase):
